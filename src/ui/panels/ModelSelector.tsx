@@ -150,91 +150,93 @@ export const ModelSelector: React.FC = () => {
                                 </div>
                               </div>
 
-                              <div className="relative mb-3">
-                                <select
-                                  value={(!['auto', '1024x1024', '1024x1536', '1536x1024', '2048x2048', '2048x1152', '3840x2160', '2160x3840'].includes(config.t8starImageSize || 'auto')) ? 'custom' : (config.t8starImageSize || 'auto')}
-                                  onChange={(e) => {
-                                    if (e.target.value === 'custom') {
-                                      handleUpdateString('t8starImageSize', '2560x1440');
-                                    } else {
-                                      handleUpdateString('t8starImageSize', e.target.value);
-                                    }
-                                  }}
-                                  className="w-full bg-[#0D0F12] text-slate-200 text-xs rounded-lg px-3 py-2.5 border border-white/5 focus:border-[#7B8BFF] outline-none appearance-none font-medium cursor-pointer"
-                                >
-                                  <option value="auto">Auto (默认)</option>
-                                  <option value="1024x1024">1024x1024 (1:1)</option>
-                                  <option value="1024x1536">1024x1536 (2:3)</option>
-                                  <option value="1536x1024">1536x1024 (3:2)</option>
-                                  <option value="2048x2048">2048x2048 (1:1 2K)</option>
-                                  <option value="2048x1152">2048x1152 (16:9 2K)</option>
-                                  <option value="3840x2160">3840x2160 (16:9 4K)</option>
-                                  <option value="2160x3840">2160x3840 (9:16 4K)</option>
-                                  <option value="custom">Custom (自定义)</option>
-                                </select>
-                                <ChevronDown className="absolute right-3 top-3 text-slate-500 pointer-events-none" size={14} />
-                              </div>
-
-                              {/* Custom Input boxes */}
-                              {(!['auto', '1024x1024', '1024x1536', '1536x1024', '2048x2048', '2048x1152', '3840x2160', '2160x3840'].includes(config.t8starImageSize || 'auto')) && (
-                                (() => {
-                                  const currentCustomSize = config.t8starImageSize || '';
-                                  const match = currentCustomSize.match(/^(\d+)x(\d+)$/i);
-                                  const width = match ? match[1] : '';
-                                  const height = match ? match[2] : '';
-
-                                  return (
-                                    <div className="flex items-center justify-between space-x-3 mb-1">
-                                      <input
-                                        type="text"
-                                        value={width}
-                                        onChange={e => handleUpdateString('t8starImageSize', `${e.target.value}x${height || '1440'}`)}
-                                        className="w-full bg-[#0D0F12] text-slate-200 text-xs rounded-lg px-3 py-2.5 border border-white/5 focus:border-[#7B8BFF] outline-none font-medium"
-                                        placeholder="Width"
-                                      />
-                                      <span className="text-slate-500 font-medium text-xs">×</span>
-                                      <input
-                                        type="text"
-                                        value={height}
-                                        onChange={e => handleUpdateString('t8starImageSize', `${width || '2560'}x${e.target.value}`)}
-                                        className="w-full bg-[#0D0F12] text-slate-200 text-xs rounded-lg px-3 py-2.5 border border-white/5 focus:border-[#7B8BFF] outline-none font-medium"
-                                        placeholder="Height"
-                                      />
-                                    </div>
-                                  );
-                                })()
-                              )}
-
-                              {/* Error validation for Custom Size */}
                               {(() => {
-                                const currentCustomSize = config.t8starImageSize || '';
-                                let hasError = false;
-                                let errorMsg = "";
+                                const sizeMap: Record<string, Record<string, string>> = {
+                                  '1:1': { '1K': '1024x1024', '2K': '2048x2048', '4K': '4096x4096' },
+                                  '3:2': { '1K': '1200x800', '2K': '1536x1024', '4K': '3072x2048' },
+                                  '2:3': { '1K': '800x1200', '2K': '1024x1536', '4K': '2048x3072' },
+                                  '4:3': { '1K': '1152x864', '2K': '1408x1056', '4K': '2880x2160' },
+                                  '3:4': { '1K': '864x1152', '2K': '1056x1408', '4K': '2160x2880' },
+                                  '5:4': { '1K': '1280x1024', '2K': '1600x1280', '4K': '3200x2560' },
+                                  '4:5': { '1K': '1024x1280', '2K': '1280x1600', '4K': '2560x3200' },
+                                  '16:9': { '1K': '1280x720', '2K': '2048x1152', '4K': '3840x2160' },
+                                  '9:16': { '1K': '720x1280', '2K': '1152x2048', '4K': '2160x3840' },
+                                  '2:1': { '1K': '1280x640', '2K': '2048x1024', '4K': '4096x2048' },
+                                  '1:2': { '1K': '640x1280', '2K': '1024x2048', '4K': '2048x4096' },
+                                  '21:9': { '1K': '1680x720', '2K': '2464x1056', '4K': '3360x1440' },
+                                  '9:21': { '1K': '720x1680', '2K': '1056x2464', '4K': '1440x3360' },
+                                };
 
-                                const match = currentCustomSize.match(/^(\d+)x(\d+)$/i);
-                                if (!match && currentCustomSize !== 'auto' && currentCustomSize !== 'custom' && currentCustomSize !== '') {
-                                  hasError = true;
-                                  errorMsg = "格式错误";
-                                } else if (match) {
-                                  const w = parseInt(match[1]);
-                                  const h = parseInt(match[2]);
-                                  const total = w * h;
+                                const val = config.t8starImageSize || 'auto';
+                                let ratio = '1:1';
+                                let res = '2K';
 
-                                  if (w < 256 || h < 256) {
-                                    hasError = true;
-                                    errorMsg = `单边不能低于256px`;
-                                  } else if (w > 4096 || h > 4096) {
-                                    hasError = true;
-                                    errorMsg = `单边不建议超过4096px`;
-                                  } else if (total < 655360) {
-                                    hasError = true;
-                                    errorMsg = `最小像素 655360`;
-                                  } else if (total > 8294400) {
-                                    hasError = true;
-                                    errorMsg = `最大像素 8294400`;
+                                if (val !== 'auto') {
+                                  let found = false;
+                                  for (const r in sizeMap) {
+                                    for (const s in sizeMap[r]) {
+                                      if (sizeMap[r][s] === val) {
+                                        ratio = r;
+                                        res = s;
+                                        found = true;
+                                        break;
+                                      }
+                                    }
+                                    if (found) break;
                                   }
                                 }
-                                return hasError ? <div className="text-red-400 text-[10px] mt-1.5 leading-tight">{errorMsg}</div> : null;
+
+                                const handleRatioResChange = (newRatio: string, newRes: string) => {
+                                  handleUpdateString('t8starImageSize', sizeMap[newRatio][newRes]);
+                                };
+
+                                return (
+                                  <>
+                                    <div className="flex items-center space-x-3 mb-3">
+                                      <div className="flex-1">
+                                        <div className="text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Ratio</div>
+                                        <div className="relative">
+                                          <select
+                                            value={ratio}
+                                            onChange={(e) => handleRatioResChange(e.target.value, res)}
+                                            className="w-full bg-[#0D0F12] text-slate-200 text-xs rounded-lg px-3 py-2.5 border border-white/5 focus:border-[#7B8BFF] outline-none appearance-none font-medium cursor-pointer"
+                                          >
+                                            <option value="1:1">1:1</option>
+                                            <option value="3:2">3:2</option>
+                                            <option value="2:3">2:3</option>
+                                            <option value="4:3">4:3</option>
+                                            <option value="3:4">3:4</option>
+                                            <option value="5:4">5:4</option>
+                                            <option value="4:5">4:5</option>
+                                            <option value="16:9">16:9</option>
+                                            <option value="9:16">9:16</option>
+                                            <option value="2:1">2:1</option>
+                                            <option value="1:2">1:2</option>
+                                            <option value="21:9">21:9</option>
+                                            <option value="9:21">9:21</option>
+                                          </select>
+                                          <ChevronDown className="absolute right-3 top-3 text-slate-500 pointer-events-none" size={14} />
+                                        </div>
+                                      </div>
+                                      <div className="flex-1">
+                                        <div className="text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Res</div>
+                                        <div className="relative">
+                                          <select
+                                            value={res}
+                                            onChange={(e) => handleRatioResChange(ratio, e.target.value)}
+                                            className="w-full bg-[#0D0F12] text-slate-200 text-xs rounded-lg px-3 py-2.5 border border-white/5 focus:border-[#7B8BFF] outline-none appearance-none font-medium cursor-pointer"
+                                          >
+                                            <option value="1K">1K</option>
+                                            <option value="2K">2K</option>
+                                            <option value="4K">4K（暂不可用）</option>
+                                          </select>
+                                          <ChevronDown className="absolute right-3 top-3 text-slate-500 pointer-events-none" size={14} />
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                  </>
+                                );
                               })()}
                             </div>
 
