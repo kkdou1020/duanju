@@ -330,9 +330,10 @@ export const generateSceneImage = async (
     const fs = require('fs');
     const logFile = 'C:\\Users\\Administrator\\Desktop\\duanju\\duanju0302\\server-debug.log';
     const log = (msg: string) => {
-        const line = `[${new Date().toISOString()}] ${msg}\n`;
+        const timeStr = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-');
+        const line = `[${timeStr}] ${msg}\n`;
         console.log(line.trim());
-        try { fs.appendFileSync(logFile, line); } catch(e){}
+        try { fs.appendFileSync(logFile, line); } catch (e) { }
     };
 
     log(`[Scene Gen] Calling generateContent...`);
@@ -355,14 +356,93 @@ export const generateSceneImage = async (
 
     log(`[Scene Gen] Extracting image from response...`);
     const raw = extractImageFromResponse(response);
-    
+
     log(`[Scene Gen] Image extracted, length: ${raw.length}. Bypassing sharp processing for Data URLs...`);
     let imageUrl = raw;
     if (raw.startsWith('http')) {
         log(`[Scene Gen] Image is HTTP URL, ensuring PNG...`);
         imageUrl = await ensurePngDataUrl(raw, 0); // 0 = no resize
     }
-    
+
     log(`[Scene Gen] Final image ready, length: ${imageUrl.length}. Returning to frontend...`);
     return { imageUrl };
 };
+
+/**
+ * Reverse engineers smart prompt descriptions for multiple angles based on a base description and optional reference image.
+ */
+export const reverseEngineerAngles = async (
+    description: string,
+    targetAngles: string[],
+    imageBase64?: string,
+    language: string = "Chinese"
+): Promise<{ angle: string; description: string }[]> => {
+    let parts: any[] = [];
+
+    let useVision = false;
+    if (imageBase64) {
+        const match = imageBase64.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9\-.+]+);base64,(.+)$/);
+        if (match && match.length === 3) {
+            useVision = true;
+            parts.push({
+                inlineData: { mimeType: match[1], data: match[2] }
+            });
+        }
+    }
+
+    let promptText = `你是一个电影摄影指导+3D空间建模专家+生图提示词工程师。
+你的任务是在【完全复用同一个空间】前提下仅改变“摄像机位置与朝向”生成不同方位的提示词。
+【输入场景】${description}
+目标方位:${JSON.stringify(targetAngles)}
+${useVision ? `【参考图约束(最高优先级)】严格遵守参考图空间结构、主体资产及材质外观。禁止新增/删除物体或改变布局。` : `【无参考图时】先构建稳定三维场景布局并在所有机位保持一致。`}
+【核心规则】
+1.场景锁定(最重要):使用"the exact same environment","identical layout","same objects and positions","no changes to scene content"强制锁定。
+2.物理摄像机强制转移(垂直视角/打破原图角度):强制【摄影机与观察面完全垂直(Orthogonal/Flat elevation view)】:
+-正面:"Camera exactly perpendicular to the front","Dead-on flat elevation view","Zero perspective distortion"
+-背面:"Camera exactly perpendicular to the back","180-degree reverse dead-on view","Flat architectural elevation"
+-左侧:"Camera exactly perpendicular to the left wall","90-degree side flat elevation view"
+-右侧:"Camera exactly perpendicular to the right wall","90-degree side flat elevation view"
+-顶部:"Camera exactly perpendicular looking straight up","Flat ceiling plan view, zero perspective"
+-底部:"Camera exactly perpendicular looking straight down","Flat floor plan view, absolute top-down"
+3.空间重投影:根据方位重新计算视野内容,如背面绝不能和正面看到的一样。
+4.输出结构:使用${language}，逗号分隔:"description":"[一致性锁定语],[物理摄像机设定与朝向],[从该角度看到的空间结构与物体变化]"。
+禁止写故事/氛围/情绪/发散/新增元素。
+返回JSON:{"results":[{"angle":"","description":""}]}
+`;
+
+    parts.push({ text: promptText });
+
+    const { Type } = await import('../helpers');
+
+    const schema = {
+        type: Type.OBJECT,
+        properties: {
+            results: {
+                type: Type.ARRAY,
+                items: {
+                    type: Type.OBJECT,
+                    properties: {
+                        angle: { type: Type.STRING },
+                        description: { type: Type.STRING }
+                    },
+                    required: ["angle", "description"]
+                }
+            }
+        },
+        required: ["results"]
+    };
+
+    const response = await retryWithBackoff<GenerateContentResponse>(() => ai.models.generateContent({
+        model: MODELS.TEXT_FAST,
+        contents: { parts },
+        config: {
+            systemInstruction: "你是一个专业的电影摄影指导与提示词工程师。输出严格符合要求的 JSON 对象。",
+            responseMimeType: "application/json",
+            responseSchema: schema
+        }
+    }), 2, 2000);
+
+    const parsed = safeJsonParse<{ results: { angle: string; description: string }[] }>(response.text, { results: [] });
+    return parsed.results || [];
+};
+

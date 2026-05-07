@@ -109,7 +109,8 @@ export class T8StarProvider implements IAIProvider {
         const fs = require('fs');
         const logFile = 'C:\\Users\\Administrator\\Desktop\\duanju\\duanju0302\\server-debug.log';
         const log = (msg: string) => {
-            const line = `[${new Date().toISOString()}] ${msg}\n`;
+            const timeStr = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-');
+            const line = `[${timeStr}] ${msg}\n`;
             console.log(line.trim());
             try { fs.appendFileSync(logFile, line); } catch(e){}
         };

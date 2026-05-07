@@ -114,4 +114,22 @@ router.post('/build-asset-prompts', (req: Request, res: Response) => {
     }
 });
 
+// POST /api/media/reverse-angles
+router.post('/reverse-angles', async (req: Request, res: Response) => {
+    try {
+        const { description, targetAngles, imageBase64, language } = req.body;
+        if (!description || !targetAngles || !Array.isArray(targetAngles)) {
+            return res.status(400).json({ error: 'Missing description or targetAngles' });
+        }
+        
+        // Dynamic import since it's a new export that might not be at the top level here yet
+        const { reverseEngineerAngles } = require('../services/ai/media/image');
+        const result = await reverseEngineerAngles(description, targetAngles, imageBase64, language);
+        res.json({ result });
+    } catch (e: any) {
+        console.error('[Media/reverse-angles]', e);
+        res.status(500).json({ error: e?.message || 'Internal error' });
+    }
+});
+
 export default router;

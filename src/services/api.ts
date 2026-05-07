@@ -209,6 +209,16 @@ export const buildAssetPrompts = async (
     return post('/media/build-asset-prompts', { assets, globalStyle: styleToUse });
 };
 
+/** Reverse engineer smart prompts for different camera angles */
+export const reverseEngineerAngles = async (
+    description: string,
+    targetAngles: string[],
+    imageBase64?: string,
+    language?: string
+): Promise<{ result: { angle: string; description: string }[] }> => {
+    return post('/media/reverse-angles', { description, targetAngles, imageBase64, language });
+};
+
 /** Generate a scene image (storyboard) */
 export const generateSceneImage = async (
     scene: Scene,

@@ -5,6 +5,7 @@ import { Virtuoso } from 'react-virtuoso';
 import { Plus, Wand2, Camera, Upload, Package, Pause } from 'lucide-react';
 import { generateAssetImage } from '@/services/ai';
 import { loadAssetUrl, loadAssetBase64 } from '@/services/storage';
+import { reverseEngineerAngles } from '@/services/api';
 import AssetRow from './AssetRow';
 
 interface AssetLibraryProps {
@@ -20,15 +21,17 @@ interface AssetLibraryProps {
     autoStart?: boolean;
     onBatchComplete?: () => void;
     onImportFromGlobal?: () => void;
+    language?: string;
 }
 
 const AssetLibrary: React.FC<AssetLibraryProps> = ({
     assets, onUpdateAsset, onAddAsset, onDeleteAsset,
     onExtract, isExtracting, labels, hasText, currentStyle,
-    autoStart = false, onBatchComplete, onImportFromGlobal
+    autoStart = false, onBatchComplete, onImportFromGlobal, language = "English"
 }) => {
     const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+    const [reversingIds, setReversingIds] = useState<Set<string>>(new Set());
     const [isBatchGenerating, setIsBatchGenerating] = useState(false);
     const stopBatchRef = useRef(false);
 
@@ -205,6 +208,53 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
         }
     };
 
+    const handleGenMultiAngle = async (asset: Asset, targetAngles: string[]) => {
+        if (!asset.description) return;
+        setReversingIds(prev => {
+            const next = new Set(prev);
+            next.add(asset.id);
+            return next;
+        });
+
+        try {
+            let referenceImage = asset.refImageUrl;
+            if (!referenceImage && asset.refImageAssetId) {
+                referenceImage = await loadAssetBase64(asset.refImageAssetId) || undefined;
+            }
+
+            const { result } = await reverseEngineerAngles(asset.description, targetAngles, referenceImage, language);
+            
+            if (result && Array.isArray(result)) {
+                setExpandedIds(prev => {
+                    const next = new Set(prev);
+                    next.add(asset.id);
+                    return next;
+                });
+
+                result.forEach((item, index) => {
+                    const newId = `${asset.id}_angle_${Date.now()}_${index}`;
+                    const newAsset: Asset = {
+                        id: newId,
+                        name: `${asset.name} - ${item.angle}`,
+                        description: item.description,
+                        type: 'location',
+                        parentId: asset.id
+                    };
+                    onAddAsset(newAsset);
+                });
+            }
+        } catch (e) {
+            console.error("Failed to reverse engineer angles:", e);
+            alert("反推生成失败，请重试。" + (e as any)?.message);
+        } finally {
+            setReversingIds(prev => {
+                const next = new Set(prev);
+                next.delete(asset.id);
+                return next;
+            });
+        }
+    };
+
     const handleSaveImage = async (url: string, name: string, assetId?: string) => {
         try {
             let href = url;
@@ -344,6 +394,8 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
                                     onToggleExpand={toggleExpand}
                                     onGenMetaImage={handleGenMetaImage}
                                     onSaveImage={handleSaveImage}
+                                    onGenMultiAngle={handleGenMultiAngle}
+                                    isReversing={reversingIds.has(item.asset.id)}
                                 />
                             </div>
                         )

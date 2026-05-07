@@ -234,6 +234,7 @@ const InputPanel: React.FC<InputPanelProps> = ({
             autoStart={autoAssetTrigger}
             onBatchComplete={onAssetBatchComplete}
             onImportFromGlobal={onImportFromGlobal}
+            language={language}
           />
         </div>
 
