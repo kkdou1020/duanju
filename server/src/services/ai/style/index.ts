@@ -179,7 +179,7 @@ export const extractAssets = async (
                                     id: { type: Type.STRING },
                                     name: { type: Type.STRING },
                                     description: { type: Type.STRING },
-                                    type: { type: Type.STRING, enum: ['character', 'location'] },
+                                    type: { type: Type.STRING, enum: ['character', 'location', 'item'] },
                                     parentId: { type: Type.STRING }
                                 },
                                 required: ["id", "name", "description", "type"]
@@ -243,7 +243,7 @@ export const extractAssetsFromBeats = async (
                                     id: { type: Type.STRING },
                                     name: { type: Type.STRING },
                                     description: { type: Type.STRING },
-                                    type: { type: Type.STRING, enum: ['character', 'location', 'prop', 'creature', 'vehicle', 'effect'] },
+                                    type: { type: Type.STRING, enum: ['character', 'location', 'item'] },
                                     parentId: { type: Type.STRING }
                                 },
                                 required: ["id", "name", "description", "type"]

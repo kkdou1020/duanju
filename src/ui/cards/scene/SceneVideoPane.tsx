@@ -1,8 +1,8 @@
 import React from 'react';
 import { Scene, Asset } from '@/shared/types';
 import { Translation } from '@/services/i18n/translations';
-import { Video, Clock, Camera, Zap, Plus, X, Image as ImageIcon } from 'lucide-react';
-import MentionTextarea from '@/ui/components/MentionTextarea';
+import { Video, Clock, Camera, Zap, Plus, X, Image as ImageIcon, Loader2, CheckCircle } from 'lucide-react';
+import MentionTextarea, { SceneImageCandidate } from '@/ui/components/MentionTextarea';
 
 interface SceneVideoPaneProps {
     scene: Scene;
@@ -13,15 +13,21 @@ interface SceneVideoPaneProps {
     chapterScenes: Scene[];
     onRemoveAsset: (assetId: string, mode: 'image' | 'video') => void;
     onOpenAssetSelector: (mode: 'video') => void;
+    sceneImages?: SceneImageCandidate[];
+    videos?: SceneImageCandidate[];
+    audios?: SceneImageCandidate[];
     onMentionAsset: (assetId: string) => void;
     onUnmentionAsset: (assetId: string) => void;
-    sceneImages?: { id: string; name: string; refImageUrl?: string }[];
+    onAssetUpload?: (type: 'video' | 'audio', file: File) => Promise<string | undefined>;
+    onAssetDelete?: (assetId: string) => void;
     onSpecCommit: (field: keyof Scene, value: string) => void;
     onLocalSpecChange: (field: keyof Scene, value: string) => void;
     isStartEndFrameMode?: boolean;
     startEndAssetIds?: string[];
     onOpenEndFrameSelector: () => void;
     onRemoveEndFrame: () => void;
+    isGeneratingPrompts?: boolean;
+    isPromptCompleted?: boolean;
 }
 
 const SceneVideoPane: React.FC<SceneVideoPaneProps> = ({
@@ -33,15 +39,21 @@ const SceneVideoPane: React.FC<SceneVideoPaneProps> = ({
     chapterScenes,
     onRemoveAsset,
     onOpenAssetSelector,
+    sceneImages,
+    videos,
+    audios,
     onMentionAsset,
     onUnmentionAsset,
-    sceneImages,
+    onAssetUpload,
+    onAssetDelete,
     onSpecCommit,
     onLocalSpecChange,
     isStartEndFrameMode,
     startEndAssetIds,
     onOpenEndFrameSelector,
     onRemoveEndFrame,
+    isGeneratingPrompts,
+    isPromptCompleted,
 }) => {
     // Resolve end frame asset name
     const endFrameId = startEndAssetIds?.[1];
@@ -50,17 +62,19 @@ const SceneVideoPane: React.FC<SceneVideoPaneProps> = ({
     const endFrameSceneImg = endFrameId && !endFrameAsset ? sceneImages?.find(s => s.id === endFrameId) : null;
     const endFrameName = endFrameAsset?.name || endFrameSceneImg?.name || endFrameId;
     return (
-        <div className="p-3 flex flex-col gap-2 bg-black/10 h-full">
+        <div className="p-3 flex flex-col gap-2 bg-gray-50 dark:bg-black/10 h-full">
             <div className="flex justify-between items-center">
                 <h4 className="text-[10px] uppercase tracking-widest text-blue-400 font-bold flex items-center gap-2">
                     <Video className="w-3 h-3" />
                     {labels.videoPromptLabel}
+                    {isGeneratingPrompts && <Loader2 className="w-3 h-3 animate-spin text-blue-400" />}
+                    {isPromptCompleted && !isGeneratingPrompts && <CheckCircle className="w-3 h-3 text-green-500" />}
                 </h4>
             </div>
 
             {/* Video Params Grid */}
             <div className="grid grid-cols-2 gap-2 text-[10px] font-mono mb-1">
-                <div className="bg-blue-500/10 p-1.5 rounded flex items-center gap-2 text-blue-200">
+                <div className="bg-blue-50 dark:bg-blue-500/10 p-1.5 rounded flex items-center gap-2 text-blue-800 dark:text-blue-200">
                     <Clock className="w-3 h-3 text-blue-400" />
                     <span className="opacity-50">{labels.durationLabel}:</span>
                     <input
@@ -72,7 +86,7 @@ const SceneVideoPane: React.FC<SceneVideoPaneProps> = ({
                         placeholder="3s"
                     />
                 </div>
-                <div className="bg-blue-500/10 p-1.5 rounded flex items-center gap-2 text-blue-200">
+                <div className="bg-blue-50 dark:bg-blue-500/10 p-1.5 rounded flex items-center gap-2 text-blue-800 dark:text-blue-200">
                     <Camera className="w-3 h-3 text-blue-400" />
                     <span className="opacity-50">{labels.lensLabel}:</span>
                     <input
@@ -84,7 +98,7 @@ const SceneVideoPane: React.FC<SceneVideoPaneProps> = ({
                         placeholder="35mm"
                     />
                 </div>
-                <div className="bg-blue-500/10 p-1.5 rounded flex items-center gap-2 text-blue-200">
+                <div className="bg-blue-50 dark:bg-blue-500/10 p-1.5 rounded flex items-center gap-2 text-blue-800 dark:text-blue-200">
                     <Video className="w-3 h-3 text-blue-400" />
                     <span className="opacity-50">{labels.cameraLabel}:</span>
                     <input
@@ -96,7 +110,7 @@ const SceneVideoPane: React.FC<SceneVideoPaneProps> = ({
                         placeholder="Pan"
                     />
                 </div>
-                <div className="bg-blue-500/10 p-1.5 rounded flex items-center gap-2 text-blue-200">
+                <div className="bg-blue-50 dark:bg-blue-500/10 p-1.5 rounded flex items-center gap-2 text-blue-800 dark:text-blue-200">
                     <Zap className="w-3 h-3 text-blue-400" />
                     <span className="opacity-50">{labels.vfxLabel}:</span>
                     <input
@@ -115,7 +129,7 @@ const SceneVideoPane: React.FC<SceneVideoPaneProps> = ({
                 <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 overflow-hidden mb-1">
                     {/* START row */}
                     <div className="flex items-center gap-2 px-3 py-2 border-b border-amber-500/10">
-                        <span className="text-[9px] uppercase tracking-widest text-gray-500 font-bold w-10 shrink-0">START</span>
+                        <span className="text-[9px] uppercase tracking-widest text-gray-400 dark:text-gray-500 font-bold w-10 shrink-0">START</span>
                         <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-500/15 border border-green-500/20">
                             <ImageIcon className="w-3 h-3 text-green-400" />
                             <span className="text-[10px] text-green-300 font-medium">Storyboard Image</span>
@@ -123,7 +137,7 @@ const SceneVideoPane: React.FC<SceneVideoPaneProps> = ({
                     </div>
                     {/* END row */}
                     <div className="flex items-center gap-2 px-3 py-2">
-                        <span className="text-[9px] uppercase tracking-widest text-gray-500 font-bold w-10 shrink-0">END</span>
+                        <span className="text-[9px] uppercase tracking-widest text-gray-400 dark:text-gray-500 font-bold w-10 shrink-0">END</span>
                         {endFrameId ? (
                             <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-500/15 border border-blue-500/20">
                                 <ImageIcon className="w-3 h-3 text-blue-400" />
@@ -139,7 +153,7 @@ const SceneVideoPane: React.FC<SceneVideoPaneProps> = ({
                         ) : (
                             <button
                                 onClick={onOpenEndFrameSelector}
-                                className="flex items-center gap-1 px-2 py-0.5 rounded-full border border-dashed border-white/15 text-[10px] text-gray-400 hover:text-banana-400 hover:border-banana-500/30 transition-colors"
+                                className="flex items-center gap-1 px-2 py-0.5 rounded-full border border-dashed border-gray-300 dark:border-white/15 text-[10px] text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-banana-400 hover:border-indigo-300 dark:hover:border-banana-500/30 transition-colors"
                             >
                                 <Plus className="w-3 h-3" />
                                 Add End Frame
@@ -162,12 +176,21 @@ const SceneVideoPane: React.FC<SceneVideoPaneProps> = ({
                 }}
                 assets={assets}
                 sceneImages={sceneImages}
+                videos={videos}
+                audios={audios}
                 referencedAssetIds={isStartEndFrameMode ? (startEndAssetIds || []) : (scene.videoAssetIds || [])}
                 onMention={onMentionAsset}
                 onUnmention={onUnmentionAsset}
+                onAssetUpload={onAssetUpload}
+                onAssetDelete={onAssetDelete}
                 maxMentions={isStartEndFrameMode ? undefined : 3}
                 mode="video"
-                className={`flex-1 w-full p-2 rounded border border-white/5 text-xs resize-none outline-none focus:border-blue-500/30 min-h-[10rem] transition-colors ${scene.video_prompt ? 'bg-green-900/10 text-green-100 border-green-500/20' : 'bg-black/20 text-gray-300'
+                className={`flex-1 w-full p-2 rounded border text-xs resize-none outline-none min-h-[10rem] transition-colors ${
+                    isGeneratingPrompts 
+                        ? 'bg-blue-50/50 dark:bg-blue-900/10 border-blue-400 dark:border-blue-500/50 ring-2 ring-blue-400/20 dark:ring-blue-500/20' 
+                        : scene.video_prompt 
+                            ? 'bg-green-50 dark:bg-green-900/10 text-green-800 dark:text-green-100 border-green-200 dark:border-green-500/20 focus:border-green-400 dark:focus:border-green-500/40' 
+                            : 'bg-white dark:bg-black/20 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-white/5 focus:border-blue-400 dark:focus:border-blue-500/30'
                     }`}
                 placeholder={labels.visualDesc}
             />

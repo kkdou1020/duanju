@@ -48,7 +48,7 @@ const SceneMediaViewer: React.FC<SceneMediaViewerProps> = ({
     // ── START/END FRAME MODE: keep original behavior ──
     if (isStartEndMode) {
         return (
-            <div className="w-full md:w-[320px] bg-black/40 min-h-[250px] relative border-b md:border-b-0 md:border-r border-white/5 flex items-center justify-center group shrink-0">
+            <div className="w-full md:w-[320px] bg-gray-100 dark:bg-black/40 min-h-[250px] relative border-b md:border-b-0 md:border-r border-gray-200 dark:border-white/5 flex items-center justify-center group shrink-0">
                 <input type="file" ref={fileInputRef} onChange={onFileChange} accept="image/*" className="hidden" />
 
                 {/* Start/End Frame Mode Toggle */}
@@ -58,17 +58,17 @@ const SceneMediaViewer: React.FC<SceneMediaViewerProps> = ({
                             onClick={() => {
                                 onUpdate(scene.id, 'isStartEndFrameMode', false);
                             }}
-                            className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all backdrop-blur-sm bg-banana-500 text-black shadow-lg shadow-banana-500/20"
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all backdrop-blur-sm bg-indigo-600 dark:bg-banana-500 text-white dark:text-black shadow-lg shadow-indigo-500/20 dark:shadow-banana-500/20"
                             title="关闭首尾帧模式"
                         >
-                            <div className="w-2 h-2 rounded-full bg-black" />
+                            <div className="w-2 h-2 rounded-full bg-white dark:bg-black" />
                             首尾帧模式
                         </button>
                     </div>
                 )}
 
                 {hasImage ? (
-                    <div className="relative w-full h-full flex items-center justify-center bg-black">
+                    <div className="relative w-full h-full flex items-center justify-center bg-gray-200 dark:bg-black">
                         {viewMode === 'video' && hasVideo ? (
                             <LazyMedia
                                 key={scene.startEndVideoUrl || scene.startEndVideoAssetId}
@@ -91,33 +91,33 @@ const SceneMediaViewer: React.FC<SceneMediaViewerProps> = ({
 
                         {/* View Toggle (original: only when both exist) */}
                         {hasImage && hasVideo && (
-                            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex bg-black/80 rounded-full p-1 border border-white/10 gap-1 z-20">
-                                <button onClick={() => setViewMode('image')} className={`p-1.5 rounded-full transition-all ${viewMode === 'image' ? 'bg-banana-500 text-black' : 'text-gray-400 hover:text-white'}`}><ImageIcon className="w-3 h-3" /></button>
-                                <button onClick={() => setViewMode('video')} className={`p-1.5 rounded-full transition-all ${viewMode === 'video' ? 'bg-banana-500 text-black' : 'text-gray-400 hover:text-white'}`}><Video className="w-3 h-3" /></button>
+                            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex bg-white/90 dark:bg-black/80 rounded-full p-1 border border-gray-200 dark:border-white/10 gap-1 z-20">
+                                <button onClick={() => setViewMode('image')} className={`p-1.5 rounded-full transition-all ${viewMode === 'image' ? 'bg-indigo-600 dark:bg-banana-500 text-white dark:text-black' : 'text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-white'}`}><ImageIcon className="w-3 h-3" /></button>
+                                <button onClick={() => setViewMode('video')} className={`p-1.5 rounded-full transition-all ${viewMode === 'video' ? 'bg-indigo-600 dark:bg-banana-500 text-white dark:text-black' : 'text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-white'}`}><Video className="w-3 h-3" /></button>
                             </div>
                         )}
 
                         {/* Toolbar */}
                         <div className="absolute top-2 right-2 flex flex-col gap-2 z-10">
-                            <button onClick={onUploadClick} className="p-2 bg-black/60 text-white rounded-full hover:bg-banana-500 hover:text-black transition-colors opacity-0 group-hover:opacity-100" title={labels.uploadImage || "Upload Image"}><Upload className="w-4 h-4" /></button>
-                            <button onClick={onRefresh} className={`p-2 bg-black/60 text-white rounded-full hover:bg-banana-500 hover:text-black transition-colors ${(genStatus === ImageGenStatus.GENERATING || videoStatus === ImageGenStatus.GENERATING) ? 'animate-spin cursor-not-allowed opacity-50' : 'opacity-0 group-hover:opacity-100'}`} disabled={genStatus === ImageGenStatus.GENERATING || videoStatus === ImageGenStatus.GENERATING}><RefreshCw className="w-4 h-4" /></button>
+                            <button onClick={onUploadClick} className="p-2 bg-white/90 dark:bg-black/60 text-gray-700 dark:text-white rounded-full hover:bg-indigo-600 dark:hover:bg-banana-500 hover:text-white dark:hover:text-black transition-colors opacity-0 group-hover:opacity-100" title={labels.uploadImage || "Upload Image"}><Upload className="w-4 h-4" /></button>
+                            <button onClick={onRefresh} className={`p-2 bg-white/90 dark:bg-black/60 text-gray-700 dark:text-white rounded-full hover:bg-indigo-600 dark:hover:bg-banana-500 hover:text-white dark:hover:text-black transition-colors ${(genStatus === ImageGenStatus.GENERATING || videoStatus === ImageGenStatus.GENERATING) ? 'animate-spin cursor-not-allowed opacity-50' : 'opacity-0 group-hover:opacity-100'}`} disabled={genStatus === ImageGenStatus.GENERATING || videoStatus === ImageGenStatus.GENERATING}><RefreshCw className="w-4 h-4" /></button>
                             {!hasVideo && (<button onClick={onGenerateVideo} disabled={videoStatus === ImageGenStatus.GENERATING} className={`p-2 bg-blue-600/80 text-white rounded-full hover:bg-blue-500 transition-colors ${videoStatus === ImageGenStatus.GENERATING ? 'cursor-not-allowed' : 'opacity-0 group-hover:opacity-100'}`} title={labels.genVideo}>{videoStatus === ImageGenStatus.GENERATING ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Film className="w-4 h-4" />}</button>)}
-                            {scene.imageUrl && (<button onClick={onSaveImage} className="p-2 bg-black/60 text-white rounded-full hover:bg-banana-500 hover:text-black transition-colors opacity-0 group-hover:opacity-100" title={labels.saveImage}><Download className="w-4 h-4" /></button>)}
+                            {scene.imageUrl && (<button onClick={onSaveImage} className="p-2 bg-white/90 dark:bg-black/60 text-gray-700 dark:text-white rounded-full hover:bg-indigo-600 dark:hover:bg-banana-500 hover:text-white dark:hover:text-black transition-colors opacity-0 group-hover:opacity-100" title={labels.saveImage}><Download className="w-4 h-4" /></button>)}
                         </div>
                     </div>
                 ) : (
                     <div className="flex flex-col items-center justify-center p-6 text-center w-full">
                         {genStatus === ImageGenStatus.GENERATING || isGeneratingExternal ? (
                             <div className="flex flex-col items-center gap-3">
-                                <div className="w-8 h-8 border-2 border-banana-400 border-t-transparent rounded-full animate-spin" />
-                                <span className="text-xs text-banana-400 font-mono animate-pulse">{labels.rendering}</span>
+                                <div className="w-8 h-8 border-2 border-indigo-400 dark:border-banana-400 border-t-transparent rounded-full animate-spin" />
+                                <span className="text-xs text-indigo-500 dark:text-banana-400 font-mono animate-pulse">{labels.rendering}</span>
                             </div>
                         ) : (
                             <>
-                                <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-3"><ImageIcon className="w-6 h-6 text-gray-500" /></div>
+                                <div className="w-12 h-12 rounded-full bg-gray-200 dark:bg-white/5 flex items-center justify-center mb-3"><ImageIcon className="w-6 h-6 text-gray-400 dark:text-gray-500" /></div>
                                 <div className="flex items-center gap-2">
-                                    <button onClick={() => onGenerateImage(false)} disabled={!areAssetsReady} className={`px-4 py-2 rounded-lg border text-xs font-semibold uppercase tracking-wider transition-all flex items-center gap-2 ${areAssetsReady ? 'bg-white/5 hover:bg-banana-500 hover:text-black border-white/10' : 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed'}`}><Aperture className="w-4 h-4" />{labels.visualizeBtn}</button>
-                                    <button onClick={onUploadClick} className="p-2 rounded-lg border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 transition-colors" title={labels.uploadImage || "Upload Image"}><Upload className="w-4 h-4" /></button>
+                                    <button onClick={() => onGenerateImage(false)} disabled={!areAssetsReady} className={`px-4 py-2 rounded-lg border text-xs font-semibold uppercase tracking-wider transition-all flex items-center gap-2 ${areAssetsReady ? 'bg-white dark:bg-white/5 hover:bg-indigo-600 dark:hover:bg-banana-500 hover:text-white dark:hover:text-black border-gray-300 dark:border-white/10' : 'bg-gray-200 dark:bg-gray-800 text-gray-400 dark:text-gray-500 border-gray-300 dark:border-gray-700 cursor-not-allowed'}`}><Aperture className="w-4 h-4" />{labels.visualizeBtn}</button>
+                                    <button onClick={onUploadClick} className="p-2 rounded-lg border border-gray-300 dark:border-white/10 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/10 transition-colors" title={labels.uploadImage || "Upload Image"}><Upload className="w-4 h-4" /></button>
                                 </div>
                             </>
                         )}
@@ -129,7 +129,7 @@ const SceneMediaViewer: React.FC<SceneMediaViewerProps> = ({
 
     // ── REFERENCE MODE: Dual Tab Layout ──
     return (
-        <div className="w-full md:w-[320px] bg-black/40 min-h-[250px] relative border-b md:border-b-0 md:border-r border-white/5 flex flex-col items-center justify-center group shrink-0">
+        <div className="w-full md:w-[320px] bg-gray-100 dark:bg-black/40 min-h-[250px] relative border-b md:border-b-0 md:border-r border-gray-200 dark:border-white/5 flex flex-col items-center justify-center group shrink-0">
             <input type="file" ref={fileInputRef} onChange={onFileChange} accept="image/*" className="hidden" />
             <input type="file" ref={videoFileInputRef} onChange={onVideoFileChange} accept="video/*" className="hidden" />
 
@@ -144,7 +144,7 @@ const SceneMediaViewer: React.FC<SceneMediaViewerProps> = ({
                                 onUpdate(scene.id, 'startEndAssetIds', [startId]);
                             }
                         }}
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all backdrop-blur-sm bg-black/60 text-gray-300 hover:bg-black/80 border border-white/10"
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all backdrop-blur-sm bg-white/80 dark:bg-black/60 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-black/80 border border-gray-300 dark:border-white/10"
                         title="开启首尾帧模式 (强制使用 veo3.1-pro-4k)"
                     >
                         <div className="w-2 h-2 rounded-full bg-gray-400" />
@@ -158,7 +158,7 @@ const SceneMediaViewer: React.FC<SceneMediaViewerProps> = ({
                 {viewMode === 'image' ? (
                     /* ── IMAGE TAB ── */
                     hasImage ? (
-                        <div className="relative w-full h-full flex items-center justify-center bg-black">
+                        <div className="relative w-full h-full flex items-center justify-center bg-gray-200 dark:bg-black">
                             <LazyMedia
                                 assetId={scene.imageAssetId}
                                 fallbackUrl={scene.imageUrl}
@@ -169,30 +169,30 @@ const SceneMediaViewer: React.FC<SceneMediaViewerProps> = ({
                             />
                             {/* Image Toolbar */}
                             <div className="absolute top-2 right-2 flex flex-col gap-2 z-10">
-                                <button onClick={onUploadClick} className="p-2 bg-black/60 text-white rounded-full hover:bg-banana-500 hover:text-black transition-colors opacity-0 group-hover:opacity-100" title={labels.uploadImage || "Upload"}><Upload className="w-4 h-4" /></button>
-                                <button onClick={() => onGenerateImage(true)} className={`p-2 bg-black/60 text-white rounded-full hover:bg-banana-500 hover:text-black transition-colors ${genStatus === ImageGenStatus.GENERATING ? 'animate-spin cursor-not-allowed opacity-50' : 'opacity-0 group-hover:opacity-100'}`} disabled={genStatus === ImageGenStatus.GENERATING || !areAssetsReady} title={labels.regenerate}><RefreshCw className="w-4 h-4" /></button>
-                                <button onClick={onSaveImage} className="p-2 bg-black/60 text-white rounded-full hover:bg-banana-500 hover:text-black transition-colors opacity-0 group-hover:opacity-100" title={labels.saveImage}><Download className="w-4 h-4" /></button>
-                                <button onClick={onDeleteImage} className="p-2 bg-black/60 text-red-400 rounded-full hover:bg-red-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100" title="删除图片"><Trash2 className="w-4 h-4" /></button>
+                                <button onClick={onUploadClick} className="p-2 bg-white/90 dark:bg-black/60 text-gray-700 dark:text-white rounded-full hover:bg-indigo-600 dark:hover:bg-banana-500 hover:text-white dark:hover:text-black transition-colors opacity-0 group-hover:opacity-100" title={labels.uploadImage || "Upload"}><Upload className="w-4 h-4" /></button>
+                                <button onClick={() => onGenerateImage(true)} className={`p-2 bg-white/90 dark:bg-black/60 text-gray-700 dark:text-white rounded-full hover:bg-indigo-600 dark:hover:bg-banana-500 hover:text-white dark:hover:text-black transition-colors ${genStatus === ImageGenStatus.GENERATING ? 'animate-spin cursor-not-allowed opacity-50' : 'opacity-0 group-hover:opacity-100'}`} disabled={genStatus === ImageGenStatus.GENERATING || !areAssetsReady} title={labels.regenerate}><RefreshCw className="w-4 h-4" /></button>
+                                <button onClick={onSaveImage} className="p-2 bg-white/90 dark:bg-black/60 text-gray-700 dark:text-white rounded-full hover:bg-indigo-600 dark:hover:bg-banana-500 hover:text-white dark:hover:text-black transition-colors opacity-0 group-hover:opacity-100" title={labels.saveImage}><Download className="w-4 h-4" /></button>
+                                <button onClick={onDeleteImage} className="p-2 bg-white/90 dark:bg-black/60 text-red-500 dark:text-red-400 rounded-full hover:bg-red-600 dark:hover:bg-red-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100" title="删除图片"><Trash2 className="w-4 h-4" /></button>
                             </div>
                         </div>
                     ) : (
                         <div className="flex flex-col items-center justify-center p-6 text-center w-full">
                             {genStatus === ImageGenStatus.GENERATING || isGeneratingExternal ? (
                                 <div className="flex flex-col items-center gap-3">
-                                    <div className="w-8 h-8 border-2 border-banana-400 border-t-transparent rounded-full animate-spin" />
-                                    <span className="text-xs text-banana-400 font-mono animate-pulse">{labels.rendering}</span>
+                                    <div className="w-8 h-8 border-2 border-indigo-400 dark:border-banana-400 border-t-transparent rounded-full animate-spin" />
+                                    <span className="text-xs text-indigo-500 dark:text-banana-400 font-mono animate-pulse">{labels.rendering}</span>
                                 </div>
                             ) : (
                                 <>
-                                    <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-3"><ImageIcon className="w-6 h-6 text-gray-500" /></div>
+                                    <div className="w-12 h-12 rounded-full bg-gray-200 dark:bg-white/5 flex items-center justify-center mb-3"><ImageIcon className="w-6 h-6 text-gray-400 dark:text-gray-500" /></div>
                                     <div className="flex items-center gap-2">
                                         <div className="relative group/btn">
                                             <button
                                                 onClick={() => onGenerateImage(false)}
                                                 disabled={!areAssetsReady}
                                                 className={`px-4 py-2 rounded-lg border text-xs font-semibold uppercase tracking-wider transition-all flex items-center gap-2 ${areAssetsReady
-                                                    ? 'bg-white/5 hover:bg-banana-500 hover:text-black border-white/10'
-                                                    : 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed'
+                                                    ? 'bg-white dark:bg-white/5 hover:bg-indigo-600 dark:hover:bg-banana-500 hover:text-white dark:hover:text-black border-gray-300 dark:border-white/10'
+                                                    : 'bg-gray-200 dark:bg-gray-800 text-gray-400 dark:text-gray-500 border-gray-300 dark:border-gray-700 cursor-not-allowed'
                                                     }`}
                                             >
                                                 <Aperture className="w-4 h-4" />
@@ -204,7 +204,7 @@ const SceneMediaViewer: React.FC<SceneMediaViewerProps> = ({
                                                 </div>
                                             )}
                                         </div>
-                                        <button onClick={onUploadClick} className="p-2 rounded-lg border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 transition-colors" title={labels.uploadImage || "Upload Image"}><Upload className="w-4 h-4" /></button>
+                                        <button onClick={onUploadClick} className="p-2 rounded-lg border border-gray-300 dark:border-white/10 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/10 transition-colors" title={labels.uploadImage || "Upload Image"}><Upload className="w-4 h-4" /></button>
                                     </div>
                                 </>
                             )}
@@ -213,7 +213,7 @@ const SceneMediaViewer: React.FC<SceneMediaViewerProps> = ({
                 ) : (
                     /* ── VIDEO TAB ── */
                     hasVideo ? (
-                        <div className="relative w-full h-full flex items-center justify-center bg-black">
+                        <div className="relative w-full h-full flex items-center justify-center bg-gray-200 dark:bg-black">
                             <LazyMedia
                                 key={scene.videoUrl || scene.videoAssetId}
                                 assetId={scene.videoAssetId}
@@ -224,30 +224,30 @@ const SceneMediaViewer: React.FC<SceneMediaViewerProps> = ({
                             />
                             {/* Video Toolbar */}
                             <div className="absolute top-2 right-2 flex flex-col gap-2 z-10">
-                                <button onClick={onVideoUploadClick} className="p-2 bg-black/60 text-white rounded-full hover:bg-banana-500 hover:text-black transition-colors opacity-0 group-hover:opacity-100" title="上传视频"><Upload className="w-4 h-4" /></button>
-                                <button onClick={onGenerateVideo} className={`p-2 bg-black/60 text-white rounded-full hover:bg-banana-500 hover:text-black transition-colors ${videoStatus === ImageGenStatus.GENERATING ? 'animate-spin cursor-not-allowed opacity-50' : 'opacity-0 group-hover:opacity-100'}`} disabled={videoStatus === ImageGenStatus.GENERATING || !videoAssetsReady} title="重新生成视频"><RefreshCw className="w-4 h-4" /></button>
-                                <button onClick={onSaveImage} className="p-2 bg-black/60 text-white rounded-full hover:bg-banana-500 hover:text-black transition-colors opacity-0 group-hover:opacity-100" title="下载视频"><Download className="w-4 h-4" /></button>
-                                <button onClick={onDeleteVideo} className="p-2 bg-black/60 text-red-400 rounded-full hover:bg-red-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100" title="删除视频"><Trash2 className="w-4 h-4" /></button>
+                                <button onClick={onVideoUploadClick} className="p-2 bg-white/90 dark:bg-black/60 text-gray-700 dark:text-white rounded-full hover:bg-indigo-600 dark:hover:bg-banana-500 hover:text-white dark:hover:text-black transition-colors opacity-0 group-hover:opacity-100" title="上传视频"><Upload className="w-4 h-4" /></button>
+                                <button onClick={onGenerateVideo} className={`p-2 bg-white/90 dark:bg-black/60 text-gray-700 dark:text-white rounded-full hover:bg-indigo-600 dark:hover:bg-banana-500 hover:text-white dark:hover:text-black transition-colors ${videoStatus === ImageGenStatus.GENERATING ? 'animate-spin cursor-not-allowed opacity-50' : 'opacity-0 group-hover:opacity-100'}`} disabled={videoStatus === ImageGenStatus.GENERATING || !videoAssetsReady} title="重新生成视频"><RefreshCw className="w-4 h-4" /></button>
+                                <button onClick={onSaveImage} className="p-2 bg-white/90 dark:bg-black/60 text-gray-700 dark:text-white rounded-full hover:bg-indigo-600 dark:hover:bg-banana-500 hover:text-white dark:hover:text-black transition-colors opacity-0 group-hover:opacity-100" title="下载视频"><Download className="w-4 h-4" /></button>
+                                <button onClick={onDeleteVideo} className="p-2 bg-white/90 dark:bg-black/60 text-red-500 dark:text-red-400 rounded-full hover:bg-red-600 dark:hover:bg-red-500 hover:text-white transition-colors opacity-0 group-hover:opacity-100" title="删除视频"><Trash2 className="w-4 h-4" /></button>
                             </div>
                         </div>
                     ) : (
                         <div className="flex flex-col items-center justify-center p-6 text-center w-full">
                             {videoStatus === ImageGenStatus.GENERATING ? (
                                 <div className="flex flex-col items-center gap-3">
-                                    <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-                                    <span className="text-xs text-blue-400 font-mono animate-pulse">生成视频...</span>
+                                    <div className="w-8 h-8 border-2 border-indigo-500 dark:border-blue-400 border-t-transparent rounded-full animate-spin" />
+                                    <span className="text-xs text-indigo-600 dark:text-blue-400 font-mono animate-pulse">生成视频...</span>
                                 </div>
                             ) : (
                                 <>
-                                    <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-3"><Film className="w-6 h-6 text-gray-500" /></div>
+                                    <div className="w-12 h-12 rounded-full bg-gray-200 dark:bg-white/5 flex items-center justify-center mb-3"><Film className="w-6 h-6 text-gray-400 dark:text-gray-500" /></div>
                                     <div className="flex items-center gap-2">
                                         <div className="relative group/btn">
                                             <button
                                                 onClick={onGenerateVideo}
                                                 disabled={!videoAssetsReady}
                                                 className={`px-4 py-2 rounded-lg border text-xs font-semibold uppercase tracking-wider transition-all flex items-center gap-2 ${videoAssetsReady
-                                                    ? 'bg-white/5 hover:bg-blue-500 hover:text-white border-white/10'
-                                                    : 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed'
+                                                    ? 'bg-white dark:bg-white/5 hover:bg-blue-600 dark:hover:bg-blue-500 hover:text-white border-gray-300 dark:border-white/10'
+                                                    : 'bg-gray-200 dark:bg-gray-800 text-gray-400 dark:text-gray-500 border-gray-300 dark:border-gray-700 cursor-not-allowed'
                                                     }`}
                                             >
                                                 <Film className="w-4 h-4" />
@@ -259,7 +259,7 @@ const SceneMediaViewer: React.FC<SceneMediaViewerProps> = ({
                                                 </div>
                                             )}
                                         </div>
-                                        <button onClick={onVideoUploadClick} className="p-2 rounded-lg border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 transition-colors" title="上传视频"><Upload className="w-4 h-4" /></button>
+                                        <button onClick={onVideoUploadClick} className="p-2 rounded-lg border border-gray-300 dark:border-white/10 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/10 transition-colors" title="上传视频"><Upload className="w-4 h-4" /></button>
                                     </div>
                                 </>
                             )}
@@ -269,17 +269,17 @@ const SceneMediaViewer: React.FC<SceneMediaViewerProps> = ({
             </div>
 
             {/* ── Bottom Tab Toggle (always visible in reference mode) ── */}
-            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex bg-black/80 rounded-full p-1 border border-white/10 gap-1 z-20">
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex bg-white/90 dark:bg-black/80 rounded-full p-1 border border-gray-200 dark:border-white/10 gap-1 z-20">
                 <button
                     onClick={() => setViewMode('image')}
-                    className={`p-1.5 rounded-full transition-all ${viewMode === 'image' ? 'bg-banana-500 text-black' : 'text-gray-400 hover:text-white'}`}
+                    className={`p-1.5 rounded-full transition-all ${viewMode === 'image' ? 'bg-indigo-600 dark:bg-banana-500 text-white dark:text-black' : 'text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-white'}`}
                     title="图片"
                 >
                     <ImageIcon className="w-3 h-3" />
                 </button>
                 <button
                     onClick={() => setViewMode('video')}
-                    className={`p-1.5 rounded-full transition-all ${viewMode === 'video' ? 'bg-banana-500 text-black' : 'text-gray-400 hover:text-white'}`}
+                    className={`p-1.5 rounded-full transition-all ${viewMode === 'video' ? 'bg-indigo-600 dark:bg-banana-500 text-white dark:text-black' : 'text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-white'}`}
                     title="视频"
                 >
                     <Video className="w-3 h-3" />

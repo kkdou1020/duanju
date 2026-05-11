@@ -40,9 +40,11 @@ export const analyzeNarrative = async (
     prevContext: string,
     episodeCount?: number,
     onProgress?: (msg: string) => void,
-    onBatchComplete?: (episodes: any[], meta: any) => void
+    onBatchComplete?: (episodes: any[], meta: any) => void,
+    directorStyle?: string,
+    directorStrength?: number
 ): Promise<NarrativeBlueprint> => {
-    return await runAgent1_NarrativeAnalysis(text, language, prevContext, episodeCount, onProgress, onBatchComplete);
+    return await runAgent1_NarrativeAnalysis(text, language, prevContext, episodeCount, onProgress, onBatchComplete, directorStyle, directorStrength);
 };
 
 // --- Helper: compute stylePrefix from GlobalStyle ---

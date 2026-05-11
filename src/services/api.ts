@@ -73,9 +73,11 @@ export const analyzeNarrative = async (
     prevContext: string,
     episodeCount?: number,
     _onProgress?: (msg: string) => void,
-    _onBatchComplete?: (episodes: any[], meta: any) => void
+    _onBatchComplete?: (episodes: any[], meta: any) => void,
+    directorStyle?: string,
+    directorStrength?: number
 ): Promise<NarrativeBlueprint> => {
-    return post('/pipeline/analyze', { text, language, prevContext, episodeCount });
+    return post('/pipeline/analyze', { text, language, prevContext, episodeCount, directorStyle, directorStrength });
 };
 
 /** Agent 2 + A2: Generate BeatSheet + Extract Assets */

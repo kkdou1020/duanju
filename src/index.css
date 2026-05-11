@@ -2,34 +2,47 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  background-color: #121216;
-  color: #e4e4e7;
-}
+@layer base {
+  body {
+    @apply bg-[#f7f5f0] text-slate-900 transition-colors duration-300;
+  }
+  
+  html.dark body {
+    @apply bg-[#0D0F12] text-gray-100;
+  }
 
-/* Custom scrollbar for dark theme */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    @apply w-2 h-2;
+  }
 
-::-webkit-scrollbar-track {
-  background: #1e1e24;
-}
+  ::-webkit-scrollbar-track {
+    @apply bg-gray-100;
+  }
 
-::-webkit-scrollbar-thumb {
-  background: #3f3f46;
-  border-radius: 4px;
-}
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 rounded-full;
+  }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #52525b;
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-400;
+  }
+
+  html.dark ::-webkit-scrollbar-track {
+    @apply bg-[#1A1D24];
+  }
+
+  html.dark ::-webkit-scrollbar-thumb {
+    @apply bg-[#242832];
+  }
+
+  html.dark ::-webkit-scrollbar-thumb:hover {
+    @apply bg-[#3f3f46];
+  }
 }
 
 /* ContentEditable placeholder */
 [contenteditable][data-placeholder]:empty::before {
   content: attr(data-placeholder);
-  color: #6b7280;
-  pointer-events: none;
-  font-style: italic;
+  @apply text-gray-400 italic pointer-events-none;
 }

@@ -1,12 +1,14 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import { Asset } from '@/shared/types';
+import { X } from 'lucide-react';
 import { ASSET_TAG_REGEX, extractAssetTags, resolveTagToAsset, isStoryboardTag } from '@/shared/asset-tags';
 
-interface SceneImageCandidate {
+export interface SceneImageCandidate {
     id: string;
     name: string;
     refImageUrl?: string;
+    canDelete?: boolean;
 }
 
 interface MentionTextareaProps {
@@ -14,9 +16,13 @@ interface MentionTextareaProps {
     onChange: (value: string) => void;
     assets: Asset[];
     sceneImages?: SceneImageCandidate[];
+    videos?: SceneImageCandidate[];
+    audios?: SceneImageCandidate[];
     referencedAssetIds: string[];
     onMention: (assetId: string) => void;
     onUnmention: (assetId: string) => void;
+    onAssetUpload?: (type: 'video' | 'audio', file: File) => Promise<string | undefined>;
+    onAssetDelete?: (assetId: string) => void;
 
     maxMentions?: number;
     mode?: 'video' | 'image';
@@ -38,7 +44,9 @@ const findAssetInfo = (
     tagName: string,
     assets: Asset[],
     sceneImages: SceneImageCandidate[],
-    tagId?: string
+    tagId?: string,
+    videos: SceneImageCandidate[] = [],
+    audios: SceneImageCandidate[] = []
 ): { displayName: string; thumb?: string } => {
     // 0. If #id anchor is present, exact ID lookup
     if (tagId) {
@@ -46,6 +54,10 @@ const findAssetInfo = (
         if (byId) return { displayName: byId.name, thumb: byId.refImageUrl };
         const siById = sceneImages.find(s => s.id === tagId);
         if (siById) return { displayName: siById.name, thumb: siById.refImageUrl };
+        const vById = videos.find(v => v.id === tagId);
+        if (vById) return { displayName: vById.name, thumb: vById.refImageUrl };
+        const aById = audios.find(a => a.id === tagId);
+        if (aById) return { displayName: aById.name, thumb: aById.refImageUrl };
     }
 
     // 1. Exact name match
@@ -53,6 +65,10 @@ const findAssetInfo = (
     if (exactAsset) return { displayName: exactAsset.name, thumb: exactAsset.refImageUrl };
     const exactSi = sceneImages.find(s => s.name === tagName || s.id === tagName);
     if (exactSi) return { displayName: exactSi.name, thumb: exactSi.refImageUrl };
+    const exactV = videos.find(v => v.name === tagName || v.id === tagName);
+    if (exactV) return { displayName: exactV.name, thumb: exactV.refImageUrl };
+    const exactA = audios.find(a => a.name === tagName || a.id === tagName);
+    if (exactA) return { displayName: exactA.name, thumb: exactA.refImageUrl };
 
     // 1.5 Storyboard suffix matching: @图像_分镜S01 should match sceneImage named 分镜E1_S01
     if (isStoryboardTag(tagName)) {
@@ -65,7 +81,7 @@ const findAssetInfo = (
     }
 
     // 2. Longest prefix-match fallback with overlap ratio gate (≥50%)
-    const allCandidates = [...assets, ...sceneImages];
+    const allCandidates = [...assets, ...sceneImages, ...videos, ...audios];
     let best: { displayName: string; thumb?: string } | null = null;
     let bestLen = 0;
     for (const c of allCandidates) {
@@ -93,7 +109,9 @@ const textToHtml = (
     text: string,
     assets: Asset[],
     sceneImages: SceneImageCandidate[],
-    mode: 'video' | 'image' = 'video'
+    mode: 'video' | 'image' = 'video',
+    videos: SceneImageCandidate[] = [],
+    audios: SceneImageCandidate[] = []
 ): string => {
     if (!text) return '';
     const escaped = text
@@ -106,14 +124,14 @@ const textToHtml = (
         (_match, p1, p2, p3, p4) => {
             const tagName = p1 || p3;
             const tagId = (p2 || p4) as string | undefined;
-            const info = findAssetInfo(tagName, assets, sceneImages, tagId);
+            const info = findAssetInfo(tagName, assets, sceneImages, tagId, videos, audios);
             const colors = CHIP_COLORS[mode];
             const imgHtml = info.thumb
                 ? `<img src="${info.thumb}" style="width:14px;height:14px;border-radius:2px;object-fit:cover;vertical-align:-2px;margin-right:3px;display:inline-block;" />`
-                : `<span style="vertical-align:-1px;margin-right:3px;display:inline-block;font-size:12px;">🧑</span>`;
+                : `<span style="vertical-align:-1px;margin-right:3px;display:inline-block;font-size:inherit;">🧑</span>`;
             // Store both name and optional id in data attributes
             const idAttr = tagId ? ` data-mention-id="${tagId}"` : '';
-            return `<span contenteditable="false" data-mention="${tagName}"${idAttr} style="display:inline-block;background:${colors.bg};border:1px solid ${colors.border};border-radius:4px;padding:1px 5px;margin:0 2px;font-size:12px;color:${colors.text};cursor:default;vertical-align:baseline;line-height:normal;user-select:all;font-weight:500;">${imgHtml}${info.displayName}</span>\u200B`;
+            return `<span contenteditable="false" data-mention="${tagName}"${idAttr} style="display:inline-block;background:${colors.bg};border:1px solid ${colors.border};border-radius:4px;padding:1px 5px;margin:0 2px;font-size:inherit;color:${colors.text};cursor:default;vertical-align:baseline;line-height:normal;user-select:all;font-weight:500;">${imgHtml}${info.displayName}</span>\u200B`;
         }
     );
 };
@@ -159,27 +177,38 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
     onChange,
     assets,
     sceneImages = [],
+    videos = [],
+    audios = [],
     referencedAssetIds,
     onMention,
     onUnmention,
-
+    onAssetUpload,
+    onAssetDelete,
     maxMentions,
     mode = 'video',
     className = '',
-    placeholder,
+    placeholder = ''
 }) => {
     const [showDropdown, setShowDropdown] = useState(false);
     const [query, setQuery] = useState('');
     const [highlightIdx, setHighlightIdx] = useState(0);
+    const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
     const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null);
+    const [previewImage, setPreviewImage] = useState<{ url: string; x: number; y: number } | null>(null);
 
     const editorRef = useRef<HTMLDivElement>(null);
     const prevTagsRef = useRef<string[]>(extractTags(value));
     const dropdownRef = useRef<HTMLDivElement>(null);
     const lastRenderedValue = useRef<string>(value);
     const isInternalChange = useRef(false);
+    
+    const videoUploadRef = useRef<HTMLInputElement>(null);
+    const audioUploadRef = useRef<HTMLInputElement>(null);
+    const isUploadingRef = useRef(false);
+    const isDeletingRef = useRef(false);
+    const newlyUploadedIdRef = useRef<string | null>(null);
 
-    const availableAssets = assets.filter(a => !!a.refImageUrl);
+    const availableAssets = assets; // Removed filter to allow assets without reference images
 
     // Sync prevTagsRef on external value changes
     useEffect(() => {
@@ -187,36 +216,29 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
     }, [value]);
 
     // Render HTML when value, assets, or sceneImages changes externally
-    const sceneImagesFingerprint = sceneImages.map(s => `${s.name}:${s.refImageUrl ? '1' : '0'}`).join(',');
-    const assetsFingerprint = assets.map(a => `${a.id}:${a.refImageUrl ? '1' : '0'}`).join(',');
-    const combinedFingerprint = `${sceneImagesFingerprint}|${assetsFingerprint}`;
-    
-    const lastFingerprintRef = useRef(combinedFingerprint);
     useEffect(() => {
         if (!editorRef.current) return;
         if (isInternalChange.current) {
             isInternalChange.current = false;
             return;
         }
-        const fpChanged = combinedFingerprint !== lastFingerprintRef.current;
-        lastFingerprintRef.current = combinedFingerprint;
-        if (value !== lastRenderedValue.current || fpChanged) {
-            const html = textToHtml(value, assets, sceneImages, mode as 'video' | 'image');
+        if (value !== lastRenderedValue.current) {
+            const html = textToHtml(value, assets, sceneImages, mode as 'video' | 'image', videos, audios);
             editorRef.current.innerHTML = html || '';
             lastRenderedValue.current = value;
         }
-    }, [value, assets, sceneImages, combinedFingerprint, mode]);
+    }, [value, assets, sceneImages, videos, audios, mode]);
 
     // Initial render
     useEffect(() => {
         if (editorRef.current && !editorRef.current.innerHTML) {
-            editorRef.current.innerHTML = textToHtml(value, assets, sceneImages, mode as 'video' | 'image') || '';
+            editorRef.current.innerHTML = textToHtml(value, assets, sceneImages, mode as 'video' | 'image', videos, audios) || '';
         }
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Build candidate list
     const candidates = React.useMemo(() => {
-        const items: { id: string; name: string; displayName: string; disabled: boolean; inPrompt: boolean; thumb?: string }[] = [];
+        const items: { id: string; name: string; displayName: string; disabled: boolean; inPrompt: boolean; thumb?: string; category: 'asset' | 'scene' | 'video' | 'audio', canDelete?: boolean }[] = [];
 
         // Count ALL unique @图像 tags in prompt (including 分镜 tags)
         const currentTagMatches = [...value.matchAll(TAG_REGEX)];
@@ -234,17 +256,30 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
         const currentMentionCount = uniqueRefs.size;
         const atLimit = maxMentions !== undefined && currentMentionCount >= maxMentions;
 
+        const videoIds = new Set(videos.map(v => v.id));
+        const audioIds = new Set(audios.map(a => a.id));
+        const sceneImageIds = new Set(sceneImages.map(s => s.id));
+
         for (const asset of availableAssets) {
-            // Match by ID first (exact), then by name (fuzzy fallback)
+            if (videoIds.has(asset.id) || audioIds.has(asset.id) || sceneImageIds.has(asset.id)) {
+                continue;
+            }
             const isInPrompt = promptIdSet.has(asset.id) || promptNameSet.has(asset.name);
-            items.push({
-                id: asset.id,
-                name: asset.name,
-                displayName: asset.name,
-                disabled: atLimit && !isInPrompt,
-                inPrompt: isInPrompt,
-                thumb: asset.refImageUrl,
-            });
+            const isDisabled = atLimit && !isInPrompt;
+            if (!query || asset.name.toLowerCase().includes(query.toLowerCase()) || asset.id.toLowerCase().includes(query.toLowerCase())) {
+                let category: 'asset' | 'scene' | 'video' | 'audio' = 'asset';
+                if (asset.type === 'video') category = 'video';
+                if (asset.type === 'audio') category = 'audio';
+                items.push({
+                    id: asset.id,
+                    name: asset.name,
+                    displayName: asset.name,
+                    thumb: asset.refImageUrl,
+                    disabled: isDisabled,
+                    category: category,
+                    inPrompt: isInPrompt
+                });
+            }
         }
 
         for (const si of sceneImages) {
@@ -276,15 +311,52 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
                 }
             }
 
-            // Always allow options to show up even if the base scene is referenced
-            items.push({
-                id: si.id,
-                name: si.name,
-                displayName: si.name,
-                disabled: atLimit && !isInPrompt,
-                inPrompt: isInPrompt,
-                thumb: si.refImageUrl,
-            });
+            const isDisabled = atLimit && !isInPrompt;
+            if (!query || si.name.toLowerCase().includes(query.toLowerCase()) || si.id.toLowerCase().includes(query.toLowerCase())) {
+                items.push({
+                    id: si.id,
+                    name: si.name,
+                    displayName: si.name,
+                    thumb: si.refImageUrl,
+                    disabled: isDisabled,
+                    category: 'scene',
+                    inPrompt: isInPrompt
+                });
+            }
+        }
+
+        for (const v of videos) {
+            const isInPrompt = promptIdSet.has(v.id) || promptNameSet.has(v.name);
+            const isDisabled = atLimit && !isInPrompt;
+            if (!query || v.name.toLowerCase().includes(query.toLowerCase()) || v.id.toLowerCase().includes(query.toLowerCase())) {
+                items.push({
+                    id: v.id,
+                    name: v.name,
+                    displayName: v.name,
+                    thumb: v.refImageUrl,
+                    disabled: isDisabled,
+                    category: 'video',
+                    inPrompt: isInPrompt,
+                    canDelete: v.canDelete
+                });
+            }
+        }
+
+        for (const a of audios) {
+            const isInPrompt = promptIdSet.has(a.id) || promptNameSet.has(a.name);
+            const isDisabled = atLimit && !isInPrompt;
+            if (!query || a.name.toLowerCase().includes(query.toLowerCase()) || a.id.toLowerCase().includes(query.toLowerCase())) {
+                items.push({
+                    id: a.id,
+                    name: a.name,
+                    displayName: a.name,
+                    thumb: a.refImageUrl,
+                    disabled: isDisabled,
+                    category: 'audio',
+                    inPrompt: isInPrompt,
+                    canDelete: a.canDelete
+                });
+            }
         }
 
         if (query) {
@@ -294,7 +366,18 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
             );
         }
         return items;
-    }, [availableAssets, sceneImages, referencedAssetIds, maxMentions, query, value]);
+    }, [availableAssets, sceneImages, videos, audios, referencedAssetIds, maxMentions, query, value]);
+
+    // Auto-scroll to newly uploaded item
+    useEffect(() => {
+        if (newlyUploadedIdRef.current && candidates.length > 0) {
+            const idx = candidates.findIndex(c => c.id === newlyUploadedIdRef.current);
+            if (idx >= 0) {
+                setHighlightIdx(idx);
+                newlyUploadedIdRef.current = null;
+            }
+        }
+    }, [candidates]);
 
     // Handle input from contentEditable
     const handleInput = useCallback(() => {
@@ -311,7 +394,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
             // Get text before cursor in current text node
             if (range.startContainer.nodeType === Node.TEXT_NODE) {
                 const textBefore = (range.startContainer.textContent || '').substring(0, range.startOffset);
-                const atMatch = textBefore.match(/@([^\s@]*)$/);
+                const atMatch = textBefore.match(/[@＠]([^\s@＠]*)$/);
                 if (atMatch) {
                     setQuery(atMatch[1] || '');
                     setShowDropdown(true);
@@ -374,9 +457,9 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
             const textNode = range.startContainer;
             const text = textNode.textContent || '';
             const beforeCursor = text.substring(0, range.startOffset);
-            const atIdx = beforeCursor.lastIndexOf('@');
+            const atIdx = Math.max(beforeCursor.lastIndexOf('@'), beforeCursor.lastIndexOf('＠'));
             if (atIdx >= 0) {
-                // Remove @query
+                // Remove @query or ＠query
                 const newText = text.substring(0, atIdx) + text.substring(range.startOffset);
                 textNode.textContent = newText;
                 // Set cursor to atIdx
@@ -387,7 +470,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
 
         // Create chip element
         const colors = CHIP_COLORS[mode as 'video' | 'image'];
-        const info = findAssetInfo(tagName, assets, sceneImages, assetId);
+        const info = findAssetInfo(tagName, assets, sceneImages, assetId, videos, audios);
 
         const chip = document.createElement('span');
         chip.contentEditable = 'false';
@@ -396,7 +479,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
         if (assetId && assetId !== '__base__') {
             chip.dataset.mentionId = assetId;
         }
-        chip.style.cssText = `display:inline-block;background:${colors.bg};border:1px solid ${colors.border};border-radius:4px;padding:1px 5px;margin:0 2px;font-size:12px;color:${colors.text};cursor:default;vertical-align:baseline;line-height:normal;user-select:all;font-weight:500;`;
+        chip.style.cssText = `display:inline-block;background:${colors.bg};border:1px solid ${colors.border};border-radius:4px;padding:1px 5px;margin:0 2px;font-size:inherit;color:${colors.text};cursor:default;vertical-align:baseline;line-height:normal;user-select:all;font-weight:500;`;
 
         if (thumb) {
             const img = document.createElement('img');
@@ -406,7 +489,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
         } else {
             const icon = document.createElement('span');
             icon.textContent = '🧑';
-            icon.style.cssText = 'vertical-align:-1px;margin-right:3px;display:inline-block;font-size:12px;';
+            icon.style.cssText = 'vertical-align:-1px;margin-right:3px;display:inline-block;font-size:inherit;';
             chip.appendChild(icon);
         }
 
@@ -464,7 +547,11 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
     }, [showDropdown, candidates, highlightIdx, selectCandidate]);
 
     const handleBlur = useCallback(() => {
-        setTimeout(() => setShowDropdown(false), 200);
+        setTimeout(() => {
+            if (!isUploadingRef.current && !isDeletingRef.current) {
+                setShowDropdown(false);
+            }
+        }, 200);
     }, []);
 
     // Scroll highlighted item into view
@@ -472,8 +559,31 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
         if (!showDropdown || !dropdownRef.current) return;
         const items = dropdownRef.current.querySelectorAll('[data-candidate]');
         const item = items[highlightIdx] as HTMLElement;
-        if (item) item.scrollIntoView({ block: 'nearest' });
+        if (item) {
+            item.scrollIntoView({ block: 'nearest' });
+        }
     }, [highlightIdx, showDropdown]);
+
+    // Show preview only on explicit mouse hover
+    useEffect(() => {
+        if (!showDropdown || !dropdownRef.current || hoveredIdx === null) {
+            setPreviewImage(null);
+            return;
+        }
+        const items = dropdownRef.current.querySelectorAll('[data-candidate]');
+        const item = items[hoveredIdx] as HTMLElement;
+        if (item) {
+            const candidate = candidates[hoveredIdx];
+            if (candidate && candidate.thumb) {
+                const rect = item.getBoundingClientRect();
+                setPreviewImage({ url: candidate.thumb, x: rect.right, y: rect.top });
+            } else {
+                setPreviewImage(null);
+            }
+        } else {
+            setPreviewImage(null);
+        }
+    }, [hoveredIdx, showDropdown, candidates]);
 
     // Compute dropdown position when it opens
     useEffect(() => {
@@ -502,7 +612,49 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
                 style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowY: 'auto' }}
             />
 
+            {onAssetUpload && (
+                <>
+                    <input
+                        type="file"
+                        accept="video/*"
+                        className="hidden"
+                        ref={videoUploadRef}
+                        onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file && onAssetUpload) {
+                                // Clear query so the new item won't be filtered out
+                                setQuery('');
+                                const newId = await onAssetUpload('video', file);
+                                if (newId) {
+                                    newlyUploadedIdRef.current = newId;
+                                    // The dropdown will stay open because we fixed the innerHTML rewrite bug.
+                                }
+                                e.target.value = '';
+                            }
+                        }}
+                    />
+                    <input
+                        type="file"
+                        accept="audio/*"
+                        className="hidden"
+                        ref={audioUploadRef}
+                        onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file && onAssetUpload) {
+                                setQuery('');
+                                const newId = await onAssetUpload('audio', file);
+                                if (newId) {
+                                    newlyUploadedIdRef.current = newId;
+                                }
+                                e.target.value = '';
+                            }
+                        }}
+                    />
+                </>
+            )}
+
             {showDropdown && candidates.length > 0 && dropdownPos && ReactDOM.createPortal(
+                <>
                 <div
                     ref={dropdownRef}
                     style={{
@@ -511,40 +663,300 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
                         left: `${dropdownPos.left}px`,
                         zIndex: 9999,
                     }}
-                    className="w-72 max-h-48 overflow-y-auto bg-dark-800 border border-white/10 rounded-lg shadow-xl py-1"
+                    className="flex w-[800px] max-w-[90vw] max-h-56 bg-white dark:bg-dark-800 border border-gray-200 dark:border-white/10 rounded-lg shadow-xl text-gray-900 dark:text-gray-100 overflow-hidden"
                 >
-                    {maxMentions !== undefined && (
-                        <div className="px-3 py-1 text-[9px] text-gray-500 border-b border-white/5">
-                            参考图 {new Set([...value.matchAll(TAG_REGEX)].map(m => (m[2] || m[4]) || (m[1] || m[3]))).size}/{maxMentions}
-                        </div>
-                    )}
-                    {candidates.map((c, i) => (
-                        <div
-                            key={c.id}
-                            data-candidate
-                            className={`
-                                flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors
-                                ${i === highlightIdx ? 'bg-banana-500/20' : 'hover:bg-white/5'}
-                                ${c.disabled ? 'opacity-40 cursor-not-allowed' : ''}
-                            `}
-                            onMouseDown={(e) => {
-                                e.preventDefault();
-                                if (!c.disabled) selectCandidate(c);
-                            }}
-                            onMouseEnter={() => setHighlightIdx(i)}
-                        >
-                            {c.thumb ? (
-                                <img src={c.thumb} className="w-5 h-5 rounded object-cover" />
-                            ) : (
-                                <span className="text-[10px]">🧑</span>
-                            )}
-                            <span className="flex-1 truncate">{c.displayName}</span>
-                            {c.inPrompt && (
-                                <span className="text-[9px] text-green-400/70">✅</span>
+                    {/* Left Column: Assets */}
+                    <div className="flex-1 flex flex-col border-r border-gray-200 dark:border-white/10 w-0">
+                        <div className="px-3 py-1.5 text-xs font-bold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-dark-900 border-b border-gray-200 dark:border-white/5 shrink-0 flex items-center justify-between">
+                            <span className="truncate">资产 (Assets)</span>
+                            {maxMentions !== undefined && (
+                                <span className="text-[9px] font-normal opacity-70 shrink-0 ml-2">
+                                    {new Set([...value.matchAll(TAG_REGEX)].map(m => (m[2] || m[4]) || (m[1] || m[3]))).size}/{maxMentions}
+                                </span>
                             )}
                         </div>
-                    ))}
-                </div>,
+                        <div className="flex-1 overflow-y-auto py-1">
+                            {candidates.map((c, i) => c.category === 'asset' && (
+                                <div
+                                    key={c.id}
+                                    data-candidate
+                                    className={`
+                                        flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors
+                                        ${i === highlightIdx ? 'bg-indigo-100 dark:bg-banana-500/20 text-indigo-700 dark:text-inherit' : 'hover:bg-gray-100 dark:hover:bg-white/5'}
+                                        ${c.disabled ? 'opacity-40 cursor-not-allowed' : ''}
+                                    `}
+                                    onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        if (!c.disabled) selectCandidate(c);
+                                    }}
+                                    onMouseEnter={() => {
+                                        setHighlightIdx(i);
+                                        setHoveredIdx(i);
+                                    }}
+                                    onMouseLeave={() => setHoveredIdx(null)}
+                                >
+                                    <span className="text-[10px] shrink-0">🧑</span>
+                                    <span className="flex-1 truncate">{c.displayName}</span>
+                                    {c.inPrompt && (
+                                        <span className="text-[9px] text-green-600 dark:text-green-400/70 shrink-0">✅</span>
+                                    )}
+                                </div>
+                            ))}
+                            {candidates.filter(c => c.category === 'asset').length === 0 && (
+                                <div className="px-3 py-2 text-xs text-gray-400 text-center">暂无资产</div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Right Column 1: Scenes */}
+                    <div className="flex-1 flex flex-col border-r border-gray-200 dark:border-white/10 w-0">
+                        <div className="px-3 py-1.5 text-xs font-bold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-dark-900 border-b border-gray-200 dark:border-white/5 shrink-0 truncate">
+                            分镜 (Scenes)
+                        </div>
+                        <div className="flex-1 overflow-y-auto py-1">
+                            {candidates.map((c, i) => c.category === 'scene' && (
+                                <div
+                                    key={c.id}
+                                    data-candidate
+                                    className={`
+                                        flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors
+                                        ${i === highlightIdx ? 'bg-indigo-100 dark:bg-banana-500/20 text-indigo-700 dark:text-inherit' : 'hover:bg-gray-100 dark:hover:bg-white/5'}
+                                        ${c.disabled ? 'opacity-40 cursor-not-allowed' : ''}
+                                    `}
+                                    onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        if (!c.disabled) selectCandidate(c);
+                                    }}
+                                    onMouseEnter={() => {
+                                        setHighlightIdx(i);
+                                        setHoveredIdx(i);
+                                    }}
+                                    onMouseLeave={() => setHoveredIdx(null)}
+                                >
+                                    <span className="text-[10px] shrink-0">🎬</span>
+                                    <span className="flex-1 truncate">{c.displayName}</span>
+                                    {c.inPrompt && (
+                                        <span className="text-[9px] text-green-600 dark:text-green-400/70 shrink-0">✅</span>
+                                    )}
+                                </div>
+                            ))}
+                            {candidates.filter(c => c.category === 'scene').length === 0 && (
+                                <div className="px-3 py-2 text-xs text-gray-400 text-center">暂无分镜</div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Right Column 2: Videos */}
+                    <div className="flex-1 flex flex-col border-r border-gray-200 dark:border-white/10 w-0">
+                        <div className="px-3 py-1.5 text-xs font-bold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-dark-900 border-b border-gray-200 dark:border-white/5 shrink-0 truncate">
+                            视频 (Videos)
+                        </div>
+                        <div className="flex-1 overflow-y-auto py-1">
+                            {candidates.map((c, i) => c.category === 'video' && (
+                                <div
+                                    key={c.id}
+                                    id={`mention-item-${c.id}`}
+                                    data-candidate
+                                    className={`
+                                        flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors
+                                        ${i === highlightIdx ? 'bg-indigo-100 dark:bg-banana-500/20 text-indigo-700 dark:text-inherit' : 'hover:bg-gray-100 dark:hover:bg-white/5'}
+                                        ${c.disabled ? 'opacity-40 cursor-not-allowed' : ''}
+                                    `}
+                                    onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        if (!c.disabled) selectCandidate(c);
+                                    }}
+                                    onMouseEnter={() => {
+                                        setHighlightIdx(i);
+                                        setHoveredIdx(i);
+                                    }}
+                                    onMouseLeave={() => setHoveredIdx(null)}
+                                >
+                                    <span className="text-[10px] shrink-0">🎥</span>
+                                    <span className="flex-1 truncate">{c.displayName}</span>
+                                    {c.inPrompt && (
+                                        <span className="text-[9px] text-green-600 dark:text-green-400/70 shrink-0">✅</span>
+                                    )}
+                                    {c.canDelete && (
+                                        <button 
+                                            onMouseDown={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                isDeletingRef.current = true;
+                                                setTimeout(() => {
+                                                    if (window.confirm('确认删除此视频素材？')) {
+                                                        if (!onAssetDelete) {
+                                                            alert('系统错误：删除功能未就绪，请按 F5 刷新页面后再试。');
+                                                            setTimeout(() => { isDeletingRef.current = false; editorRef.current?.focus(); }, 300);
+                                                            return;
+                                                        }
+                                                        console.log("Deleting video asset:", c.id);
+                                                        onAssetDelete(c.id);
+                                                        
+                                                        if (c.inPrompt) {
+                                                            onUnmention(c.id);
+                                                            // Remove from text value
+                                                            const regex = new RegExp(`\\[@图像_${c.name}(?:#[^\\]]+)?\\]|@图像_${c.name}(?:#[^\\s\\]]+)?|@${c.name}(?:#[^\\s\\]]+)?`, 'g');
+                                                            onChange(value.replace(regex, ''));
+                                                            // Remove from DOM
+                                                            if (editorRef.current) {
+                                                                const chips = editorRef.current.querySelectorAll(`span[data-mention="${c.name}"]`);
+                                                                chips.forEach(chip => chip.remove());
+                                                            }
+                                                        }
+                                                    }
+                                                    setTimeout(() => { isDeletingRef.current = false; editorRef.current?.focus(); }, 300);
+                                                }, 10);
+                                            }}
+                                            className="ml-auto text-gray-400 hover:text-red-500 hover:bg-red-500/10 p-1 rounded transition-colors"
+                                            title="删除素材"
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                            {candidates.filter(c => c.category === 'video').length === 0 && (
+                                <div className="px-3 py-2 text-xs text-gray-400 text-center">暂无视频</div>
+                            )}
+                        </div>
+                        {onAssetUpload && (
+                            <div className="p-1 border-t border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-dark-900 shrink-0">
+                                <button
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={() => {
+                                        isUploadingRef.current = true;
+                                        videoUploadRef.current?.click();
+                                        const onWindowFocus = () => {
+                                            setTimeout(() => {
+                                                isUploadingRef.current = false;
+                                                // Retain focus manually if needed
+                                                if (showDropdown) editorRef.current?.focus();
+                                            }, 300);
+                                            window.removeEventListener('focus', onWindowFocus);
+                                        };
+                                        window.addEventListener('focus', onWindowFocus);
+                                    }}
+                                    className="w-full py-1.5 text-xs text-indigo-600 dark:text-banana-400 bg-white dark:bg-dark-800 hover:bg-indigo-50 dark:hover:bg-banana-500/10 border border-indigo-200 dark:border-banana-500/30 rounded flex items-center justify-center gap-1 transition-colors"
+                                >
+                                    <span className="text-sm">+</span> 上传本地视频
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Right Column 3: Audios */}
+                    <div className="flex-1 flex flex-col w-0">
+                        <div className="px-3 py-1.5 text-xs font-bold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-dark-900 border-b border-gray-200 dark:border-white/5 shrink-0 truncate">
+                            音频 (Audios)
+                        </div>
+                        <div className="flex-1 overflow-y-auto py-1">
+                            {candidates.map((c, i) => c.category === 'audio' && (
+                                <div
+                                    key={c.id}
+                                    data-candidate
+                                    className={`
+                                        flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors
+                                        ${i === highlightIdx ? 'bg-indigo-100 dark:bg-banana-500/20 text-indigo-700 dark:text-inherit' : 'hover:bg-gray-100 dark:hover:bg-white/5'}
+                                        ${c.disabled ? 'opacity-40 cursor-not-allowed' : ''}
+                                    `}
+                                    onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        if (!c.disabled) selectCandidate(c);
+                                    }}
+                                    onMouseEnter={() => {
+                                        setHighlightIdx(i);
+                                        setHoveredIdx(i);
+                                    }}
+                                    onMouseLeave={() => setHoveredIdx(null)}
+                                >
+                                    <span className="text-[10px] shrink-0">🎵</span>
+                                    <span className="flex-1 truncate">{c.displayName}</span>
+                                    {c.inPrompt && (
+                                        <span className="text-[9px] text-green-600 dark:text-green-400/70 shrink-0">✅</span>
+                                    )}
+                                    {c.canDelete && (
+                                        <button 
+                                            onMouseDown={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                isDeletingRef.current = true;
+                                                setTimeout(() => {
+                                                    if (window.confirm('确认删除此音频素材？')) {
+                                                        if (!onAssetDelete) {
+                                                            alert('系统错误：删除功能未就绪，请按 F5 刷新页面后再试。');
+                                                            setTimeout(() => { isDeletingRef.current = false; editorRef.current?.focus(); }, 300);
+                                                            return;
+                                                        }
+                                                        console.log("Deleting audio asset:", c.id);
+                                                        onAssetDelete(c.id);
+                                                        
+                                                        if (c.inPrompt) {
+                                                            onUnmention(c.id);
+                                                            // Remove from text value
+                                                            const regex = new RegExp(`\\[@图像_${c.name}(?:#[^\\]]+)?\\]|@图像_${c.name}(?:#[^\\s\\]]+)?|@${c.name}(?:#[^\\s\\]]+)?`, 'g');
+                                                            onChange(value.replace(regex, ''));
+                                                            // Remove from DOM
+                                                            if (editorRef.current) {
+                                                                const chips = editorRef.current.querySelectorAll(`span[data-mention="${c.name}"]`);
+                                                                chips.forEach(chip => chip.remove());
+                                                            }
+                                                        }
+                                                    }
+                                                    setTimeout(() => { isDeletingRef.current = false; editorRef.current?.focus(); }, 300);
+                                                }, 10);
+                                            }}
+                                            className="ml-auto text-gray-400 hover:text-red-500 hover:bg-red-500/10 p-1 rounded transition-colors"
+                                            title="删除素材"
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                            {candidates.filter(c => c.category === 'audio').length === 0 && (
+                                <div className="px-3 py-2 text-xs text-gray-400 text-center">暂无音频</div>
+                            )}
+                        </div>
+                        {onAssetUpload && (
+                            <div className="p-1 border-t border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-dark-900 shrink-0">
+                                <button
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={() => {
+                                        isUploadingRef.current = true;
+                                        audioUploadRef.current?.click();
+                                        const onWindowFocus = () => {
+                                            setTimeout(() => {
+                                                isUploadingRef.current = false;
+                                                // Retain focus manually if needed
+                                                if (showDropdown) editorRef.current?.focus();
+                                            }, 300);
+                                            window.removeEventListener('focus', onWindowFocus);
+                                        };
+                                        window.addEventListener('focus', onWindowFocus);
+                                    }}
+                                    className="w-full py-1.5 text-xs text-indigo-600 dark:text-banana-400 bg-white dark:bg-dark-800 hover:bg-indigo-50 dark:hover:bg-banana-500/10 border border-indigo-200 dark:border-banana-500/30 rounded flex items-center justify-center gap-1 transition-colors"
+                                >
+                                    <span className="text-sm">+</span> 上传本地音频
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+                {previewImage && (
+                    <div
+                        style={{
+                            position: 'fixed',
+                            top: Math.min(previewImage.y, window.innerHeight - 250),
+                            left: previewImage.x + 8,
+                            zIndex: 10000,
+                        }}
+                        className="p-1 bg-white dark:bg-dark-900 border border-gray-200 dark:border-white/10 rounded-lg shadow-2xl pointer-events-none animate-in fade-in zoom-in duration-100"
+                    >
+                        <img src={previewImage.url} className="max-w-[240px] max-h-[240px] rounded-md" style={{ objectFit: 'contain' }} />
+                    </div>
+                )}
+                </>,
                 document.body
             )}
         </div>

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Scene, ImageGenStatus, GlobalStyle, Asset } from '@/shared/types';
+import { Scene, ImageGenStatus, GlobalStyle, Asset, NovelChunk } from '@/shared/types';
 import { Translation } from '@/services/i18n/translations';
 import { useSceneAssets } from './useSceneAssets';
 import { useSceneMedia } from './useSceneMedia';
@@ -26,6 +26,9 @@ export interface UseSceneCardProps {
     isOptimizing?: boolean;
     flash?: boolean;
     chapterScenes?: Scene[];
+    allChunks: NovelChunk[];
+    chunk: NovelChunk;
+    onUpdateChunk: (id: string, updates: Partial<NovelChunk> | ((c: NovelChunk) => Partial<NovelChunk>)) => void;
 }
 
 export function useSceneCard(props: UseSceneCardProps) {
@@ -44,12 +47,15 @@ export function useSceneCard(props: UseSceneCardProps) {
         language = 'Chinese',
         isOptimizing = false,
         flash = false,
-        chapterScenes = []
+        chapterScenes = [],
+        allChunks,
+        chunk,
+        onUpdateChunk
     } = props;
 
     // ── Sub-hooks ──
     const assetState = useSceneAssets({
-        scene, assets, globalStyle, language, chapterScenes, onUpdate
+        scene, assets, globalStyle, language, chapterScenes, allChunks, chunk, onUpdate, onUpdateChunk
     });
 
     const mediaState = useSceneMedia({
@@ -104,6 +110,8 @@ export function useSceneCard(props: UseSceneCardProps) {
         activeAssetSelector: assetState.activeAssetSelector,
         setActiveAssetSelector: assetState.setActiveAssetSelector,
         sceneImages: assetState.sceneImages,
+        sceneVideos: assetState.sceneVideos,
+        sceneAudios: assetState.sceneAudios,
 
         // Props pass-through
         scene, labels, onUpdate, onDelete, onDuplicate,
@@ -136,6 +144,8 @@ export function useSceneCard(props: UseSceneCardProps) {
         handleUnmentionVideo: assetState.handleUnmentionVideo,
         handleMentionImage: assetState.handleMentionImage,
         handleUnmentionImage: assetState.handleUnmentionImage,
+        handleAssetUpload: assetState.handleAssetUpload,
+        handleAssetDelete: assetState.handleAssetDelete,
     };
 }
 

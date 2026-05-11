@@ -12,7 +12,9 @@ export const runAgent1_NarrativeAnalysis = async (
     prevContext: string,
     episodeCount?: number,
     onProgress?: (msg: string) => void,
-    onBatchComplete?: (episodes: any[], meta: any) => void
+    onBatchComplete?: (episodes: any[], meta: any) => void,
+    directorStyle?: string,
+    directorStrength?: number
 ): Promise<NarrativeBlueprint> => {
     if (onProgress) {
         onProgress(`Generating Narrative Blueprint...`);
@@ -151,7 +153,9 @@ export const runAgent1_NarrativeAnalysis = async (
                     isBatched: isSplitMode,
                     episodeRange,
                     currentBatchNum,
-                    totalBatches
+                    totalBatches,
+                    directorStyle,
+                    directorStrength
                 });
 
                 const response = await retryWithBackoff<GenerateContentResponse>(() => ai.models.generateContent({
@@ -207,6 +211,14 @@ export const runAgent1_NarrativeAnalysis = async (
                     });
 
                     if (validEpisodes.length > 0) {
+                        // Clean up JSON leakage artifacts that Gemini sometimes hallucinates at the end of long strings
+                        validEpisodes.forEach(ep => {
+                            if (ep.script) {
+                                ep.script = ep.script.replace(/",\s*(title|episode_number|logline|pacing_structure|character_instructions|mentioned_chapters)"?\s*:\s*.*$/is, '').trim();
+                                ep.script = ep.script.replace(/",\s*title:\s*.*$/is, '').trim();
+                            }
+                        });
+
                         allEpisodes.push(...validEpisodes);
                         finalBatchMeta = result.batch_meta;
 

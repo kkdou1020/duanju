@@ -157,8 +157,14 @@ export const runAgent2_Annotation = async (
                 let addon = beat.visual_action || '';
                 addon = addon.split(cleanRaw).join(''); 
                 addon = addon.replace(/原文内容:|\[画面补充\]:|\[场景.*?\]|【场景.*?】/g, '').trim();
+                
+                // Clean up potential JSON leakage (e.g., ",camera_movement:)
+                addon = addon.replace(/",\s*(camera_movement|lighting|audio_subtext|narrative_function|shot_id|shot_name)"?\s*:\s*.*$/is, '').trim();
 
-                beat.visual_action = `原文内容：${cleanRaw}\n[画面补充]：${addon || '无'}`;
+                let finalAction = `原文内容：${cleanRaw}\n[画面补充]：${addon || '无'}`;
+                // Double check for trailing leakage in the entire visual_action
+                finalAction = finalAction.replace(/",\s*(camera_movement|lighting|audio_subtext|narrative_function|shot_id|shot_name)"?\s*:\s*.*$/is, '').trim();
+                beat.visual_action = finalAction;
                 return beat;
             });
 

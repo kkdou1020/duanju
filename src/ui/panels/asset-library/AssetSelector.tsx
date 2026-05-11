@@ -149,31 +149,31 @@ export const AssetSelector: React.FC<AssetSelectorProps> = ({
         const current = pendingUploads[currentUploadIdx];
         return (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-                <div className="bg-gray-900 border border-white/10 rounded-xl w-full max-w-md p-6 shadow-2xl space-y-4">
+                <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-white/10 rounded-xl w-full max-w-md p-6 shadow-2xl space-y-4">
                     <div className="flex justify-between items-center">
-                        <h3 className="text-lg font-bold text-white">New Asset ({currentUploadIdx + 1}/{pendingUploads.length})</h3>
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">New Asset ({currentUploadIdx + 1}/{pendingUploads.length})</h3>
                         <span className="text-xs text-gray-500 font-mono">{current.name}</span>
                     </div>
 
-                    <div className="flex justify-center bg-black/40 rounded-lg p-4 border border-white/5">
+                    <div className="flex justify-center bg-gray-100 dark:bg-black/40 rounded-lg p-4 border border-gray-200 dark:border-white/5">
                         <img src={current.base64} alt="Preview" className="h-40 object-contain rounded" />
                     </div>
 
                     <div className="space-y-3">
                         <div>
-                            <label className="text-xs text-gray-400 block mb-1">Name</label>
+                            <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">Name</label>
                             <input
                                 value={newAssetInfo.name}
                                 onChange={e => setNewAssetInfo(prev => ({ ...prev, name: e.target.value }))}
-                                className="w-full bg-black/20 border border-white/10 rounded px-3 py-2 text-white focus:border-banana-500 outline-none"
+                                className="w-full bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded px-3 py-2 text-gray-900 dark:text-white focus:border-indigo-500 dark:focus:border-banana-500 outline-none"
                             />
                         </div>
                         <div>
-                            <label className="text-xs text-gray-400 block mb-1">Type</label>
+                            <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">Type</label>
                             <select
                                 value={newAssetInfo.type}
                                 onChange={e => setNewAssetInfo(prev => ({ ...prev, type: e.target.value as any }))}
-                                className="w-full bg-black/20 border border-white/10 rounded px-3 py-2 text-white focus:border-banana-500 outline-none"
+                                className="w-full bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded px-3 py-2 text-gray-900 dark:text-white focus:border-indigo-500 dark:focus:border-banana-500 outline-none"
                             >
                                 <option value="character">Character</option>
                                 <option value="location">Location</option>
@@ -181,11 +181,11 @@ export const AssetSelector: React.FC<AssetSelectorProps> = ({
                             </select>
                         </div>
                         <div>
-                            <label className="text-xs text-gray-400 block mb-1">Description</label>
+                            <label className="text-xs text-gray-600 dark:text-gray-400 block mb-1">Description</label>
                             <textarea
                                 value={newAssetInfo.description}
                                 onChange={e => setNewAssetInfo(prev => ({ ...prev, description: e.target.value }))}
-                                className="w-full bg-black/20 border border-white/10 rounded px-3 py-2 text-white focus:border-banana-500 outline-none h-24 resize-none"
+                                className="w-full bg-white dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded px-3 py-2 text-gray-900 dark:text-white focus:border-indigo-500 dark:focus:border-banana-500 outline-none h-24 resize-none"
                                 placeholder="Describe this asset for the AI..."
                             />
                         </div>
@@ -194,13 +194,13 @@ export const AssetSelector: React.FC<AssetSelectorProps> = ({
                     <div className="flex justify-end gap-2 pt-2">
                         <button
                             onClick={() => setPendingUploads([])}
-                            className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
+                            className="px-4 py-2 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors"
                         >
                             Cancel All
                         </button>
                         <button
                             onClick={handleConfirmCurrentUpload}
-                            className="px-4 py-2 bg-banana-500 text-black font-bold rounded hover:bg-banana-400 transition-colors"
+                            className="px-4 py-2 bg-indigo-600 dark:bg-banana-500 text-white dark:text-black font-bold rounded hover:bg-indigo-700 dark:hover:bg-banana-400 transition-colors"
                         >
                             {currentUploadIdx === pendingUploads.length - 1 ? 'Finish & Add' : 'Next Asset'}
                         </button>
@@ -212,19 +212,19 @@ export const AssetSelector: React.FC<AssetSelectorProps> = ({
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-            <div className="bg-gray-900 border border-white/10 rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl">
-                <div className="p-4 border-b border-white/10 flex justify-between items-center">
-                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">Select Reference Asset</h3>
+            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-white/10 rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl">
+                <div className="p-4 border-b border-gray-200 dark:border-white/10 flex justify-between items-center">
+                    <h3 className="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">Select Reference Asset</h3>
                     <div className="flex items-center gap-2">
                         {allowMultiple && multiSelection.size > 0 && (
                             <button
                                 onClick={handleConfirmSelection}
-                                className="bg-banana-500 text-black text-xs font-bold px-3 py-1.5 rounded hover:bg-banana-400 transition-colors"
+                                className="bg-indigo-600 dark:bg-banana-500 text-white dark:text-black text-xs font-bold px-3 py-1.5 rounded hover:bg-indigo-700 dark:hover:bg-banana-400 transition-colors"
                             >
                                 Confirm ({multiSelection.size})
                             </button>
                         )}
-                        <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
+                        <button onClick={onClose} className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors">
                             <X className="w-5 h-5" />
                         </button>
                     </div>
@@ -232,12 +232,12 @@ export const AssetSelector: React.FC<AssetSelectorProps> = ({
 
                 {/* Tabs */}
                 {sceneImages.length > 0 && (
-                    <div className="flex border-b border-white/10">
+                    <div className="flex border-b border-gray-200 dark:border-white/10">
                         <button
                             onClick={() => setActiveTab('assets')}
                             className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors ${activeTab === 'assets'
-                                ? 'bg-white/5 text-banana-500 border-b-2 border-banana-500'
-                                : 'text-gray-500 hover:text-white hover:bg-white/5'
+                                ? 'bg-gray-50 dark:bg-white/5 text-indigo-600 dark:text-banana-500 border-b-2 border-indigo-600 dark:border-banana-500'
+                                : 'text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-white/5'
                                 }`}
                         >
                             Assets Library
@@ -245,8 +245,8 @@ export const AssetSelector: React.FC<AssetSelectorProps> = ({
                         <button
                             onClick={() => setActiveTab('scenes')}
                             className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors ${activeTab === 'scenes'
-                                ? 'bg-white/5 text-banana-500 border-b-2 border-banana-500'
-                                : 'text-gray-500 hover:text-white hover:bg-white/5'
+                                ? 'bg-gray-50 dark:bg-white/5 text-indigo-600 dark:text-banana-500 border-b-2 border-indigo-600 dark:border-banana-500'
+                                : 'text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-white/5'
                                 }`}
                         >
                             Storyboards ({sceneImages.length})
@@ -254,14 +254,14 @@ export const AssetSelector: React.FC<AssetSelectorProps> = ({
                     </div>
                 )}
 
-                <div className="p-4 border-b border-white/10 flex gap-2">
+                <div className="p-4 border-b border-gray-200 dark:border-white/10 flex gap-2">
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
                         <input
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             placeholder="Search assets..."
-                            className="w-full bg-black/20 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:border-banana-500 focus:outline-none transition-colors"
+                            className="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm text-gray-900 dark:text-white focus:border-indigo-500 dark:focus:border-banana-500 focus:outline-none transition-colors"
                             autoFocus
                         />
                     </div>
@@ -275,7 +275,7 @@ export const AssetSelector: React.FC<AssetSelectorProps> = ({
                     />
                     <button
                         onClick={() => fileInputRef.current?.click()}
-                        className="px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg flex items-center gap-2 transition-colors text-sm font-medium whitespace-nowrap"
+                        className="px-3 py-2 bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 text-gray-700 dark:text-white rounded-lg flex items-center gap-2 transition-colors text-sm font-medium whitespace-nowrap"
                     >
                         <Upload className="w-4 h-4" />
                         Upload
@@ -299,10 +299,10 @@ export const AssetSelector: React.FC<AssetSelectorProps> = ({
                                 }}
                                 disabled={isDisabled}
                                 className={`group relative aspect-square rounded-lg overflow-hidden border transition-all text-left ${isDisabled
-                                    ? 'border-white/10 opacity-30 cursor-not-allowed'
+                                    ? 'border-gray-200 dark:border-white/10 opacity-30 cursor-not-allowed'
                                     : isSelected
-                                        ? 'border-banana-500 ring-1 ring-banana-500'
-                                        : 'border-white/5 hover:border-banana-500/50 hover:scale-[1.02]'
+                                        ? 'border-indigo-500 dark:border-banana-500 ring-1 ring-indigo-500 dark:ring-banana-500'
+                                        : 'border-gray-200 dark:border-white/5 hover:border-indigo-500/50 dark:hover:border-banana-500/50 hover:scale-[1.02]'
                                     }`}
                             >
                                 {asset.refImageUrl || asset.refImageAssetId ? (
@@ -315,7 +315,7 @@ export const AssetSelector: React.FC<AssetSelectorProps> = ({
                                         imgClassName="w-full h-full object-cover"
                                     />
                                 ) : (
-                                    <div className="w-full h-full bg-white/5 flex items-center justify-center text-gray-500 text-xs">
+                                    <div className="w-full h-full bg-gray-100 dark:bg-white/5 flex items-center justify-center text-gray-500 text-xs">
                                         No Image
                                     </div>
                                 )}
@@ -324,11 +324,11 @@ export const AssetSelector: React.FC<AssetSelectorProps> = ({
                                     <div className="text-[10px] text-gray-400 capitalize">{asset.type}</div>
                                 </div>
                                 {(isDisabled || isSelected) && (
-                                    <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                                    <div className="absolute inset-0 flex items-center justify-center bg-white/50 dark:bg-black/50">
                                         {isDisabled ? (
-                                            <span className="text-gray-400 font-bold text-xs bg-black/80 px-2 py-1 rounded">Added</span>
+                                            <span className="text-gray-600 dark:text-gray-400 font-bold text-xs bg-white/90 dark:bg-black/80 px-2 py-1 rounded">Added</span>
                                         ) : (
-                                            <span className="text-banana-500 font-bold text-xs bg-black/80 px-2 py-1 rounded">Selected</span>
+                                            <span className="text-indigo-600 dark:text-banana-500 font-bold text-xs bg-white/90 dark:bg-black/80 px-2 py-1 rounded">Selected</span>
                                         )}
                                     </div>
                                 )}

@@ -1,8 +1,8 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
-import { Scene, Asset, GlobalStyle } from '@/shared/types';
+import { Scene, Asset, GlobalStyle, NovelChunk } from '@/shared/types';
 import { matchAssetsToPrompt } from '@/services/ai';
 import { ASSET_TAG_REGEX } from '@/shared/asset-tags';
-import { loadAssetBase64 } from '@/services/storage';
+import { loadAssetBase64, saveAsset, deleteAsset } from '@/services/storage';
 
 export interface UseSceneAssetsProps {
     scene: Scene;
@@ -10,11 +10,14 @@ export interface UseSceneAssetsProps {
     globalStyle: GlobalStyle;
     language: string;
     chapterScenes: Scene[];
+    allChunks: NovelChunk[];
+    chunk: NovelChunk;
     onUpdate: (id: string, fieldOrUpdates: keyof Scene | Partial<Scene>, value?: any) => void;
+    onUpdateChunk: (id: string, updates: Partial<NovelChunk> | ((c: NovelChunk) => Partial<NovelChunk>)) => void;
 }
 
 export function useSceneAssets(props: UseSceneAssetsProps) {
-    const { scene, assets, globalStyle, language, chapterScenes, onUpdate } = props;
+    const { scene, assets, globalStyle, language, chapterScenes, allChunks, chunk, onUpdate, onUpdateChunk } = props;
 
     const [activeAssetSelector, setActiveAssetSelector] = useState<'none' | 'image' | 'video'>('none');
 
@@ -257,6 +260,111 @@ export function useSceneAssets(props: UseSceneAssetsProps) {
         return () => { cancelled = true; };
     }, [chapterScenes]);
 
+    // ── Extract Global Videos & Audios ──
+    const sceneVideos = useMemo(() => {
+        const videos: any[] = [];
+        for (const c of allChunks) {
+            for (const s of c.scenes) {
+                if (s.prompt_options && s.prompt_options.length > 0) {
+                    s.prompt_options.forEach((opt, index) => {
+                        if (opt.videoUrl || opt.videoAssetId) {
+                            const optionLabel = String.fromCharCode(65 + index); // A, B, C
+                            videos.push({
+                                id: `scene_video_${c.id}_${s.id}_${opt.option_id}`,
+                                name: `E${c.index + 1}分镜S${s.id.replace('scene_', '')}-${opt.option_id || optionLabel}`,
+                                description: s.visual_desc || "Generated video",
+                                type: 'item',
+                                refImageUrl: opt.imageUrl || undefined // Use thumbnail if available
+                            });
+                        }
+                    });
+                } else if (s.videoUrl || s.videoAssetId || s.startEndVideoAssetId) {
+                    videos.push({
+                        id: `scene_video_${c.id}_${s.id}`,
+                        name: `E${c.index + 1}分镜S${s.id.replace('scene_', '')}-A`,
+                        description: s.visual_desc || "Generated video",
+                        type: 'item',
+                        refImageUrl: s.imageUrl || undefined
+                    });
+                }
+            }
+        }
+        
+        // Add chunk uploaded videos
+        const uploadedVideos = chunk.assets.filter(a => a.type === 'video').map(a => ({
+            id: a.id,
+            name: a.name,
+            description: a.description,
+            type: 'item',
+            refImageUrl: a.refImageUrl,
+            canDelete: true
+        }));
+        
+        return [...videos, ...uploadedVideos];
+    }, [allChunks, chunk.assets]);
+
+    const sceneAudios = useMemo(() => {
+        // Add chunk uploaded audios
+        const uploadedAudios = chunk.assets.filter(a => a.type === 'audio').map(a => ({
+            id: a.id,
+            name: a.name,
+            description: a.description,
+            type: 'item',
+            refImageUrl: a.refImageUrl,
+            canDelete: true
+        }));
+        return uploadedAudios;
+    }, [chunk.assets]);
+
+    const handleAssetUpload = async (type: 'video' | 'audio', file: File) => {
+        try {
+            // Save to IndexedDB
+            const blob = new Blob([file], { type: file.type });
+            const assetId = await saveAsset(blob);
+            
+            // Generate a safe name from filename
+            const fileName = file.name.split('.')[0].replace(/[^a-zA-Z0-9_\u4e00-\u9fa5]/g, '_');
+            
+            const newAsset: Asset = {
+                id: assetId,
+                name: fileName,
+                description: `上传的${type === 'video' ? '视频' : '音频'}素材`,
+                type: type as any,
+            };
+            
+            // Add to chunk assets
+            onUpdateChunk(chunk.id, (prev) => ({
+                assets: [...prev.assets, newAsset]
+            }));
+            
+            return assetId;
+        } catch (e) {
+            console.error('Failed to upload asset', e);
+            alert(`上传${type === 'video' ? '视频' : '音频'}失败: ` + e);
+            return undefined;
+        }
+    };
+
+    const handleAssetDelete = async (assetId: string) => {
+        console.log("handleAssetDelete called with assetId:", assetId);
+        
+        // Remove from chunk assets FIRST for immediate UI feedback
+        onUpdateChunk(chunk.id, (prev) => {
+            const assets = prev.assets || [];
+            console.log("Previous chunk assets:", assets);
+            const filtered = assets.filter(a => a.id !== assetId);
+            console.log("Filtered chunk assets:", filtered);
+            return { assets: filtered };
+        });
+
+        // Then delete from IndexedDB
+        try {
+            await deleteAsset(assetId);
+        } catch (e) {
+            console.warn('Failed to delete asset from DB', e);
+        }
+    };
+
     // ── Initialize video asset IDs when image first appears ──
     const initializeVideoAssetIds = () => {
         if (!scene.isStartEndFrameMode && scene.videoAssetIds === undefined) {
@@ -302,6 +410,8 @@ export function useSceneAssets(props: UseSceneAssetsProps) {
         // State
         activeAssetSelector, setActiveAssetSelector,
         sceneImages,
+        sceneVideos,
+        sceneAudios,
 
         // Handlers
         handleAddAsset,
@@ -313,5 +423,7 @@ export function useSceneAssets(props: UseSceneAssetsProps) {
         handleUnmentionVideo,
         handleMentionImage,
         handleUnmentionImage,
+        handleAssetUpload,
+        handleAssetDelete
     };
 }

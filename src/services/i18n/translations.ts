@@ -117,7 +117,7 @@ export const translations: Record<string, Translation> = {
     copy: "复制",
     visualizeBtn: "生成图片",
     openFull: "查看大图",
-    tabScript: "剧本输入",
+    tabScript: "剧本大纲",
     tabAssets: "资产设定 (DNA)",
     assetsTitle: "数字资产库",
     extractAssets: "智能提取设定",

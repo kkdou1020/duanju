@@ -6,7 +6,7 @@ const router = Router();
 // POST /api/pipeline/analyze
 router.post('/analyze', async (req: Request, res: Response) => {
     try {
-        const { text, language, prevContext, episodeCount } = req.body;
+        const { text, language, prevContext, episodeCount, directorStyle, directorStrength } = req.body;
         if (!text || !language) {
             return res.status(400).json({ error: 'Missing required fields: text, language' });
         }
@@ -15,7 +15,11 @@ router.post('/analyze', async (req: Request, res: Response) => {
             text,
             language,
             prevContext || '',
-            episodeCount
+            episodeCount,
+            undefined,
+            undefined,
+            directorStyle,
+            directorStrength
         );
         res.json(result);
     } catch (e: any) {

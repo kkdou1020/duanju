@@ -10,6 +10,7 @@ import saveAs from 'file-saver';
 
 export interface UseChunkActionsProps {
     chunk: NovelChunk;
+    allChunks: NovelChunk[];
     styleState: GlobalStyle;
     language: string;
     isActive: boolean;
@@ -19,18 +20,20 @@ export interface UseChunkActionsProps {
     onExtract: (chunk: NovelChunk) => Promise<Asset[]>;
     onGenerateScript: (chunk: NovelChunk) => Promise<Scene[]>;
     onGenerateBeats: (chunk: NovelChunk) => Promise<Scene[]>;
-    onGeneratePrompts: (chunk: NovelChunk) => Promise<Scene[]>;
+    onGeneratePrompts: (chunk: NovelChunk, targetSceneIds?: string[], onProgress?: (activeId: string | null, completedIds: string[]) => void) => Promise<Scene[]>;
     onGenerateImage: (scene: Scene, chunkAssets?: Asset[], optionId?: string, allScenes?: Scene[]) => Promise<string>;
     onToggle: () => void;
 }
 
 export function useChunkActions({
-    chunk, styleState, language, isActive,
+    chunk, allChunks, styleState, language, isActive,
     onUpdateChunk, onSceneUpdate, onDuplicateScene,
     onExtract, onGenerateScript, onGenerateBeats, onGeneratePrompts, onGenerateImage, onToggle
 }: UseChunkActionsProps) {
     const [loadingStep, setLoadingStep] = useState<'none' | 'extracting' | 'storyboarding' | 'scripting' | 'filming'>('none');
     const [generatingSceneIds, setGeneratingSceneIds] = useState<string[]>([]);
+    const [activePromptSceneId, setActivePromptSceneId] = useState<string | null>(null);
+    const [completedPromptSceneIds, setCompletedPromptSceneIds] = useState<string[]>([]);
     const [scriptError, setScriptError] = useState<string | null>(null);
     const [exportProgress, setExportProgress] = useState<number | null>(null);
     const [showTextModal, setShowTextModal] = useState(false);
@@ -171,10 +174,39 @@ export function useChunkActions({
     };
 
     const handleGeneratePromptsAction = async () => {
+        const scenesWithPrompts = chunk.scenes.filter(s => !!s.np_prompt?.trim() || (s.prompt_options && s.prompt_options.some(opt => !!opt.np_prompt?.trim())));
+        const scenesWithoutPrompts = chunk.scenes.filter(s => !scenesWithPrompts.includes(s));
+
+        let targetSceneIds: string[] | undefined = undefined;
+
+        if (scenesWithPrompts.length === 0) {
+            targetSceneIds = undefined; // Generate all
+        } else if (scenesWithoutPrompts.length > 0) {
+            const confirmMsg = language === 'Chinese'
+                ? `${scenesWithPrompts.length}/${chunk.scenes.length} 个分镜已有提示词。\n\n点击「确定」仅生成缺失的 ${scenesWithoutPrompts.length} 个提示词。\n点击「取消」重新生成全部。`
+                : `${scenesWithPrompts.length}/${chunk.scenes.length} scenes already have prompts.\n\nClick OK to generate the ${scenesWithoutPrompts.length} missing prompts.\nClick Cancel to regenerate all.`;
+            if (window.confirm(confirmMsg)) {
+                targetSceneIds = scenesWithoutPrompts.map(s => s.id);
+            } else {
+                targetSceneIds = undefined; // Regenerate all
+            }
+        } else {
+            const confirmMsg = language === 'Chinese'
+                ? `所有 ${chunk.scenes.length} 个分镜已有提示词，是否重新生成全部？`
+                : `All ${chunk.scenes.length} scenes already have prompts. Regenerate all?`;
+            if (!window.confirm(confirmMsg)) return;
+            targetSceneIds = undefined; // Regenerate all
+        }
+
+        setActivePromptSceneId(null);
+        setCompletedPromptSceneIds([]);
         setLoadingStep('scripting');
         setScriptError(null);
         try {
-            const scenes = await onGeneratePrompts(chunk);
+            const scenes = await onGeneratePrompts(chunk, targetSceneIds, (activeId, completedIds) => {
+                setActivePromptSceneId(activeId);
+                setCompletedPromptSceneIds(completedIds);
+            });
             if (!scenes || scenes.length === 0) throw new Error("Empty prompts from AI");
             // onGeneratePrompts already calls updateChunk with scripted status
             if (!isActive) onToggle();
@@ -183,6 +215,8 @@ export function useChunkActions({
             setScriptError(e.message || "Failed to generate prompts. Please try again.");
         } finally {
             setLoadingStep('none');
+            setActivePromptSceneId(null);
+            // intentionally NOT clearing completedPromptSceneIds so the checkmarks remain
         }
     };
 
@@ -569,7 +603,7 @@ export function useChunkActions({
     return {
         // State
         loadingStep, scriptError, exportProgress,
-        generatingSceneIds, getSceneAssetsReady, getVideoAssetsReady, anyAssetPending,
+        generatingSceneIds, activePromptSceneId, completedPromptSceneIds, getSceneAssetsReady, getVideoAssetsReady, anyAssetPending,
         showTextModal, setShowTextModal, editingText, setEditingText,
 
         // Handlers

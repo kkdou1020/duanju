@@ -97,6 +97,25 @@ export const saveAsset = async (blob: Blob): Promise<string> => {
   }
 };
 
+export const deleteAsset = async (assetId: string): Promise<void> => {
+  try {
+    const db = await getDB();
+    return new Promise<void>((resolve, reject) => {
+      try {
+        const transaction = db.transaction('Assets', 'readwrite');
+        const store = transaction.objectStore('Assets');
+        store.delete(assetId);
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+      } catch (e) {
+        reject(e);
+      }
+    });
+  } catch (e) {
+    throw e;
+  }
+};
+
 export const loadAssetUrl = async (assetId: string): Promise<string | null> => {
   try {
     const db = await getDB();

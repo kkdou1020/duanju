@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Link as LinkIcon, Sparkles, Play, Clapperboard } from 'lucide-react';
-import { Scene, GlobalStyle, Asset } from '@/shared/types';
+import { Scene, GlobalStyle, Asset, NovelChunk } from '@/shared/types';
 import { Translation } from '@/services/i18n/translations';
 import { AssetSelector } from '@/ui/panels/asset-library/AssetSelector';
 
@@ -19,6 +19,8 @@ interface SceneCardProps {
     onDelete?: (id: string) => void;
     onDuplicate?: (id: string) => void;
     isGeneratingExternal?: boolean;
+    isGeneratingPrompts?: boolean;
+    isPromptCompleted?: boolean;
     onGenerateImageOverride?: (scene: Scene) => Promise<string>;
     onImageGenerated?: (id: string, url: string) => void;
     onVideoGenerated?: (id: string, url: string, assetId?: string) => void;
@@ -33,6 +35,9 @@ interface SceneCardProps {
     isOptimizing?: boolean;
     flash?: boolean;
     chapterScenes?: Scene[];
+    allChunks: NovelChunk[];
+    chunk: NovelChunk;
+    onUpdateChunk: (id: string, updates: Partial<NovelChunk> | ((c: NovelChunk) => Partial<NovelChunk>)) => void;
 }
 
 const SceneCard: React.FC<SceneCardProps> = (props) => {
@@ -76,7 +81,7 @@ const SceneCard: React.FC<SceneCardProps> = (props) => {
     };
 
     return (
-        <div className={`rounded-xl border overflow-hidden bg-dark-900 shadow-lg transition-all duration-300 ${state.flash ? 'ring-2 ring-banana-500 animate-pulse' : 'border-white/5'}`}>
+        <div className={`rounded-xl border overflow-hidden bg-white dark:bg-dark-900 shadow-sm dark:shadow-lg transition-all duration-300 ${state.flash ? 'ring-2 ring-indigo-500 dark:ring-banana-500 animate-pulse' : 'border-gray-200 dark:border-white/5'}`}>
             <div className="flex flex-col md:flex-row">
                 {/* LEFT COLUMN: MEDIA */}
                 <SceneMediaViewer
@@ -124,14 +129,14 @@ const SceneCard: React.FC<SceneCardProps> = (props) => {
 
                     {/* Prompt Options Selection */}
                     {state.scene.prompt_options && state.scene.prompt_options.length > 0 && (
-                        <div className="flex flex-col border-b border-white/5 bg-[#121212]">
+                        <div className="flex flex-col border-b border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-[#121212]">
                             {/* Top alignment row with Batch Actions */}
-                            <div className="flex justify-end px-3 py-2 bg-[#1a1a1a] border-b border-black">
+                            <div className="flex justify-end px-3 py-2 bg-gray-100 dark:bg-[#1a1a1a] border-b border-gray-200 dark:border-black">
                                 <div className="flex gap-2">
                                     <button
                                         onClick={() => state.handleGenerateBatchImages()}
                                         disabled={state.getGenStatus(viewingOptionId) === 'GENERATING' || !state.areAssetsReady}
-                                        className="px-4 py-1.5 rounded-md border border-purple-500/50 hover:bg-purple-500/20 text-purple-400 text-xs font-bold transition-colors disabled:opacity-50"
+                                        className="px-4 py-1.5 rounded-md border border-purple-300 dark:border-purple-500/50 hover:bg-purple-100 dark:hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 text-xs font-bold transition-colors disabled:opacity-50"
                                         title={!state.areAssetsReady ? "请等待全局资产准备完成" : "为当前所有方案并发生成对应的分镜图片"}
                                     >
                                         一键生图
@@ -139,7 +144,7 @@ const SceneCard: React.FC<SceneCardProps> = (props) => {
                                     <button
                                         onClick={() => state.handleGenerateBatchVideos()}
                                         disabled={state.getVideoStatus(viewingOptionId) === 'GENERATING' || !state.videoAssetsReady}
-                                        className="px-4 py-1.5 rounded-md border border-blue-500/50 hover:bg-blue-500/20 text-blue-400 text-xs font-bold transition-colors disabled:opacity-50"
+                                        className="px-4 py-1.5 rounded-md border border-blue-300 dark:border-blue-500/50 hover:bg-blue-100 dark:hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 text-xs font-bold transition-colors disabled:opacity-50"
                                         title={!state.videoAssetsReady ? "请等待全局资产准备完成" : "为当前所有方案并发生成对应的视频"}
                                     >
                                         一键生视频
@@ -148,7 +153,7 @@ const SceneCard: React.FC<SceneCardProps> = (props) => {
                             </div>
                             
                             {/* Tabs Row */}
-                            <div className="flex border-b border-black bg-[#121212] gap-1 px-2 pt-2">
+                            <div className="flex border-b border-gray-200 dark:border-black bg-gray-50 dark:bg-[#121212] gap-1 px-2 pt-2">
                                 {state.scene.prompt_options.map((opt, index) => {
                                     const isActive = viewingOption?.option_id === opt.option_id;
                                     const displayId = opt.option_id || String.fromCharCode(65 + index);
@@ -169,7 +174,7 @@ const SceneCard: React.FC<SceneCardProps> = (props) => {
                                                 state.onUpdate(state.scene.id, 'assetIds', opt.assetIds || []);
                                                 state.onUpdate(state.scene.id, 'videoAssetIds', opt.videoAssetIds || []);
                                             }}
-                                            className={`flex-1 py-2 text-xs font-bold transition-all border-b-2 rounded-t-md flex justify-center items-center ${isActive ? 'bg-[#1e1e1e] text-yellow-500 border-yellow-500 shadow-sm' : 'bg-black/40 text-gray-500 border-transparent hover:bg-white/5 hover:text-gray-300'}`}
+                                            className={`flex-1 py-2 text-xs font-bold transition-all border-b-2 rounded-t-md flex justify-center items-center ${isActive ? 'bg-white dark:bg-[#1e1e1e] text-indigo-600 dark:text-yellow-500 border-indigo-600 dark:border-yellow-500 shadow-sm' : 'bg-gray-100 dark:bg-black/40 text-gray-500 border-transparent hover:bg-gray-200 dark:hover:bg-white/5 hover:text-gray-700 dark:hover:text-gray-300'}`}
                                         >
                                             方案{displayId}: 实拍参考
                                         </button>
@@ -179,13 +184,13 @@ const SceneCard: React.FC<SceneCardProps> = (props) => {
 
                             {/* Reference Details Panel */}
                             {viewingOption && (
-                                <div className="p-3 flex flex-col gap-3.5 bg-[#0a0a0a]">
+                                <div className="p-3 flex flex-col gap-3.5 bg-gray-100 dark:bg-[#0a0a0a]">
                                     <div className="flex items-center gap-2">
-                                        <span className="text-gray-400 text-xs flex items-center gap-1 shrink-0">
-                                            <Search className="w-3 h-3 text-blue-400" />
+                                        <span className="text-gray-500 dark:text-gray-400 text-xs flex items-center gap-1 shrink-0">
+                                            <Search className="w-3 h-3 text-indigo-500 dark:text-blue-400" />
                                             镜头参照:
                                         </span>
-                                        <div className="flex-1 bg-[#151515] border border-yellow-500/30 rounded px-2.5 py-1 text-yellow-500 text-[11px] font-semibold truncate" title={viewingOption.lens_reference?.shot_name || viewingOption.lens_reference?.searchKeyword || '未知'}>
+                                        <div className="flex-1 bg-white dark:bg-[#151515] border border-indigo-200 dark:border-yellow-500/30 rounded px-2.5 py-1 text-indigo-600 dark:text-yellow-500 text-[11px] font-semibold truncate" title={viewingOption.lens_reference?.shot_name || viewingOption.lens_reference?.searchKeyword || '未知'}>
                                             {viewingOption.lens_reference?.shot_name || viewingOption.lens_reference?.searchKeyword || '未知'}
                                         </div>
                                         {viewingOption.lens_reference?.video_url && (
@@ -197,7 +202,7 @@ const SceneCard: React.FC<SceneCardProps> = (props) => {
 
                                     {/* Description */}
                                     {viewingOption.lens_reference?.description && (
-                                        <div className="border-l-2 border-yellow-600/50 pl-2 py-0.5 flex flex-wrap gap-1.5 text-[11px] italic text-gray-400 items-baseline">
+                                        <div className="border-l-2 border-indigo-300 dark:border-yellow-600/50 pl-2 py-0.5 flex flex-wrap gap-1.5 text-[11px] italic text-gray-600 dark:text-gray-400 items-baseline">
                                             <span>{viewingOption.lens_reference.description}</span>
                                             {viewingOption.lens_reference.timestamp && (
                                                 <span className="text-gray-500">(参考节点: {viewingOption.lens_reference.timestamp})</span>
@@ -211,42 +216,55 @@ const SceneCard: React.FC<SceneCardProps> = (props) => {
                     )}
 
                     {/* Middle: Split Content (Video Left, Image/Dialogue Right) */}
-                    <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-white/5">
+                    <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-gray-200 dark:divide-white/5">
                         {/* LEFT PANE: VIDEO PROMPT */}
                         <SceneVideoPane
                             scene={state.scene}
                             labels={state.labels}
                             onUpdate={handleSynchronizedUpdate}
                             hasImage={state.hasImage}
-                            assets={state.assets}
+                            assets={props.assets || []}
                             chapterScenes={state.chapterScenes}
                             onRemoveAsset={state.handleRemoveAsset}
                             onOpenAssetSelector={() => state.setActiveAssetSelector('video')}
+                            sceneImages={state.sceneImages}
+                            videos={state.sceneVideos}
+                            audios={state.sceneAudios}
                             onMentionAsset={state.handleMentionVideo}
                             onUnmentionAsset={state.handleUnmentionVideo}
-                            sceneImages={state.sceneImages}
+                            onAssetUpload={state.handleAssetUpload}
+                            onAssetDelete={state.handleAssetDelete}
                             onSpecCommit={state.handleSpecCommit}
                             onLocalSpecChange={state.handleLocalSpecChange}
                             isStartEndFrameMode={state.scene.isStartEndFrameMode}
                             startEndAssetIds={state.scene.startEndAssetIds}
                             onOpenEndFrameSelector={() => state.setActiveAssetSelector('video')}
                             onRemoveEndFrame={() => state.handleRemoveAsset(state.scene.startEndAssetIds?.[1] || '', 'video')}
+                            onToggleStartEndMode={(enabled) => state.onUpdate(state.scene.id, 'isStartEndFrameMode', enabled)}
+                            isGeneratingPrompts={props.isGeneratingPrompts}
+                            isPromptCompleted={props.isPromptCompleted}
                         />
 
                         {/* RIGHT PANE: IMAGE + DIALOGUE */}
-                        <div className="flex flex-col h-full divide-y divide-white/5">
+                        <div className="flex flex-col h-full divide-y divide-gray-200 dark:divide-white/5">
                             {/* Top: Image Prompt */}
                             <SceneImagePane
                                 scene={state.scene}
                                 labels={state.labels}
                                 onUpdate={handleSynchronizedUpdate}
-                                assets={state.assets}
+                                assets={props.assets || []}
                                 chapterScenes={state.chapterScenes}
                                 onRemoveAsset={state.handleRemoveAsset}
+                                sceneImages={state.sceneImages}
+                                videos={state.sceneVideos}
+                                audios={state.sceneAudios}
                                 onOpenAssetSelector={() => state.setActiveAssetSelector('image')}
                                 onMentionAsset={state.handleMentionImage}
                                 onUnmentionAsset={state.handleUnmentionImage}
-                                sceneImages={state.sceneImages}
+                                onAssetUpload={state.handleAssetUpload}
+                                onAssetDelete={state.handleAssetDelete}
+                                isGeneratingPrompts={props.isGeneratingPrompts}
+                                isPromptCompleted={props.isPromptCompleted}
                             />
 
                             {/* Bottom: Dialogue & Audio Section */}
@@ -282,13 +300,27 @@ const SceneCard: React.FC<SceneCardProps> = (props) => {
     );
 };
 
+const getGlobalMediaHash = (chunks: any[]) => {
+    let hash = '';
+    for (const c of chunks) {
+        for (const s of c.scenes) {
+            hash += (s.videoAssetId || '') + (s.videoUrl || '') + (s.imageAssetId || '') + (s.imageUrl || '');
+        }
+    }
+    return hash;
+};
+
 export default React.memo(SceneCard, (prev, next) => {
     return prev.scene === next.scene
         && prev.isGeneratingExternal === next.isGeneratingExternal
+        && prev.isGeneratingPrompts === next.isGeneratingPrompts
+        && prev.isPromptCompleted === next.isPromptCompleted
         && prev.areAssetsReady === next.areAssetsReady
         && prev.videoAssetsReady === next.videoAssetsReady
         && prev.flash === next.flash
         && prev.assets === next.assets
         && prev.globalStyle === next.globalStyle
-        && prev.language === next.language;
+        && prev.language === next.language
+        && prev.chunk.assets === next.chunk.assets
+        && getGlobalMediaHash(prev.allChunks) === getGlobalMediaHash(next.allChunks);
 });

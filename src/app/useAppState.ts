@@ -31,6 +31,28 @@ export function useAppState() {
     });
     const [filename, setFilename] = useState("");
     const [fullNovelText, setFullNovelText] = useState("");
+    
+    // Theme State
+    const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+        const saved = localStorage.getItem('theme');
+        return (saved as 'light' | 'dark') || 'dark'; // Default to dark for backward compatibility
+    });
+
+    const toggleTheme = () => {
+        setTheme(prev => {
+            const next = prev === 'dark' ? 'light' : 'dark';
+            localStorage.setItem('theme', next);
+            return next;
+        });
+    };
+
+    useEffect(() => {
+        if (theme === 'dark') {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    }, [theme]);
 
     const globalAssetsRef = useRef(globalAssets);
     useEffect(() => { globalAssetsRef.current = globalAssets; }, [globalAssets]);
@@ -46,7 +68,7 @@ export function useAppState() {
     useSessionRestore({
         globalAssets, setGlobalAssets, chunks, setChunks,
         globalStyle, setGlobalStyle, language, setLanguage,
-        filename, setFilename
+        filename, setFilename, fullNovelText, setFullNovelText
     });
 
     const { flashScene, handleSceneUpdate, handleDuplicateScene } = useSceneManager(chunks, setChunks);
@@ -174,7 +196,7 @@ export function useAppState() {
         language, setLanguage, status, analysisProgress,
         expandedId, setExpandedId, activeChunkId, setActiveChunkId,
         showGlobalSelector, setShowGlobalSelector,
-        filename,
+        filename, fullNovelText,
         t, targetChunkId, targetChunk, displayedAssets,
 
         // Auto mode
@@ -195,5 +217,8 @@ export function useAppState() {
         // Chunk delete & copy
         handleDeleteChunk,
         handleCopyChunk,
+
+        // Theme
+        theme, toggleTheme,
     };
 }

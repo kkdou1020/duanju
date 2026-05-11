@@ -7,6 +7,7 @@ import { useChunkActions } from './useChunkActions';
 
 interface ChunkPanelProps {
     chunk: NovelChunk;
+    allChunks: NovelChunk[];
     globalAssets: Asset[];
     styleState: GlobalStyle;
     labels: Translation;
@@ -18,7 +19,7 @@ interface ChunkPanelProps {
     onExtract: (chunk: NovelChunk) => Promise<Asset[]>;
     onGenerateScript: (chunk: NovelChunk) => Promise<Scene[]>;
     onGenerateBeats: (chunk: NovelChunk) => Promise<Scene[]>;
-    onGeneratePrompts: (chunk: NovelChunk) => Promise<Scene[]>;
+    onGeneratePrompts: (chunk: NovelChunk, targetSceneIds?: string[]) => Promise<Scene[]>;
     onGenerateImage: (scene: Scene, chunkAssets?: Asset[], optionId?: string, allScenes?: Scene[]) => Promise<string>;
     language: string;
     isActive: boolean;
@@ -29,7 +30,7 @@ interface ChunkPanelProps {
 }
 
 const ChunkPanel: React.FC<ChunkPanelProps> = ({
-    chunk, globalAssets, styleState, labels,
+    chunk, allChunks, globalAssets, styleState, labels,
     onUpdateChunk, onDeleteChunk, onCopyChunk, onSceneUpdate, onDuplicateScene,
     onExtract, onGenerateScript, onGenerateBeats, onGeneratePrompts, onGenerateImage,
     language, isActive, onToggle,
@@ -37,7 +38,7 @@ const ChunkPanel: React.FC<ChunkPanelProps> = ({
 }) => {
     const {
         loadingStep, scriptError, exportProgress,
-        generatingSceneIds, getSceneAssetsReady, getVideoAssetsReady, anyAssetPending,
+        generatingSceneIds, activePromptSceneId, completedPromptSceneIds, getSceneAssetsReady, getVideoAssetsReady, anyAssetPending,
         showTextModal, setShowTextModal, editingText, setEditingText,
         handleAddChunkAssets, handleExtract, handleScript,
         handleStoryboard, handleGeneratePromptsAction,
@@ -47,7 +48,7 @@ const ChunkPanel: React.FC<ChunkPanelProps> = ({
         handleGenerateImageInternal, handleVideoGenerated,
         handleDownload,
     } = useChunkActions({
-        chunk, styleState, language, isActive,
+        chunk, allChunks, styleState, language, isActive,
         onUpdateChunk, onSceneUpdate, onDuplicateScene,
         onExtract, onGenerateScript, onGenerateBeats, onGeneratePrompts, onGenerateImage, onToggle
     });
@@ -64,12 +65,12 @@ const ChunkPanel: React.FC<ChunkPanelProps> = ({
 
     return (
         <>
-            <div className={`bg-dark-800 rounded-xl border overflow-hidden shadow-lg transition-all duration-300 ease-in-out w-[75%] ${isActive ? 'border-banana-500/30 ring-1 ring-banana-500/20' : 'border-white/10'}`}>
+            <div className={`bg-white dark:bg-dark-800 rounded-xl border overflow-hidden shadow-md dark:shadow-lg transition-all duration-300 ease-in-out w-[75%] ${isActive ? 'border-indigo-500/30 dark:border-banana-500/30 ring-1 ring-indigo-500/20 dark:ring-banana-500/20' : 'border-gray-200 dark:border-white/10'}`}>
 
                 {/* Header */}
-                <div className={`p-4 flex items-center justify-between bg-white/5 cursor-pointer hover:bg-white/10 ${isLocked ? 'opacity-75' : ''}`} onClick={onToggle}>
+                <div className={`p-4 flex items-center justify-between bg-gray-50 dark:bg-white/5 cursor-pointer hover:bg-gray-100 dark:hover:bg-white/10 ${isLocked ? 'opacity-75' : ''}`} onClick={onToggle}>
                     <div className="flex items-center gap-4">
-                        <button className="text-gray-400">
+                        <button className="text-gray-400 dark:text-gray-500">
                             {isActive ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
                         </button>
                         <div className="flex-1" onClick={e => e.stopPropagation()}>
@@ -78,12 +79,12 @@ const ChunkPanel: React.FC<ChunkPanelProps> = ({
                                     type="text"
                                     value={chunk.title || `${labels.chunkLabel} ${chunk.index + 1}`}
                                     onChange={(e) => onUpdateChunk(chunk.id, { title: e.target.value })}
-                                    className="bg-transparent text-sm font-bold text-white focus:outline-none focus:ring-1 focus:ring-banana-500/50 rounded px-1 -ml-1 hover:bg-white/5 transition-colors w-full"
+                                    className="bg-transparent text-sm font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500/50 dark:focus:ring-banana-500/50 rounded px-1 -ml-1 hover:bg-gray-200 dark:hover:bg-white/5 transition-colors w-full"
                                 />
-                                {isLocked && <span className="text-[10px] bg-banana-500/20 text-banana-400 px-2 py-0.5 rounded-full border border-banana-500/30 whitespace-nowrap">Auto-Focus</span>}
+                                {isLocked && <span className="text-[10px] bg-indigo-100 dark:bg-banana-500/20 text-indigo-600 dark:text-banana-400 px-2 py-0.5 rounded-full border border-indigo-200 dark:border-banana-500/30 whitespace-nowrap">Auto-Focus</span>}
                             </div>
                             <p
-                                className="text-xs text-gray-500 font-mono mt-1 cursor-pointer hover:text-banana-400 transition-colors flex items-center gap-1 group"
+                                className="text-xs text-gray-500 font-mono mt-1 cursor-pointer hover:text-indigo-600 dark:hover:text-banana-400 transition-colors flex items-center gap-1 group"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     setEditingText(chunk.text);
@@ -91,8 +92,8 @@ const ChunkPanel: React.FC<ChunkPanelProps> = ({
                                 }}
                                 title="点击查看完整内容"
                             >
-                                <span className="group-hover:underline decoration-banana-400/50 underline-offset-2">{chunk.text.substring(0, 60)}...</span>
-                                <FileText className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity text-banana-400" />
+                                <span className="group-hover:underline decoration-indigo-400/50 dark:decoration-banana-400/50 underline-offset-2">{chunk.text.substring(0, 60)}...</span>
+                                <FileText className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity text-indigo-500 dark:text-banana-400" />
                             </p>
                         </div>
                     </div>
@@ -100,7 +101,7 @@ const ChunkPanel: React.FC<ChunkPanelProps> = ({
                     <div className="flex items-center gap-2">
                         <button
                             onClick={(e) => { e.stopPropagation(); onCopyChunk(chunk.id); }}
-                            className="p-1.5 text-gray-500 hover:text-blue-400 hover:bg-white/10 rounded transition-colors"
+                            className="p-1.5 text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-200 dark:hover:bg-white/10 rounded transition-colors"
                             title={language === 'Chinese' ? '复制章节' : 'Copy Chapter'}
                         >
                             <Copy className="w-4 h-4" />
@@ -108,18 +109,18 @@ const ChunkPanel: React.FC<ChunkPanelProps> = ({
                         <button
                             onClick={(e) => { e.stopPropagation(); handleDownload(); }}
                             disabled={exportProgress !== null}
-                            className="p-1.5 text-gray-500 hover:text-green-400 hover:bg-white/10 rounded transition-colors"
+                            className="p-1.5 text-gray-500 hover:text-green-600 dark:hover:text-green-400 hover:bg-gray-200 dark:hover:bg-white/10 rounded transition-colors"
                             title={language === 'Chinese' ? '下载资产包 (ZIP)' : 'Download ZIP'}
                         >
                             {exportProgress !== null ? (
-                                <div className="w-4 h-4 border-2 border-white/50 border-t-transparent rounded-full animate-spin" />
+                                <div className="w-4 h-4 border-2 border-gray-400 dark:border-white/50 border-t-transparent rounded-full animate-spin" />
                             ) : (
                                 <Download className="w-4 h-4" />
                             )}
                         </button>
                         <button
                             onClick={(e) => { e.stopPropagation(); onDeleteChunk(chunk.id); }}
-                            className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-white/10 rounded transition-colors"
+                            className="p-1.5 text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-gray-200 dark:hover:bg-white/10 rounded transition-colors"
                             title={labels.btnDelete}
                         >
                             <Trash2 className="w-4 h-4" />
@@ -133,10 +134,10 @@ const ChunkPanel: React.FC<ChunkPanelProps> = ({
                             </div>
                         )}
 
-                        <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${chunk.status === 'completed' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
-                            chunk.status === 'shooting' ? 'bg-banana-500/20 text-banana-400 border border-banana-500/30 animate-pulse' :
-                                chunk.status === 'storyboarded' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' :
-                                    'bg-gray-700 text-gray-400'
+                        <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${chunk.status === 'completed' ? 'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-500/30' :
+                            chunk.status === 'shooting' ? 'bg-indigo-100 dark:bg-banana-500/20 text-indigo-700 dark:text-banana-400 border border-indigo-200 dark:border-banana-500/30 animate-pulse' :
+                                chunk.status === 'storyboarded' ? 'bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-500/30' :
+                                    'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
                             }`}>
                             {chunk.status === 'completed' && <CheckCircle className="w-3 h-3" />}
                             {chunk.status}
@@ -145,7 +146,7 @@ const ChunkPanel: React.FC<ChunkPanelProps> = ({
                 </div>
 
                 {/* Workflow Toolbar */}
-                <div className="border-t border-white/10 p-2 bg-black/20 flex flex-wrap gap-2 justify-end items-center">
+                <div className="border-t border-gray-200 dark:border-white/10 p-2 bg-white dark:bg-black/20 flex flex-wrap gap-2 justify-end items-center">
 
                     {scriptError && (
                         <div className="mr-auto text-red-400 text-xs flex items-center gap-2 px-2">
@@ -154,15 +155,13 @@ const ChunkPanel: React.FC<ChunkPanelProps> = ({
                         </div>
                     )}
 
-
-
                     <div className="group relative">
                         <button
                             onClick={(e) => { e.stopPropagation(); handleStoryboard(); }}
                             disabled={loadingStep !== 'none'}
                             className={`px-3 py-1.5 rounded text-xs font-bold flex items-center gap-2 ${loadingStep === 'none'
-                                ? 'bg-purple-500/20 hover:bg-purple-500/30 text-purple-400'
-                                : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                                ? 'bg-purple-100 dark:bg-purple-500/20 hover:bg-purple-200 dark:hover:bg-purple-500/30 text-purple-700 dark:text-purple-400'
+                                : 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
                                 }`}
                         >
                             {loadingStep === 'storyboarding' ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
@@ -175,8 +174,8 @@ const ChunkPanel: React.FC<ChunkPanelProps> = ({
                             onClick={(e) => { e.stopPropagation(); handleGeneratePromptsAction(); }}
                             disabled={loadingStep !== 'none' || chunk.scenes.length === 0}
                             className={`px-3 py-1.5 rounded text-xs font-bold flex items-center gap-2 ${loadingStep === 'none' && chunk.scenes.length > 0
-                                ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400'
-                                : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                                ? 'bg-emerald-100 dark:bg-emerald-500/20 hover:bg-emerald-200 dark:hover:bg-emerald-500/30 text-emerald-700 dark:text-emerald-400'
+                                : 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
                                 }`}
                         >
                             {loadingStep === 'scripting' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
@@ -199,8 +198,8 @@ const ChunkPanel: React.FC<ChunkPanelProps> = ({
                                         onClick={(e) => { e.stopPropagation(); handleShoot(); }}
                                         disabled={!allReady}
                                         className={`px-3 py-1.5 rounded text-xs font-bold flex items-center gap-2 shadow-lg ${allReady
-                                            ? 'bg-banana-500 text-black hover:bg-banana-400 shadow-banana-500/20'
-                                            : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                                            ? 'bg-indigo-600 dark:bg-banana-500 text-white dark:text-black hover:bg-indigo-700 dark:hover:bg-banana-400 shadow-indigo-500/20 dark:shadow-banana-500/20'
+                                            : 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
                                             }`}
                                     >
                                         <Video className="w-4 h-4" />
@@ -235,8 +234,8 @@ const ChunkPanel: React.FC<ChunkPanelProps> = ({
                                         onClick={(e) => { e.stopPropagation(); handleMakeFilm(); }}
                                         disabled={!filmReady}
                                         className={`px-3 py-1.5 rounded text-xs font-bold flex items-center gap-2 shadow-lg ${filmReady
-                                            ? 'bg-red-500 text-white hover:bg-red-400 shadow-red-500/20'
-                                            : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                                            ? 'bg-rose-600 dark:bg-red-500 text-white hover:bg-rose-700 dark:hover:bg-red-400 shadow-rose-500/20 dark:shadow-red-500/20'
+                                            : 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
                                             }`}
                                     >
                                         {loadingStep === 'filming' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Film className="w-4 h-4" />}
@@ -259,7 +258,7 @@ const ChunkPanel: React.FC<ChunkPanelProps> = ({
 
                 {/* Content Body */}
                 {isActive && (
-                    <div className="p-4 border-t border-white/10 space-y-4">
+                    <div className="p-4 border-t border-gray-200 dark:border-white/10 space-y-4">
                         {chunk.scenes.length === 0 ? (
                             <div className="text-center py-8 text-gray-600 italic text-sm">
                                 {labels.statusReady}. Generate Script to begin.
@@ -276,6 +275,8 @@ const ChunkPanel: React.FC<ChunkPanelProps> = ({
                                         onDelete={handleDeleteScene}
                                         onDuplicate={handleDuplicateScene}
                                         isGeneratingExternal={generatingSceneIds.includes(scene.id)}
+                                        isGeneratingPrompts={activePromptSceneId === scene.id}
+                                        isPromptCompleted={completedPromptSceneIds.includes(scene.id)}
                                         onGenerateImageOverride={handleGenerateImageInternal}
                                         onImageGenerated={handleImageGenerated}
                                         onVideoGenerated={handleVideoGenerated}
@@ -283,12 +284,14 @@ const ChunkPanel: React.FC<ChunkPanelProps> = ({
                                         areAssetsReady={getSceneAssetsReady(scene)}
                                         videoAssetsReady={getVideoAssetsReady(scene)}
                                         checkImageReady={(optId) => getSceneAssetsReady(scene, optId)}
-                                        checkVideoReady={(optId) => getVideoAssetsReady(scene, optId)}
-                                        assets={chunk.assets}
+                                        flashSceneId={flashSceneId}
+                                        assets={globalAssets}
                                         onAddAsset={handleAddChunkAssets}
                                         language={language}
-                                        flash={flashSceneId === scene.id}
                                         chapterScenes={chunk.scenes}
+                                        allChunks={allChunks}
+                                        chunk={chunk}
+                                        onUpdateChunk={onUpdateChunk}
                                     />
                                 ))}
                             </div>
@@ -296,46 +299,44 @@ const ChunkPanel: React.FC<ChunkPanelProps> = ({
                     </div>
                 )}
             </div>
-
-            {/* Full Text Modal */}
+            
             {showTextModal && (
-                <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-8 backdrop-blur-sm" onClick={() => setShowTextModal(false)}>
-                    <div className="bg-dark-900 rounded-xl max-w-6xl w-full h-[85vh] flex flex-col border border-white/10 shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
-                        {/* Modal Header */}
-                        <div className="p-4 border-b border-white/10 flex items-center justify-between bg-white/5">
-                            <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                                <FileText className="w-5 h-5 text-banana-400" />
-                                {chunk.title || `Episode ${chunk.index + 1}`}
-                                <span className="text-xs font-normal text-gray-500 ml-2">(Edit to update script generation)</span>
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                    <div className="bg-white dark:bg-dark-800 rounded-xl w-full max-w-5xl flex flex-col max-h-[90vh] border border-gray-200 dark:border-white/10 shadow-2xl">
+                        <div className="p-4 border-b border-gray-200 dark:border-white/10 flex justify-between items-center bg-gray-50 dark:bg-white/5 rounded-t-xl">
+                            <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                <FileText className="w-5 h-5 text-indigo-500 dark:text-banana-400" />
+                                {language === 'Chinese' ? '章节内容' : 'Chapter Content'}
                             </h3>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    onClick={() => {
-                                        onUpdateChunk(chunk.id, { text: editingText });
-                                        setShowTextModal(false);
-                                    }}
-                                    className="px-3 py-1.5 bg-banana-500 hover:bg-banana-400 text-black text-sm font-bold rounded flex items-center gap-2 transition-colors"
-                                >
-                                    <Save className="w-4 h-4" />
-                                    Save
-                                </button>
-                                <button
-                                    onClick={() => setShowTextModal(false)}
-                                    className="p-2 hover:bg-white/10 rounded-full transition-colors text-gray-400 hover:text-white"
-                                >
-                                    <X className="w-5 h-5" />
-                                </button>
-                            </div>
+                            <button onClick={() => setShowTextModal(false)} className="text-gray-400 dark:text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
                         </div>
-
-                        {/* Modal Content */}
-                        <div className="p-0 overflow-hidden flex-1 flex flex-col bg-dark-950/50 h-full">
+                        <div className="p-4 flex-1 overflow-hidden flex flex-col relative group">
                             <textarea
                                 value={editingText}
                                 onChange={(e) => setEditingText(e.target.value)}
-                                className="w-full h-full p-6 bg-transparent text-gray-300 font-mono text-sm leading-relaxed focus:outline-none resize-none"
-                                spellCheck={false}
+                                className="w-full flex-1 bg-gray-50 dark:bg-[#121216] border border-gray-200 dark:border-white/5 rounded-lg p-4 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-indigo-500 dark:focus:border-banana-500/50 focus:ring-1 focus:ring-indigo-500/30 dark:focus:ring-banana-500/30 resize-none transition-all leading-relaxed min-h-[60vh]"
+                                placeholder={language === 'Chinese' ? '在这里编辑小说原文...' : 'Edit novel text here...'}
                             />
+                        </div>
+                        <div className="p-4 border-t border-gray-200 dark:border-white/10 flex justify-end gap-3 bg-gray-50 dark:bg-dark-900 rounded-b-xl">
+                            <button
+                                onClick={() => setShowTextModal(false)}
+                                className="px-4 py-2 text-sm text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white font-medium transition-colors"
+                            >
+                                {language === 'Chinese' ? '取消' : 'Cancel'}
+                            </button>
+                            <button
+                                onClick={() => {
+                                    onUpdateChunk(chunk.id, { text: editingText });
+                                    setShowTextModal(false);
+                                }}
+                                className="px-5 py-2 text-sm bg-indigo-600 dark:bg-banana-500 text-white dark:text-black font-bold rounded hover:bg-indigo-700 dark:hover:bg-banana-400 shadow-lg shadow-indigo-500/20 dark:shadow-banana-500/20 transition-all flex items-center gap-2"
+                            >
+                                <Save className="w-4 h-4" />
+                                {language === 'Chinese' ? '保存更改' : 'Save Changes'}
+                            </button>
                         </div>
                     </div>
                 </div>

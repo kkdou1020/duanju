@@ -328,26 +328,26 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
     }, [assets, expandedIds, rootAssets]);
 
     return (
-        <div className="flex flex-col h-full bg-dark-800 border-x border-b border-white/10 rounded-b-xl overflow-hidden shadow-xl">
-            <div className="bg-white/5 p-4 border-b border-white/10 flex justify-between items-center">
-                <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wider flex items-center gap-2">
+        <div className="flex flex-col h-full bg-white dark:bg-dark-800 border-x border-b border-gray-200 dark:border-white/10 rounded-b-xl overflow-hidden shadow-sm dark:shadow-xl transition-colors duration-300">
+            <div className="bg-gray-50 dark:bg-white/5 p-4 border-b border-gray-200 dark:border-white/10 flex justify-between items-center">
+                <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-300 tracking-wider flex items-center gap-2">
                     {labels.assetsTitle}
-                    <span className="bg-banana-500/20 text-banana-500 text-[10px] px-1.5 py-0.5 rounded-full">{assets.length}</span>
+                    <span className="bg-indigo-100 dark:bg-banana-500/20 text-indigo-600 dark:text-banana-500 text-[10px] px-1.5 py-0.5 rounded-full">{assets.length}</span>
                 </h2>
                 <div className="flex gap-2">
-                    <label className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-gray-300 transition-colors cursor-pointer" title="Upload Asset">
+                    <label className="p-1.5 bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 rounded-lg text-gray-500 dark:text-gray-300 transition-colors cursor-pointer" title="Upload Asset">
                         <Upload className="w-4 h-4" />
                         <input type="file" className="hidden" accept="image/*" onChange={handleUploadAsset} />
                     </label>
-                    <button onClick={handleBatchGenerate} className={`p-1.5 rounded-lg transition-colors ${isBatchGenerating ? 'bg-banana-500 text-black hover:bg-banana-400' : 'bg-white/10 hover:bg-white/20 text-gray-300'}`} title={isBatchGenerating ? "暂停生成" : labels.genMissing}>
+                    <button onClick={handleBatchGenerate} className={`p-1.5 rounded-lg transition-colors ${isBatchGenerating ? 'bg-indigo-600 dark:bg-banana-500 text-white dark:text-black hover:bg-indigo-700 dark:hover:bg-banana-400' : 'bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 text-gray-500 dark:text-gray-300'}`} title={isBatchGenerating ? "暂停生成" : labels.genMissing}>
                         {isBatchGenerating ? <Pause className="w-4 h-4" /> : <Camera className="w-4 h-4" />}
                     </button>
                     {onImportFromGlobal && (
-                        <button onClick={onImportFromGlobal} className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-gray-300 transition-colors" title="Add Reference Image">
+                        <button onClick={onImportFromGlobal} className="p-1.5 bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 rounded-lg text-gray-500 dark:text-gray-300 transition-colors" title="Add Reference Image">
                             <Package className="w-4 h-4" />
                         </button>
                     )}
-                    <button onClick={() => addAsset()} className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-gray-300 transition-colors" title={labels.addAsset}>
+                    <button onClick={() => addAsset()} className="p-1.5 bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 rounded-lg text-gray-500 dark:text-gray-300 transition-colors" title={labels.addAsset}>
                         <Plus className="w-4 h-4" />
                     </button>
                 </div>
@@ -359,17 +359,17 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
                     components={{
                         Header: () => (
                             <div className="p-4 pb-0">
-                                <div className="bg-gradient-to-br from-banana-900/20 to-transparent p-4 rounded-xl border border-banana-500/20 text-center mb-4">
-                                    <p className="text-xs text-banana-100/70 mb-3">{labels.autoExtractTip}</p>
+                                <div className="bg-gradient-to-br from-indigo-50 dark:from-banana-900/20 to-transparent p-4 rounded-xl border border-indigo-100 dark:border-banana-500/20 text-center mb-4">
+                                    <p className="text-xs text-indigo-600/70 dark:text-banana-100/70 mb-3">{labels.autoExtractTip}</p>
                                     <button
                                         onClick={onExtract}
                                         disabled={isExtracting || !hasText}
-                                        className={`w-full py-2 px-3 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all ${isExtracting || !hasText ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-banana-500 hover:bg-banana-400 text-dark-900 shadow-lg shadow-banana-500/20'}`}
+                                        className={`w-full py-2 px-3 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all ${isExtracting || !hasText ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed' : 'bg-indigo-600 dark:bg-banana-500 hover:bg-indigo-700 dark:hover:bg-banana-400 text-white dark:text-dark-900 shadow-lg shadow-indigo-500/20 dark:shadow-banana-500/20'}`}
                                     >
-                                        {isExtracting ? <><div className="w-4 h-4 border-2 border-dark-900 border-t-transparent rounded-full animate-spin" />{labels.extracting}</> : <><Wand2 className="w-4 h-4" />{labels.extractAssets}</>}
+                                        {isExtracting ? <><div className="w-4 h-4 border-2 border-white dark:border-dark-900 border-t-transparent rounded-full animate-spin" />{labels.extracting}</> : <><Wand2 className="w-4 h-4" />✨ {labels.extractAssets}</>}
                                     </button>
                                 </div>
-                                {assets.length === 0 && !isExtracting && <div className="text-center py-8 text-gray-600 text-xs italic">{labels.noAssets}</div>}
+                                {assets.length === 0 && !isExtracting && <div className="text-center py-8 text-gray-400 dark:text-gray-600 text-xs italic">{labels.noAssets}</div>}
                             </div>
                         ),
                         Footer: () => <div className="h-4" />

@@ -70,7 +70,7 @@ export interface Asset {
   id: string; // e.g. "hero_base"
   name: string;
   description: string;
-  type: 'character' | 'location' | 'item';
+  type: 'character' | 'location' | 'item' | 'video' | 'audio';
   visualDna?: string; // Specific visual tags for this asset
   refImageUrl?: string;
   refImageAssetId?: string; // New: Persistent ID for ref image Blob in IndexedDB

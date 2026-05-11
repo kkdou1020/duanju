@@ -191,7 +191,8 @@ export function useChunkManager(deps: ChunkManagerDeps) {
                 }
             }
 
-            const blueprint = await analyzeNarrative(chunk.text, language, prevContext);
+            const directorName = globalStyle.director.custom || (globalStyle.director.selected !== 'None' ? globalStyle.director.selected : '') || '';
+            const blueprint = await analyzeNarrative(chunk.text, language, prevContext, undefined, undefined, undefined, directorName, globalStyle.director.strength);
 
             let allScenes: import('@/shared/types').Scene[] = [];
             for (const episode of blueprint.episodes) {
@@ -266,7 +267,7 @@ export function useChunkManager(deps: ChunkManagerDeps) {
     };
 
     // --- Step 2: Generate Prompts from cached BeatSheet → scripted ---
-    const handleGeneratePrompts = async (chunk: NovelChunk) => {
+    const handleGeneratePrompts = async (chunk: NovelChunk, initialTargetSceneIds?: string[], onProgressCb?: (activeId: string | null, completedIds: string[]) => void) => {
         if (scriptingChunksRef.current.has(chunk.id)) {
             console.warn(`Prompt generation for chunk ${chunk.id} already in progress.`);
             throw new Error("Generation in progress");
@@ -284,104 +285,170 @@ export function useChunkManager(deps: ChunkManagerDeps) {
             );
             const latestAssets = [...chunk.assets, ...borrowedAssets];
 
-            const livingSceneIds = new Set(chunk.scenes.map(s => s.id));
-            const filteredBeats = (chunk.beatSheet.beats || []).filter((beat: any) => {
-                const sceneId = `E${epNum}_${beat.beat_id}`;
-                return livingSceneIds.has(sceneId);
-            });
-
             const sceneMap = new Map(chunk.scenes.map(s => [s.id, s]));
-            const userSyncedBeats = filteredBeats.map((beat: any) => {
-                const scene = sceneMap.get(`E${epNum}_${beat.beat_id}`);
-                if (!scene) return beat;
-                const updated = { ...beat };
-                const originalDesc = `[${beat.shot_name || beat.shot_id || ''}] ${beat.visual_action || ''}`;
-                if (scene.visual_desc && scene.visual_desc !== originalDesc) {
-                    updated.visual_action = scene.visual_desc;
-                }
-                if (scene.video_camera && scene.video_camera !== (beat.camera_movement || '')) {
-                    updated.camera_movement = scene.video_camera;
-                }
-                if (scene.video_lens && scene.video_lens !== (beat.shot_id || '')) {
-                    updated.shot_id = scene.video_lens;
-                }
-                if (scene.audio_sfx && scene.audio_sfx !== (beat.audio_subtext || '')) {
-                    updated.audio_subtext = scene.audio_sfx;
-                }
-                return updated;
-            });
-            const syncedBeatSheet = { ...chunk.beatSheet, beats: userSyncedBeats };
-
+            
+            // local state to keep track of scenes during automatic retries
+            let liveScenes = [...chunk.scenes];
+            let currentTargetIds = initialTargetSceneIds;
             let finalVisualDna = '';
-
-            // Robust Streaming Merge Logic
-            const result = await generatePromptsFromBeatsStream(
-                syncedBeatSheet, epNum, language, latestAssets, globalStyle,
-                (progressScenes, dna) => {
-                    if (dna) finalVisualDna = dna;
+            
+            let globalCompletedIds = new Set<string>();
+            let attempt = 0;
+            const MAX_ATTEMPTS = 3;
+            
+            while (attempt < MAX_ATTEMPTS) {
+                try {
+                    const livingSceneIds = new Set(liveScenes.map(s => s.id));
+                    const filteredBeats = (chunk.beatSheet.beats || []).filter((beat: any) => {
+                        const sceneId = `E${epNum}_${beat.beat_id}`;
+                        if (!livingSceneIds.has(sceneId)) return false;
+                        if (currentTargetIds && !currentTargetIds.includes(sceneId)) return false;
+                        return true;
+                    });
                     
-                    setChunks(prev => prev.map(c => {
-                        if (c.id !== chunk.id) return c;
-                        
-                        const currentScenes = c.scenes || [];
-                        
-                        // Preserve all existing scenes, and merge updates from the stream.
-                        // If a scene is locally deleted by the user, it will be naturally excluded.
-                        const mergedProgress = currentScenes.map(old => {
-                            const ns = progressScenes.find(s => s.id === old.id);
-                            if (!ns) return old;
+                    if (filteredBeats.length === 0) break; // All requested scenes have prompts!
+
+                    const userSyncedBeats = filteredBeats.map((beat: any) => {
+                        const scene = sceneMap.get(`E${epNum}_${beat.beat_id}`);
+                        if (!scene) return beat;
+                        const updated = { ...beat };
+                        const originalDesc = `[${beat.shot_name || beat.shot_id || ''}] ${beat.visual_action || ''}`;
+                        if (scene.visual_desc && scene.visual_desc !== originalDesc) {
+                            updated.visual_action = scene.visual_desc;
+                        }
+                        if (scene.video_camera && scene.video_camera !== (beat.camera_movement || '')) {
+                            updated.camera_movement = scene.video_camera;
+                        }
+                        if (scene.video_lens && scene.video_lens !== (beat.shot_id || '')) {
+                            updated.shot_id = scene.video_lens;
+                        }
+                        if (scene.audio_sfx && scene.audio_sfx !== (beat.audio_subtext || '')) {
+                            updated.audio_subtext = scene.audio_sfx;
+                        }
+                        return updated;
+                    });
+                    const syncedBeatSheet = { ...chunk.beatSheet, beats: userSyncedBeats };
+                    
+                    if (onProgressCb && filteredBeats.length > 0) {
+                        const firstActiveId = `E${epNum}_${filteredBeats[0].beat_id}`;
+                        onProgressCb(firstActiveId, Array.from(globalCompletedIds));
+                    }
+
+                    await generatePromptsFromBeatsStream(
+                        syncedBeatSheet, epNum, language, latestAssets, globalStyle,
+                        (progressScenes, dna) => {
+                            if (dna) finalVisualDna = dna;
                             
-                            // Deep merge for prompt_options (A/B/C variants)
-                            const mergedOptions = ns.prompt_options?.map(newOpt => {
-                                const oldOpt = old.prompt_options?.find(o => o.option_id === newOpt.option_id);
-                                if (!oldOpt) return newOpt;
+                            let currentActiveId: string | null = null;
+                            const currentCompletedIds = new Set(globalCompletedIds);
+
+                            if (progressScenes.length > 0) {
+                                currentActiveId = progressScenes[progressScenes.length - 1].id;
+                                for (let i = 0; i < progressScenes.length - 1; i++) {
+                                    currentCompletedIds.add(progressScenes[i].id);
+                                }
+                            }
+                            
+                            if (onProgressCb) {
+                                onProgressCb(currentActiveId, Array.from(currentCompletedIds));
+                            }
+                            
+                            // Update our local live tracking array
+                            liveScenes = liveScenes.map(old => {
+                                const ns = progressScenes.find(s => s.id === old.id);
+                                if (!ns) return old;
+                                
+                                // Deep merge for prompt_options (A/B/C variants)
+                                const mergedOptions = ns.prompt_options?.map(newOpt => {
+                                    const oldOpt = old.prompt_options?.find(o => o.option_id === newOpt.option_id);
+                                    if (!oldOpt) return newOpt;
+                                    return {
+                                        ...newOpt,
+                                        imageUrl: oldOpt.imageUrl,
+                                        imageAssetId: oldOpt.imageAssetId,
+                                        videoUrl: oldOpt.videoUrl,
+                                        videoAssetId: oldOpt.videoAssetId,
+                                        videoAssetIds: oldOpt.videoAssetIds,
+                                        assetIds: oldOpt.assetIds,
+                                    };
+                                });
+
                                 return {
-                                    ...newOpt,
-                                    // Preserve Assets at option level
-                                    imageUrl: oldOpt.imageUrl,
-                                    imageAssetId: oldOpt.imageAssetId,
-                                    videoUrl: oldOpt.videoUrl,
-                                    videoAssetId: oldOpt.videoAssetId,
-                                    videoAssetIds: oldOpt.videoAssetIds,
-                                    assetIds: oldOpt.assetIds,
+                                    ...ns,
+                                    imageUrl: old.imageUrl,
+                                    imageAssetId: old.imageAssetId,
+                                    videoUrl: old.videoUrl,
+                                    videoAssetId: old.videoAssetId,
+                                    startEndVideoUrl: old.startEndVideoUrl,
+                                    startEndVideoAssetId: old.startEndVideoAssetId,
+                                    narrationAudioUrl: old.narrationAudioUrl,
+                                    prompt_options: mergedOptions || old.prompt_options, 
+                                    assetIds: old.assetIds || ns.assetIds,
+                                    videoAssetIds: old.videoAssetIds || ns.videoAssetIds,
+                                    startEndAssetIds: old.startEndAssetIds || ns.startEndAssetIds,
+                                    useAssets: old.useAssets !== undefined ? old.useAssets : ns.useAssets,
+                                    isStartEndFrameMode: old.isStartEndFrameMode !== undefined ? old.isStartEndFrameMode : ns.isStartEndFrameMode,
+                                    video_duration: old.video_duration || ns.video_duration,
+                                    video_vfx: old.video_vfx || ns.video_vfx,
                                 };
                             });
 
-                            // Merge and Preserve from LIVE state
-                            return {
-                                ...ns,
-                                // Preserve Assets
-                                imageUrl: old.imageUrl,
-                                imageAssetId: old.imageAssetId,
-                                videoUrl: old.videoUrl,
-                                videoAssetId: old.videoAssetId,
-                                startEndVideoUrl: old.startEndVideoUrl,
-                                startEndVideoAssetId: old.startEndVideoAssetId,
-                                narrationAudioUrl: old.narrationAudioUrl,
-                                prompt_options: mergedOptions || old.prompt_options, 
-                                // Preserve Reference Settings
-                                assetIds: old.assetIds || ns.assetIds,
-                                videoAssetIds: old.videoAssetIds || ns.videoAssetIds,
-                                startEndAssetIds: old.startEndAssetIds || ns.startEndAssetIds,
-                                useAssets: old.useAssets !== undefined ? old.useAssets : ns.useAssets,
-                                isStartEndFrameMode: old.isStartEndFrameMode !== undefined ? old.isStartEndFrameMode : ns.isStartEndFrameMode,
-                                // Preserve User Context
-                                video_duration: old.video_duration || ns.video_duration,
-                                video_vfx: old.video_vfx || ns.video_vfx,
-                            };
-                        });
-
-                        return { ...c, scenes: mergedProgress, status: 'scripting' };
-                    }));
+                            // And push to React state
+                            setChunks(prev => prev.map(c => {
+                                if (c.id !== chunk.id) return c;
+                                return { ...c, scenes: liveScenes, status: 'scripting' };
+                            }));
+                        }
+                    );
+                    
+                    // Batch completed successfully
+                    filteredBeats.forEach((b: any) => globalCompletedIds.add(`E${epNum}_${b.beat_id}`));
+                    if (onProgressCb) {
+                        onProgressCb(null, Array.from(globalCompletedIds));
+                    }
+                    
+                    // If stream completed successfully, break out of retry loop!
+                    break;
+                } catch (streamError: any) {
+                    attempt++;
+                    console.error(`Prompt generation stream interrupted (Attempt ${attempt}/${MAX_ATTEMPTS})`, streamError);
+                    
+                    if (attempt >= MAX_ATTEMPTS) {
+                        throw streamError;
+                    }
+                    
+                    // Re-calculate missing targets for the next retry!
+                    const missingScenes = liveScenes.filter(s => {
+                        // It is missing if there is no main prompt and no option prompts
+                        const hasMain = !!s.np_prompt?.trim();
+                        const hasOpt = s.prompt_options ? s.prompt_options.some(opt => !!opt.np_prompt?.trim()) : false;
+                        return !hasMain && !hasOpt;
+                    });
+                    
+                    if (missingScenes.length === 0) {
+                        break; // Actually, all were generated before failure!
+                    }
+                    
+                    // If initialTargetSceneIds was provided, we only care about missing scenes that were in the original target
+                    currentTargetIds = missingScenes
+                        .map(s => s.id)
+                        .filter(id => !initialTargetSceneIds || initialTargetSceneIds.includes(id));
+                        
+                    if (currentTargetIds.length === 0) {
+                        break;
+                    }
+                    
+                    // Wait before retry
+                    await new Promise(res => setTimeout(res, attempt * 2000));
                 }
-            );
+            }
 
             // Final Update: Sync Visual DNA ONLY if unlocked and empty
             if (finalVisualDna && !globalStyle.visualDnaLocked && !globalStyle.visualTags) {
                 setGlobalStyle(prev => ({ ...prev, visualTags: finalVisualDna }));
             }
             updateChunk(chunk.id, { status: 'scripted' });
-            return result.scenes; // handleGeneratePromptsAction uses this!
+            return liveScenes;
         } finally {
             scriptingChunksRef.current.delete(chunk.id);
         }
@@ -483,20 +550,42 @@ export function useChunkManager(deps: ChunkManagerDeps) {
         }
     };
 
-    const handleAnalyze = async (manualText: string, episodeCount?: number) => {
+    const handleAnalyze = async (manualText: string, episodeCount?: number, isRegenerate?: boolean) => {
         if (isAnalyzingRef.current) {
             console.warn('Analysis already in progress, skipping duplicate call.');
             return;
         }
+
+        if (isRegenerate) {
+            const confirmed = window.confirm(language === 'Chinese' 
+                ? "重新生成将删除当前所有的分镜脚本以及角色/场景资产库，是否继续？" 
+                : "Regenerating will delete all current storyboard scripts and assets. Continue?");
+            if (!confirmed) return;
+
+            // Clear old data
+            setChunks([]);
+            setGlobalAssets([]);
+            if (!globalStyle.visualDnaLocked) {
+                setGlobalStyle(prev => ({ ...prev, visualTags: '' }));
+            }
+        }
+
         isAnalyzingRef.current = true;
         setStatus(AnalysisStatus.ANALYZING);
         setAnalysisProgress(language === 'Chinese' ? "准备分析..." : "Initializing...");
 
-        const textToUse = fullNovelText || manualText;
+        const textToUse = filename ? fullNovelText : manualText;
+        if (!filename && manualText !== fullNovelText) {
+            setFullNovelText(manualText);
+        }
+
+        const directorName = globalStyle.director.custom || (globalStyle.director.selected !== 'None' ? globalStyle.director.selected : '') || '';
 
         analyzeNarrative(textToUse, language, "", episodeCount,
             (msg) => setAnalysisProgress(msg),
-            undefined
+            undefined,
+            directorName,
+            globalStyle.director.strength
         )
             .then(blueprint => {
                 if (blueprint && blueprint.episodes && blueprint.episodes.length > 0) {
@@ -513,6 +602,7 @@ export function useChunkManager(deps: ChunkManagerDeps) {
                     }));
 
                     setChunks(prev => {
+                        if (isRegenerate) return newChunks; // Replace entirely
                         const existingEps = new Set(prev.map(c => c.episodeData?.episode_number));
                         const uniqueNewChunks = newChunks.filter(c => !existingEps.has(c.episodeData?.episode_number));
                         if (uniqueNewChunks.length === 0) return prev;

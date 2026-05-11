@@ -24,7 +24,7 @@ export const ModelSelector: React.FC = () => {
     <div className="relative z-50">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="p-2 rounded-lg hover:bg-white/10 text-white/70 hover:text-white transition-colors"
+        className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-white/10 text-gray-500 hover:text-gray-900 dark:text-white/70 dark:hover:text-white transition-colors"
         title="Model Settings"
       >
         <Settings size={20} />
@@ -36,24 +36,24 @@ export const ModelSelector: React.FC = () => {
             className="fixed inset-0 bg-transparent"
             onClick={() => setIsOpen(false)}
           />
-          <div className="absolute right-0 mt-2 w-[360px] max-h-[85vh] flex flex-col bg-[#12141A] border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden">
+          <div className="absolute right-0 mt-2 w-[360px] max-h-[85vh] flex flex-col bg-white dark:bg-[#12141A] border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden">
             <div className="p-5 flex-1 overflow-y-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
 
               {/* Top Action Bar */}
               <div className="flex items-center justify-end mb-2">
-                <div className="w-6 h-6 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors cursor-pointer" onClick={() => setIsOpen(false)}>
-                  <X size={14} className="text-white" />
+                <div className="w-6 h-6 rounded-full bg-gray-100 dark:bg-white/5 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-white/10 transition-colors cursor-pointer" onClick={() => setIsOpen(false)}>
+                  <X size={14} className="text-gray-500 dark:text-white" />
                 </div>
               </div>
 
               {/* Main Header */}
               <div className="flex items-center space-x-3 mb-6">
-                <div className="bg-[#4D58B8] p-2.5 rounded-xl text-white shadow-lg">
+                <div className="bg-indigo-600 dark:bg-[#4D58B8] p-2.5 rounded-xl text-white shadow-lg">
                   <Box size={22} />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white leading-tight mb-0.5">Model Providers</h3>
-                  <p className="text-[11px] text-slate-400 leading-tight">配置与管理模型服务</p>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white leading-tight mb-0.5">Model Providers</h3>
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400 leading-tight">配置与管理模型服务</p>
                 </div>
               </div>
 
@@ -61,21 +61,21 @@ export const ModelSelector: React.FC = () => {
               <div className="space-y-3">
 
                 {/* Text Model Card */}
-                <div className="bg-[#1A1D24] border border-white/5 rounded-xl p-3.5 flex items-center justify-between">
+                <div className="bg-gray-50 dark:bg-[#1A1D24] border border-gray-200 dark:border-white/5 rounded-xl p-3.5 flex items-center justify-between">
                   <div className="flex items-center space-x-3">
-                    <div className="bg-[#242832] p-2 rounded-lg text-slate-300">
+                    <div className="bg-white dark:bg-[#242832] border border-gray-200 dark:border-none p-2 rounded-lg text-indigo-600 dark:text-slate-300">
                       <Type size={16} />
                     </div>
                     <div>
-                      <div className="text-[13px] font-semibold text-slate-200 leading-tight mb-0.5">Text Model</div>
-                      <div className="text-[10px] text-slate-500 leading-tight">选择用于文本生成的模型</div>
+                      <div className="text-[13px] font-semibold text-gray-800 dark:text-slate-200 leading-tight mb-0.5">Text Model</div>
+                      <div className="text-[10px] text-gray-500 dark:text-slate-500 leading-tight">选择用于文本生成的模型</div>
                     </div>
                   </div>
                   <div className="relative w-[110px]">
                     <select
                       value={config.textmodel}
                       onChange={(e) => handleUpdate('textmodel', e.target.value as ProviderType)}
-                      className="w-full bg-[#0D0F12] text-slate-200 text-xs rounded-md pl-3 pr-8 py-2 border border-white/5 focus:border-[#7B8BFF] outline-none appearance-none font-medium cursor-pointer"
+                      className="w-full bg-white dark:bg-[#0D0F12] text-gray-800 dark:text-slate-200 text-xs rounded-md pl-3 pr-8 py-2 border border-gray-300 dark:border-white/5 focus:border-indigo-500 dark:focus:border-[#7B8BFF] outline-none appearance-none font-medium cursor-pointer"
                     >
                       {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                     </select>
@@ -84,23 +84,23 @@ export const ModelSelector: React.FC = () => {
                 </div>
 
                 {/* Image Model Main Wrapper */}
-                <div className="bg-[#1A1D24] border border-white/5 rounded-xl flex flex-col overflow-hidden">
+                <div className="bg-gray-50 dark:bg-[#1A1D24] border border-gray-200 dark:border-white/5 rounded-xl flex flex-col overflow-hidden">
                   {/* Image Model Base Card */}
                   <div className="p-3.5 flex items-center justify-between">
                     <div className="flex items-center space-x-3">
-                      <div className="bg-[#242832] p-2 rounded-lg text-slate-300">
+                      <div className="bg-white dark:bg-[#242832] border border-gray-200 dark:border-none p-2 rounded-lg text-indigo-600 dark:text-slate-300">
                         <Image size={16} />
                       </div>
                       <div>
-                        <div className="text-[13px] font-semibold text-slate-200 leading-tight mb-0.5">Image Model</div>
-                        <div className="text-[10px] text-slate-500 leading-tight">选择用于图像生成的模型</div>
+                        <div className="text-[13px] font-semibold text-gray-800 dark:text-slate-200 leading-tight mb-0.5">Image Model</div>
+                        <div className="text-[10px] text-gray-500 dark:text-slate-500 leading-tight">选择用于图像生成的模型</div>
                       </div>
                     </div>
                     <div className="relative w-[110px]">
                       <select
                         value={config.imagemodel}
                         onChange={(e) => handleUpdate('imagemodel', e.target.value as ProviderType)}
-                        className="w-full bg-[#0D0F12] text-slate-200 text-xs rounded-md pl-3 pr-8 py-2 border border-white/5 focus:border-[#7B8BFF] outline-none appearance-none font-medium cursor-pointer"
+                        className="w-full bg-white dark:bg-[#0D0F12] text-gray-800 dark:text-slate-200 text-xs rounded-md pl-3 pr-8 py-2 border border-gray-300 dark:border-white/5 focus:border-indigo-500 dark:focus:border-[#7B8BFF] outline-none appearance-none font-medium cursor-pointer"
                       >
                         {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                       </select>
@@ -110,14 +110,14 @@ export const ModelSelector: React.FC = () => {
 
                   {/* T8Star Config Expansion */}
                   {config.imagemodel === 't8star' && (
-                    <div className="border-t border-white/5 p-4 pt-4">
+                    <div className="border-t border-gray-200 dark:border-white/5 p-4 pt-4">
 
                       {/* Left border wrapper to match the image */}
-                      <div className="border-l-[3px] border-[#4D58B8] pl-4 flex flex-col space-y-5">
+                      <div className="border-l-[3px] border-indigo-500 dark:border-[#4D58B8] pl-4 flex flex-col space-y-5">
 
                         {/* T8star Model Select */}
                         <div>
-                          <div className="flex items-center space-x-2 text-[#7B8BFF] mb-3">
+                          <div className="flex items-center space-x-2 text-indigo-600 dark:text-[#7B8BFF] mb-3">
                             <Sparkles size={14} />
                             <span className="text-[13px] font-semibold">T8star Image Model</span>
                           </div>
@@ -125,7 +125,7 @@ export const ModelSelector: React.FC = () => {
                             <select
                               value={config.t8starImageModel || 'nano-banana-pro'}
                               onChange={(e) => handleUpdateString('t8starImageModel', e.target.value)}
-                              className="w-full bg-[#0D0F12] text-slate-200 text-xs rounded-lg px-3 py-2.5 border border-white/5 focus:border-[#7B8BFF] outline-none appearance-none font-medium cursor-pointer"
+                              className="w-full bg-white dark:bg-[#0D0F12] text-gray-800 dark:text-slate-200 text-xs rounded-lg px-3 py-2.5 border border-gray-300 dark:border-white/5 focus:border-indigo-500 dark:focus:border-[#7B8BFF] outline-none appearance-none font-medium cursor-pointer"
                             >
                               <option value="nano-banana-pro">nano-banana-pro</option>
                               <option value="gpt-image-2">gpt-image-2</option>
@@ -141,12 +141,12 @@ export const ModelSelector: React.FC = () => {
                             {/* Size Option */}
                             <div>
                               <div className="flex items-center space-x-3 mb-3">
-                                <div className="bg-[#242832] p-1.5 rounded-md text-slate-300">
+                                <div className="bg-white dark:bg-[#242832] border border-gray-200 dark:border-none p-1.5 rounded-md text-indigo-600 dark:text-slate-300">
                                   <Maximize size={15} />
                                 </div>
                                 <div>
-                                  <div className="text-[13px] font-semibold text-slate-200 leading-tight mb-0.5">高级尺寸 (Size)</div>
-                                  <div className="text-[10px] text-slate-500 leading-tight">设置图像输出的尺寸</div>
+                                  <div className="text-[13px] font-semibold text-gray-800 dark:text-slate-200 leading-tight mb-0.5">高级尺寸 (Size)</div>
+                                  <div className="text-[10px] text-gray-500 dark:text-slate-500 leading-tight">设置图像输出的尺寸</div>
                                 </div>
                               </div>
 
@@ -194,12 +194,12 @@ export const ModelSelector: React.FC = () => {
                                   <>
                                     <div className="flex items-center space-x-3 mb-3">
                                       <div className="flex-1">
-                                        <div className="text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Ratio</div>
+                                        <div className="text-[10px] font-bold text-gray-500 dark:text-slate-500 mb-1 uppercase tracking-wider">Ratio</div>
                                         <div className="relative">
                                           <select
                                             value={ratio}
                                             onChange={(e) => handleRatioResChange(e.target.value, res)}
-                                            className="w-full bg-[#0D0F12] text-slate-200 text-xs rounded-lg px-3 py-2.5 border border-white/5 focus:border-[#7B8BFF] outline-none appearance-none font-medium cursor-pointer"
+                                            className="w-full bg-white dark:bg-[#0D0F12] text-gray-800 dark:text-slate-200 text-xs rounded-lg px-3 py-2.5 border border-gray-300 dark:border-white/5 focus:border-indigo-500 dark:focus:border-[#7B8BFF] outline-none appearance-none font-medium cursor-pointer"
                                           >
                                             <option value="1:1">1:1</option>
                                             <option value="3:2">3:2</option>
@@ -219,12 +219,12 @@ export const ModelSelector: React.FC = () => {
                                         </div>
                                       </div>
                                       <div className="flex-1">
-                                        <div className="text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Res</div>
+                                        <div className="text-[10px] font-bold text-gray-500 dark:text-slate-500 mb-1 uppercase tracking-wider">Res</div>
                                         <div className="relative">
                                           <select
                                             value={res}
                                             onChange={(e) => handleRatioResChange(ratio, e.target.value)}
-                                            className="w-full bg-[#0D0F12] text-slate-200 text-xs rounded-lg px-3 py-2.5 border border-white/5 focus:border-[#7B8BFF] outline-none appearance-none font-medium cursor-pointer"
+                                            className="w-full bg-white dark:bg-[#0D0F12] text-gray-800 dark:text-slate-200 text-xs rounded-lg px-3 py-2.5 border border-gray-300 dark:border-white/5 focus:border-indigo-500 dark:focus:border-[#7B8BFF] outline-none appearance-none font-medium cursor-pointer"
                                           >
                                             <option value="1K">1K</option>
                                             <option value="2K">2K</option>
@@ -243,12 +243,12 @@ export const ModelSelector: React.FC = () => {
                             {/* Quality Option */}
                             <div>
                               <div className="flex items-center space-x-3 mb-3">
-                                <div className="bg-[#242832] p-1.5 rounded-md text-slate-300 font-bold text-[9px] w-[26px] h-[26px] flex items-center justify-center">
+                                <div className="bg-white dark:bg-[#242832] border border-gray-200 dark:border-none p-1.5 rounded-md text-indigo-600 dark:text-slate-300 font-bold text-[9px] w-[26px] h-[26px] flex items-center justify-center">
                                   HD
                                 </div>
                                 <div>
-                                  <div className="text-[13px] font-semibold text-slate-200 leading-tight mb-0.5">图像质量 (Quality)</div>
-                                  <div className="text-[10px] text-slate-500 leading-tight">选择图像生成质量</div>
+                                  <div className="text-[13px] font-semibold text-gray-800 dark:text-slate-200 leading-tight mb-0.5">图像质量 (Quality)</div>
+                                  <div className="text-[10px] text-gray-500 dark:text-slate-500 leading-tight">选择图像生成质量</div>
                                 </div>
                               </div>
 
@@ -256,7 +256,7 @@ export const ModelSelector: React.FC = () => {
                                 <select
                                   value={config.t8starImageQuality || 'auto'}
                                   onChange={(e) => handleUpdateString('t8starImageQuality', e.target.value)}
-                                  className="w-full bg-[#0D0F12] text-slate-200 text-xs rounded-lg px-3 py-2.5 border border-white/5 focus:border-[#7B8BFF] outline-none appearance-none font-medium cursor-pointer"
+                                  className="w-full bg-white dark:bg-[#0D0F12] text-gray-800 dark:text-slate-200 text-xs rounded-lg px-3 py-2.5 border border-gray-300 dark:border-white/5 focus:border-indigo-500 dark:focus:border-[#7B8BFF] outline-none appearance-none font-medium cursor-pointer"
                                 >
                                   <option value="auto">Auto (默认)</option>
                                   <option value="low">Low (低 - 最快)</option>
@@ -276,19 +276,19 @@ export const ModelSelector: React.FC = () => {
                             {/* Nano Size Option */}
                             <div>
                               <div className="flex items-center space-x-3 mb-3">
-                                <div className="bg-[#242832] p-1.5 rounded-md text-slate-300">
+                                <div className="bg-white dark:bg-[#242832] border border-gray-200 dark:border-none p-1.5 rounded-md text-indigo-600 dark:text-slate-300">
                                   <Maximize size={15} />
                                 </div>
                                 <div>
-                                  <div className="text-[13px] font-semibold text-slate-200 leading-tight mb-0.5">基础尺寸 (Size)</div>
-                                  <div className="text-[10px] text-slate-500 leading-tight">设置图像输出的基础分辨率</div>
+                                  <div className="text-[13px] font-semibold text-gray-800 dark:text-slate-200 leading-tight mb-0.5">基础尺寸 (Size)</div>
+                                  <div className="text-[10px] text-gray-500 dark:text-slate-500 leading-tight">设置图像输出的基础分辨率</div>
                                 </div>
                               </div>
                               <div className="relative mb-3">
                                 <select
                                   value={config.t8starNanoImageSize || '2K'}
                                   onChange={(e) => handleUpdateString('t8starNanoImageSize', e.target.value)}
-                                  className="w-full bg-[#0D0F12] text-slate-200 text-xs rounded-lg px-3 py-2.5 border border-white/5 focus:border-[#7B8BFF] outline-none appearance-none font-medium cursor-pointer"
+                                  className="w-full bg-white dark:bg-[#0D0F12] text-gray-800 dark:text-slate-200 text-xs rounded-lg px-3 py-2.5 border border-gray-300 dark:border-white/5 focus:border-indigo-500 dark:focus:border-[#7B8BFF] outline-none appearance-none font-medium cursor-pointer"
                                 >
                                   <option value="1K">1K</option>
                                   <option value="2K">2K</option>
@@ -301,19 +301,19 @@ export const ModelSelector: React.FC = () => {
                             {/* Nano Aspect Ratio Option */}
                             <div>
                               <div className="flex items-center space-x-3 mb-3">
-                                <div className="bg-[#242832] p-1.5 rounded-md text-slate-300 font-bold text-[9px] w-[26px] h-[26px] flex items-center justify-center">
+                                <div className="bg-white dark:bg-[#242832] border border-gray-200 dark:border-none p-1.5 rounded-md text-indigo-600 dark:text-slate-300 font-bold text-[9px] w-[26px] h-[26px] flex items-center justify-center">
                                   AR
                                 </div>
                                 <div>
-                                  <div className="text-[13px] font-semibold text-slate-200 leading-tight mb-0.5">生成比例 (Aspect Ratio)</div>
-                                  <div className="text-[10px] text-slate-500 leading-tight">设置图像画幅比例</div>
+                                  <div className="text-[13px] font-semibold text-gray-800 dark:text-slate-200 leading-tight mb-0.5">生成比例 (Aspect Ratio)</div>
+                                  <div className="text-[10px] text-gray-500 dark:text-slate-500 leading-tight">设置图像画幅比例</div>
                                 </div>
                               </div>
                               <div className="relative">
                                 <select
                                   value={config.t8starNanoAspectRatio || '16:9'}
                                   onChange={(e) => handleUpdateString('t8starNanoAspectRatio', e.target.value)}
-                                  className="w-full bg-[#0D0F12] text-slate-200 text-xs rounded-lg px-3 py-2.5 border border-white/5 focus:border-[#7B8BFF] outline-none appearance-none font-medium cursor-pointer"
+                                  className="w-full bg-white dark:bg-[#0D0F12] text-gray-800 dark:text-slate-200 text-xs rounded-lg px-3 py-2.5 border border-gray-300 dark:border-white/5 focus:border-indigo-500 dark:focus:border-[#7B8BFF] outline-none appearance-none font-medium cursor-pointer"
                                 >
                                   <option value="16:9">16:9</option>
                                   <option value="9:16">9:16</option>
@@ -335,21 +335,21 @@ export const ModelSelector: React.FC = () => {
                 </div>
 
                 {/* Video Model Card */}
-                <div className="bg-[#1A1D24] border border-white/5 rounded-xl p-3.5 flex items-center justify-between">
+                <div className="bg-gray-50 dark:bg-[#1A1D24] border border-gray-200 dark:border-white/5 rounded-xl p-3.5 flex items-center justify-between">
                   <div className="flex items-center space-x-3">
-                    <div className="bg-[#242832] p-2 rounded-lg text-slate-300">
+                    <div className="bg-white dark:bg-[#242832] border border-gray-200 dark:border-none p-2 rounded-lg text-indigo-600 dark:text-slate-300">
                       <Video size={16} />
                     </div>
                     <div>
-                      <div className="text-[13px] font-semibold text-slate-200 leading-tight mb-0.5">Video Model</div>
-                      <div className="text-[10px] text-slate-500 leading-tight">选择用于视频生成的模型</div>
+                      <div className="text-[13px] font-semibold text-gray-800 dark:text-slate-200 leading-tight mb-0.5">Video Model</div>
+                      <div className="text-[10px] text-gray-500 dark:text-slate-500 leading-tight">选择用于视频生成的模型</div>
                     </div>
                   </div>
                   <div className="relative w-[110px]">
                     <select
                       value={config.videomodel}
                       onChange={(e) => handleUpdate('videomodel', e.target.value as ProviderType)}
-                      className="w-full bg-[#0D0F12] text-slate-200 text-xs rounded-md pl-3 pr-8 py-2 border border-white/5 focus:border-[#7B8BFF] outline-none appearance-none font-medium cursor-pointer"
+                      className="w-full bg-white dark:bg-[#0D0F12] text-gray-800 dark:text-slate-200 text-xs rounded-md pl-3 pr-8 py-2 border border-gray-300 dark:border-white/5 focus:border-indigo-500 dark:focus:border-[#7B8BFF] outline-none appearance-none font-medium cursor-pointer"
                     >
                       {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                     </select>

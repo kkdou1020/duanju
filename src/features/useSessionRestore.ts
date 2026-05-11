@@ -14,6 +14,8 @@ interface SessionState {
     setLanguage: React.Dispatch<React.SetStateAction<string>>;
     filename: string;
     setFilename: React.Dispatch<React.SetStateAction<string>>;
+    fullNovelText: string;
+    setFullNovelText: React.Dispatch<React.SetStateAction<string>>;
 }
 
 /** Re-resolve a blob: URL from IndexedDB, or keep non-blob URLs as-is */
@@ -48,7 +50,7 @@ async function hydrateScene(scene: Scene): Promise<Scene> {
 
 export function useSessionRestore(state: SessionState) {
     const [isRestored, setIsRestored] = useState(false);
-    const { globalAssets, setGlobalAssets, chunks, setChunks, globalStyle, setGlobalStyle, language, setLanguage, filename, setFilename } = state;
+    const { globalAssets, setGlobalAssets, chunks, setChunks, globalStyle, setGlobalStyle, language, setLanguage, filename, setFilename, fullNovelText, setFullNovelText } = state;
 
     // Restore State
     useEffect(() => {
@@ -79,6 +81,7 @@ export function useSessionRestore(state: SessionState) {
                     if (savedState.globalStyle) setGlobalStyle(savedState.globalStyle);
                     if (savedState.language) setLanguage(savedState.language);
                     if (savedState.filename) setFilename(savedState.filename);
+                    if (savedState.fullNovelText) setFullNovelText(savedState.fullNovelText);
                 }
             } catch (e) {
                 console.error("Failed to restore session", e);
@@ -93,11 +96,11 @@ export function useSessionRestore(state: SessionState) {
     useEffect(() => {
         if (!isRestored) return;
         const timeoutId = setTimeout(() => {
-            saveState(STATE_KEY, { globalAssets, chunks, globalStyle, language, filename })
+            saveState(STATE_KEY, { globalAssets, chunks, globalStyle, language, filename, fullNovelText })
                 .catch(e => console.error("Failed to save state", e));
         }, 200);
         return () => clearTimeout(timeoutId);
-    }, [globalAssets, chunks, globalStyle, language, filename, isRestored]);
+    }, [globalAssets, chunks, globalStyle, language, filename, fullNovelText, isRestored]);
 
     // Sync language -> default style options
     useEffect(() => {
@@ -112,4 +115,5 @@ export function useSessionRestore(state: SessionState) {
 
     return { isRestored };
 }
+
 
