@@ -274,7 +274,9 @@ export function useSceneAssets(props: UseSceneAssetsProps) {
                                 name: `E${c.index + 1}分镜S${s.id.replace('scene_', '')}-${opt.option_id || optionLabel}`,
                                 description: s.visual_desc || "Generated video",
                                 type: 'item',
-                                refImageUrl: opt.imageUrl || undefined // Use thumbnail if available
+                                refImageUrl: opt.imageUrl || undefined, // Use thumbnail if available
+                                mediaUrl: opt.videoUrl,
+                                mediaAssetId: opt.videoAssetId
                             });
                         }
                     });
@@ -284,7 +286,9 @@ export function useSceneAssets(props: UseSceneAssetsProps) {
                         name: `E${c.index + 1}分镜S${s.id.replace('scene_', '')}-A`,
                         description: s.visual_desc || "Generated video",
                         type: 'item',
-                        refImageUrl: s.imageUrl || undefined
+                        refImageUrl: s.imageUrl || undefined,
+                        mediaUrl: s.videoUrl,
+                        mediaAssetId: s.videoAssetId
                     });
                 }
             }
@@ -297,6 +301,7 @@ export function useSceneAssets(props: UseSceneAssetsProps) {
             description: a.description,
             type: 'item',
             refImageUrl: a.refImageUrl,
+            mediaAssetId: a.id,
             canDelete: true
         }));
         
@@ -311,6 +316,7 @@ export function useSceneAssets(props: UseSceneAssetsProps) {
             description: a.description,
             type: 'item',
             refImageUrl: a.refImageUrl,
+            mediaAssetId: a.id,
             canDelete: true
         }));
         return uploadedAudios;
@@ -322,8 +328,19 @@ export function useSceneAssets(props: UseSceneAssetsProps) {
             const blob = new Blob([file], { type: file.type });
             const assetId = await saveAsset(blob);
             
-            // Generate a safe name from filename
-            const fileName = file.name.split('.')[0].replace(/[^a-zA-Z0-9_\u4e00-\u9fa5]/g, '_');
+            // Generate a sequence name: video-1, audio-1, etc.
+            const existingOfType = chunk.assets.filter(a => a.type === type);
+            let nextIndex = 1;
+            const prefix = `${type}-`;
+            existingOfType.forEach(a => {
+                if (a.name.startsWith(prefix)) {
+                    const num = parseInt(a.name.substring(prefix.length), 10);
+                    if (!isNaN(num) && num >= nextIndex) {
+                        nextIndex = num + 1;
+                    }
+                }
+            });
+            const fileName = `${type}-${nextIndex}`;
             
             const newAsset: Asset = {
                 id: assetId,

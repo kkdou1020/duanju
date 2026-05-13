@@ -340,17 +340,20 @@ export function useChunkManager(deps: ChunkManagerDeps) {
                             if (dna) finalVisualDna = dna;
                             
                             let currentActiveId: string | null = null;
-                            const currentCompletedIds = new Set(globalCompletedIds);
 
                             if (progressScenes.length > 0) {
                                 currentActiveId = progressScenes[progressScenes.length - 1].id;
-                                for (let i = 0; i < progressScenes.length - 1; i++) {
-                                    currentCompletedIds.add(progressScenes[i].id);
+                                
+                                const activeIndex = filteredBeats.findIndex((b: any) => `E${epNum}_${b.beat_id}` === currentActiveId);
+                                if (activeIndex > 0) {
+                                    for (let i = 0; i < activeIndex; i++) {
+                                        globalCompletedIds.add(`E${epNum}_${filteredBeats[i].beat_id}`);
+                                    }
                                 }
                             }
                             
                             if (onProgressCb) {
-                                onProgressCb(currentActiveId, Array.from(currentCompletedIds));
+                                onProgressCb(currentActiveId, Array.from(globalCompletedIds));
                             }
                             
                             // Update our local live tracking array

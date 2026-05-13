@@ -23,7 +23,8 @@ const StylePanel: React.FC<StylePanelProps> = ({ styleState, onStyleChange, labe
     const [draftTags, setDraftTags] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const is1to1 = Boolean(styleState.work?.useOriginalCharacters && (styleState.work?.custom || (styleState.work?.selected !== 'None' ? styleState.work?.selected : '')));
+    const hasWorkSelected = Boolean(styleState.work?.custom || (styleState.work?.selected && styleState.work?.selected !== 'None'));
+    const is1to1 = Boolean(styleState.work?.useOriginalCharacters && hasWorkSelected);
 
     const handleGenerateDna = async () => {
         if (styleState.visualDnaLocked) return;
@@ -210,12 +211,12 @@ const StylePanel: React.FC<StylePanelProps> = ({ styleState, onStyleChange, labe
                     <select
                         value={current.selected}
                         onChange={(e) => updateSetting(type, 'selected', e.target.value)}
-                        className="w-full bg-white dark:bg-black/30 text-sm text-gray-700 dark:text-gray-400 p-2 rounded border border-gray-300 dark:border-white/10 focus:border-indigo-500/50 dark:focus:border-banana-500/50 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full bg-white dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-200 p-2 rounded border border-gray-300 dark:border-white/10 focus:border-indigo-500/50 dark:focus:border-banana-500/50 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                         disabled={!!current.custom || styleState.visualDnaLocked || (type === 'texture' && is1to1)}
                     >
-                        <option value="None">{labels.none}</option>
+                        <option className="bg-white dark:bg-gray-800 dark:text-gray-200" value="None">{labels.none}</option>
                         {current.options.map((opt, i) => (
-                            <option key={i} value={opt}>{opt}</option>
+                            <option className="bg-white dark:bg-gray-800 dark:text-gray-200" key={i} value={opt}>{opt}</option>
                         ))}
                     </select>
 
@@ -314,10 +315,10 @@ const StylePanel: React.FC<StylePanelProps> = ({ styleState, onStyleChange, labe
                     <select
                         value={styleState.narrationVoice}
                         onChange={(e) => onStyleChange({ ...styleState, narrationVoice: e.target.value })}
-                        className="flex-1 bg-white dark:bg-black/30 text-sm text-gray-700 dark:text-gray-400 p-2 rounded border border-gray-300 dark:border-white/10 focus:border-indigo-500/50 dark:focus:border-banana-500/50 outline-none"
+                        className="flex-1 bg-white dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-200 p-2 rounded border border-gray-300 dark:border-white/10 focus:border-indigo-500/50 dark:focus:border-banana-500/50 outline-none"
                     >
                         {VOICE_OPTIONS.map((opt) => (
-                            <option key={opt.id} value={opt.id}>{opt.name}</option>
+                            <option className="bg-white dark:bg-gray-800 dark:text-gray-200" key={opt.id} value={opt.id}>{opt.name}</option>
                         ))}
                     </select>
                     <button
@@ -366,12 +367,12 @@ const StylePanel: React.FC<StylePanelProps> = ({ styleState, onStyleChange, labe
                         <select
                             value={styleState.work.selected}
                             onChange={(e) => updateSetting('work', 'selected', e.target.value)}
-                            className="w-full bg-white dark:bg-black/30 text-sm text-gray-700 dark:text-gray-400 p-2 rounded border border-gray-300 dark:border-white/10 focus:border-indigo-500/50 dark:focus:border-banana-500/50 outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            className="w-full bg-white dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-200 p-2 rounded border border-gray-300 dark:border-white/10 focus:border-indigo-500/50 dark:focus:border-banana-500/50 outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             disabled={!!styleState.work.custom || styleState.visualDnaLocked}
                         >
-                            <option value="None">{labels.none}</option>
+                            <option className="bg-white dark:bg-gray-800 dark:text-gray-200" value="None">{labels.none}</option>
                             {styleState.work.options.map((opt, i) => (
-                                <option key={i} value={opt}>{opt}</option>
+                                <option className="bg-white dark:bg-gray-800 dark:text-gray-200" key={i} value={opt}>{opt}</option>
                             ))}
                         </select>
                         <div className="flex items-center gap-3 mt-1">
@@ -395,9 +396,9 @@ const StylePanel: React.FC<StylePanelProps> = ({ styleState, onStyleChange, labe
                                 checked={styleState.work.useOriginalCharacters || false}
                                 onChange={(e) => updateSetting('work', 'useOriginalCharacters', e.target.checked)}
                                 className="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 text-indigo-600 dark:text-banana-500 focus:ring-indigo-500 dark:focus:ring-banana-500 bg-white dark:bg-gray-800 cursor-pointer accent-indigo-600 dark:accent-banana-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                                disabled={styleState.visualDnaLocked}
+                                disabled={styleState.visualDnaLocked || !hasWorkSelected}
                             />
-                            <label htmlFor="useOriginalCharacters" className="text-xs text-gray-600 dark:text-gray-400 select-none cursor-pointer hover:text-indigo-600 dark:hover:text-banana-400 transition-colors">
+                            <label htmlFor="useOriginalCharacters" className={`text-xs select-none transition-colors ${styleState.visualDnaLocked || !hasWorkSelected ? 'text-gray-400 dark:text-gray-600 cursor-not-allowed' : 'text-gray-600 dark:text-gray-400 cursor-pointer hover:text-indigo-600 dark:hover:text-banana-400'}`}>
                                 {language === 'Chinese' ? '影视剧人物/场景/物品1:1还原' : '1:1 Restore Characters/Scenes/Items'}
                             </label>
                             <div className="group relative ml-auto mr-1">
@@ -412,19 +413,55 @@ const StylePanel: React.FC<StylePanelProps> = ({ styleState, onStyleChange, labe
                     </div>
                 </div>
 
-                {/* 2. 画面质感 (Texture) - Image Upload Only */}
-                <div>
+                {/* 2. 画面质感 (Texture) */}
+                <div className={`transition-all duration-300 relative ${is1to1 ? 'opacity-40 pointer-events-none grayscale' : ''}`}>
                     <div className="flex items-center gap-2 mb-2">
                         <span className="text-xs font-bold text-gray-300">{labels.textureStyle}</span>
                         <div className="group relative">
                             <Info className="w-3 h-3 text-gray-600 cursor-help hover:text-gray-400 transition-colors" />
                             <div className="absolute left-0 bottom-full mb-2 w-48 bg-white/95 dark:bg-black/95 border border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 text-[10px] p-2 rounded hidden group-hover:block z-50 pointer-events-none shadow-xl">
-                                {language === 'Chinese' ? '上传参考图以让模型直接提取质感DNA（1:1还原模式下将被禁用，防止风格污染）' : 'Upload reference images for texture extraction (disabled in 1:1 restore mode to prevent contamination).'}
+                                {language === 'Chinese' ? '选择或输入画面质感，也可上传参考图让模型提取（1:1还原模式下将被禁用，防止风格污染）' : 'Select or input texture style, or upload images for extraction (disabled in 1:1 restore mode).'}
                             </div>
                         </div>
                     </div>
                     
-                    <div className="flex items-center justify-between mb-2 mt-2">
+                    <div className="grid grid-cols-1 gap-3 mb-3">
+                        <input
+                            type="text"
+                            placeholder={is1to1 ? (language === 'Chinese' ? '1:1还原模式下无法叠加画面质感' : 'Texture input disabled in 1:1 Restore mode') : labels.customPlaceholder}
+                            value={styleState.texture.custom || ''}
+                            onChange={(e) => updateSetting('texture', 'custom', e.target.value)}
+                            className="w-full bg-white dark:bg-black/40 text-sm text-indigo-900 dark:text-banana-100 placeholder-gray-400 dark:placeholder-gray-600 p-2 rounded border border-gray-300 dark:border-white/10 focus:border-indigo-500/50 dark:focus:border-banana-500/50 outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            disabled={styleState.visualDnaLocked || is1to1}
+                        />
+                        <select
+                            value={styleState.texture.selected}
+                            onChange={(e) => updateSetting('texture', 'selected', e.target.value)}
+                            className="w-full bg-white dark:bg-gray-800 text-sm text-gray-700 dark:text-gray-200 p-2 rounded border border-gray-300 dark:border-white/10 focus:border-indigo-500/50 dark:focus:border-banana-500/50 outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            disabled={!!styleState.texture.custom || styleState.visualDnaLocked || is1to1}
+                        >
+                            <option className="bg-white dark:bg-gray-800 dark:text-gray-200" value="None">{labels.none}</option>
+                            {styleState.texture.options.map((opt, i) => (
+                                <option className="bg-white dark:bg-gray-800 dark:text-gray-200" key={i} value={opt}>{opt}</option>
+                            ))}
+                        </select>
+                        <div className="flex items-center gap-3 mt-1">
+                            <span className="text-[10px] text-gray-500 uppercase">{labels.strength}</span>
+                            <input
+                                type="range"
+                                min="1"
+                                max="10"
+                                step="1"
+                                value={styleState.texture.strength}
+                                onChange={(e) => updateSetting('texture', 'strength', parseInt(e.target.value))}
+                                className="flex-1 accent-indigo-600 dark:accent-banana-500 h-1 bg-gray-300 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                disabled={styleState.visualDnaLocked || is1to1}
+                            />
+                            <span className="text-xs font-mono w-4 text-right text-gray-400">{styleState.texture.strength}</span>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center justify-between mb-2 mt-2 pt-2 border-t border-gray-200 dark:border-white/5">
                         <span className="text-[10px] text-gray-500 font-medium flex items-center gap-1">
                             <ImageIcon className="w-3 h-3" />
                             Style Ref ({uploadImages.length}/10)

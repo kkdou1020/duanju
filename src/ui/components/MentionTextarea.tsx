@@ -3,12 +3,15 @@ import ReactDOM from 'react-dom';
 import { Asset } from '@/shared/types';
 import { X } from 'lucide-react';
 import { ASSET_TAG_REGEX, extractAssetTags, resolveTagToAsset, isStoryboardTag } from '@/shared/asset-tags';
+import { extractAudioFromVideo } from '@/shared/audio-extractor';
 
 export interface SceneImageCandidate {
     id: string;
     name: string;
     refImageUrl?: string;
     canDelete?: boolean;
+    mediaUrl?: string;
+    mediaAssetId?: string;
 }
 
 interface MentionTextareaProps {
@@ -38,7 +41,7 @@ const extractTags = (text: string): string[] => {
     return extractAssetTags(text).map(t => t.name).filter(n => !isStoryboardTag(n));
 };
 
-// Find asset info (display name + thumbnail) for a tag
+// Find asset info (display name + thumbnail + category) for a tag
 // Uses ID anchor for exact lookup, falls back to name-based matching
 const findAssetInfo = (
     tagName: string,
@@ -47,28 +50,28 @@ const findAssetInfo = (
     tagId?: string,
     videos: SceneImageCandidate[] = [],
     audios: SceneImageCandidate[] = []
-): { displayName: string; thumb?: string } => {
+): { displayName: string; thumb?: string; category?: string } => {
     // 0. If #id anchor is present, exact ID lookup
     if (tagId) {
         const byId = assets.find(a => a.id === tagId);
-        if (byId) return { displayName: byId.name, thumb: byId.refImageUrl };
+        if (byId) return { displayName: byId.name, thumb: byId.refImageUrl, category: byId.type };
         const siById = sceneImages.find(s => s.id === tagId);
-        if (siById) return { displayName: siById.name, thumb: siById.refImageUrl };
+        if (siById) return { displayName: siById.name, thumb: siById.refImageUrl, category: 'image' };
         const vById = videos.find(v => v.id === tagId);
-        if (vById) return { displayName: vById.name, thumb: vById.refImageUrl };
+        if (vById) return { displayName: vById.name, thumb: vById.refImageUrl, category: 'video' };
         const aById = audios.find(a => a.id === tagId);
-        if (aById) return { displayName: aById.name, thumb: aById.refImageUrl };
+        if (aById) return { displayName: aById.name, thumb: aById.refImageUrl, category: 'audio' };
     }
 
     // 1. Exact name match
     const exactAsset = assets.find(a => a.name === tagName || a.id === tagName);
-    if (exactAsset) return { displayName: exactAsset.name, thumb: exactAsset.refImageUrl };
+    if (exactAsset) return { displayName: exactAsset.name, thumb: exactAsset.refImageUrl, category: exactAsset.type };
     const exactSi = sceneImages.find(s => s.name === tagName || s.id === tagName);
-    if (exactSi) return { displayName: exactSi.name, thumb: exactSi.refImageUrl };
+    if (exactSi) return { displayName: exactSi.name, thumb: exactSi.refImageUrl, category: 'image' };
     const exactV = videos.find(v => v.name === tagName || v.id === tagName);
-    if (exactV) return { displayName: exactV.name, thumb: exactV.refImageUrl };
+    if (exactV) return { displayName: exactV.name, thumb: exactV.refImageUrl, category: 'video' };
     const exactA = audios.find(a => a.name === tagName || a.id === tagName);
-    if (exactA) return { displayName: exactA.name, thumb: exactA.refImageUrl };
+    if (exactA) return { displayName: exactA.name, thumb: exactA.refImageUrl, category: 'audio' };
 
     // 1.5 Storyboard suffix matching: @图像_分镜S01 should match sceneImage named 分镜E1_S01
     if (isStoryboardTag(tagName)) {
@@ -77,19 +80,24 @@ const findAssetInfo = (
             const siSuffix = s.name.replace('分镜', '');
             return siSuffix === beatSuffix || siSuffix.endsWith(`_${beatSuffix}`);
         });
-        if (suffixMatch) return { displayName: suffixMatch.name, thumb: suffixMatch.refImageUrl };
+        if (suffixMatch) return { displayName: suffixMatch.name, thumb: suffixMatch.refImageUrl, category: 'image' };
     }
 
     // 2. Longest prefix-match fallback with overlap ratio gate (≥50%)
-    const allCandidates = [...assets, ...sceneImages, ...videos, ...audios];
-    let best: { displayName: string; thumb?: string } | null = null;
+    const allCandidates = [
+        ...assets.map(a => ({ ...a, __cat: a.type })), 
+        ...sceneImages.map(a => ({ ...a, __cat: 'image' })), 
+        ...videos.map(a => ({ ...a, __cat: 'video' })), 
+        ...audios.map(a => ({ ...a, __cat: 'audio' }))
+    ];
+    let best: { displayName: string; thumb?: string; category?: string } | null = null;
     let bestLen = 0;
     for (const c of allCandidates) {
         if (c.name.length >= 2 && (c.name.startsWith(tagName) || tagName.startsWith(c.name))) {
             const overlap = Math.min(c.name.length, tagName.length) / Math.max(c.name.length, tagName.length);
             if (overlap >= 0.5 && c.name.length > bestLen) {
                 bestLen = c.name.length;
-                best = { displayName: c.name, thumb: 'refImageUrl' in c ? c.refImageUrl : undefined };
+                best = { displayName: c.name, thumb: 'refImageUrl' in c ? (c as any).refImageUrl : undefined, category: c.__cat };
             }
         }
     }
@@ -126,12 +134,13 @@ const textToHtml = (
             const tagId = (p2 || p4) as string | undefined;
             const info = findAssetInfo(tagName, assets, sceneImages, tagId, videos, audios);
             const colors = CHIP_COLORS[mode];
+            const defaultEmoji = info.category === 'audio' ? '🎵' : info.category === 'video' ? '🎬' : '🧑';
             const imgHtml = info.thumb
                 ? `<img src="${info.thumb}" style="width:14px;height:14px;border-radius:2px;object-fit:cover;vertical-align:-2px;margin-right:3px;display:inline-block;" />`
-                : `<span style="vertical-align:-1px;margin-right:3px;display:inline-block;font-size:inherit;">🧑</span>`;
+                : `<span style="vertical-align:-1px;margin-right:3px;display:inline-block;font-size:inherit;">${defaultEmoji}</span>`;
             // Store both name and optional id in data attributes
             const idAttr = tagId ? ` data-mention-id="${tagId}"` : '';
-            return `<span contenteditable="false" data-mention="${tagName}"${idAttr} style="display:inline-block;background:${colors.bg};border:1px solid ${colors.border};border-radius:4px;padding:1px 5px;margin:0 2px;font-size:inherit;color:${colors.text};cursor:default;vertical-align:baseline;line-height:normal;user-select:all;font-weight:500;">${imgHtml}${info.displayName}</span>\u200B`;
+            return `<span contenteditable="false" data-mention="${tagName}"${idAttr} style="display:inline;background:${colors.bg};border:1px solid ${colors.border};border-radius:4px;padding:1px 5px;margin:0;font-size:inherit;color:${colors.text};cursor:default;vertical-align:baseline;line-height:normal;user-select:all;font-weight:500;-webkit-box-decoration-break:clone;box-decoration-break:clone;">${imgHtml}${info.displayName}</span>\u200B`;
         }
     );
 };
@@ -238,7 +247,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
 
     // Build candidate list
     const candidates = React.useMemo(() => {
-        const items: { id: string; name: string; displayName: string; disabled: boolean; inPrompt: boolean; thumb?: string; category: 'asset' | 'scene' | 'video' | 'audio', canDelete?: boolean }[] = [];
+        const items: { id: string; name: string; displayName: string; disabled: boolean; inPrompt: boolean; thumb?: string; category: 'asset' | 'scene' | 'video' | 'audio', canDelete?: boolean, mediaUrl?: string, mediaAssetId?: string }[] = [];
 
         // Count ALL unique @图像 tags in prompt (including 分镜 tags)
         const currentTagMatches = [...value.matchAll(TAG_REGEX)];
@@ -337,7 +346,9 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
                     disabled: isDisabled,
                     category: 'video',
                     inPrompt: isInPrompt,
-                    canDelete: v.canDelete
+                    canDelete: v.canDelete,
+                    mediaUrl: v.mediaUrl,
+                    mediaAssetId: v.mediaAssetId
                 });
             }
         }
@@ -354,7 +365,9 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
                     disabled: isDisabled,
                     category: 'audio',
                     inPrompt: isInPrompt,
-                    canDelete: a.canDelete
+                    canDelete: a.canDelete,
+                    mediaUrl: a.mediaUrl,
+                    mediaAssetId: a.mediaAssetId
                 });
             }
         }
@@ -479,7 +492,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
         if (assetId && assetId !== '__base__') {
             chip.dataset.mentionId = assetId;
         }
-        chip.style.cssText = `display:inline-block;background:${colors.bg};border:1px solid ${colors.border};border-radius:4px;padding:1px 5px;margin:0 2px;font-size:inherit;color:${colors.text};cursor:default;vertical-align:baseline;line-height:normal;user-select:all;font-weight:500;`;
+        chip.style.cssText = `display:inline;background:${colors.bg};border:1px solid ${colors.border};border-radius:4px;padding:1px 5px;margin:0;font-size:inherit;color:${colors.text};cursor:default;vertical-align:baseline;line-height:normal;user-select:all;font-weight:500;-webkit-box-decoration-break:clone;box-decoration-break:clone;`;
 
         if (thumb) {
             const img = document.createElement('img');
@@ -565,23 +578,49 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
     }, [highlightIdx, showDropdown]);
 
     // Show preview only on explicit mouse hover
+    const [mediaBlobUrl, setMediaBlobUrl] = useState<string | null>(null);
+
     useEffect(() => {
         if (!showDropdown || !dropdownRef.current || hoveredIdx === null) {
             setPreviewImage(null);
+            setMediaBlobUrl(null);
             return;
         }
         const items = dropdownRef.current.querySelectorAll('[data-candidate]');
         const item = items[hoveredIdx] as HTMLElement;
         if (item) {
             const candidate = candidates[hoveredIdx];
-            if (candidate && candidate.thumb) {
-                const rect = item.getBoundingClientRect();
+            const rect = item.getBoundingClientRect();
+            
+            // If it's a video or audio, we prepare to show media
+            if ((candidate.category === 'video' || candidate.category === 'audio') && (candidate.mediaUrl || candidate.mediaAssetId)) {
+                setPreviewImage({ url: candidate.category, x: rect.right, y: rect.top }); // url holds type here for media
+                
+                // Fetch blob if needed
+                if (candidate.mediaUrl) {
+                    setMediaBlobUrl(candidate.mediaUrl);
+                } else if (candidate.mediaAssetId) {
+                    // Lazy load blob using object URL for better media support
+                    import('@/services/storage').then(({ loadAssetUrl }) => {
+                        loadAssetUrl(candidate.mediaAssetId!).then(url => {
+                            // Check if still hovering
+                            if (hoveredIdx !== null) {
+                                setMediaBlobUrl(url || null);
+                            }
+                        });
+                    });
+                }
+            } else if (candidate.thumb) {
+                // Regular image preview
                 setPreviewImage({ url: candidate.thumb, x: rect.right, y: rect.top });
+                setMediaBlobUrl(null);
             } else {
                 setPreviewImage(null);
+                setMediaBlobUrl(null);
             }
         } else {
             setPreviewImage(null);
+            setMediaBlobUrl(null);
         }
     }, [hoveredIdx, showDropdown, candidates]);
 
@@ -609,7 +648,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
                 onBlur={handleBlur}
                 className={className}
                 data-placeholder={placeholder}
-                style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowY: 'auto' }}
+                style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowY: 'auto', overflowX: 'hidden', textAlign: 'justify' }}
             />
 
             {onAssetUpload && (
@@ -635,16 +674,23 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
                     />
                     <input
                         type="file"
-                        accept="audio/*"
+                        accept="audio/*,video/mp4,video/quicktime,video/webm"
                         className="hidden"
                         ref={audioUploadRef}
                         onChange={async (e) => {
                             const file = e.target.files?.[0];
                             if (file && onAssetUpload) {
                                 setQuery('');
-                                const newId = await onAssetUpload('audio', file);
-                                if (newId) {
-                                    newlyUploadedIdRef.current = newId;
+                                try {
+                                    // Extract audio if a video file is uploaded
+                                    const audioFile = await extractAudioFromVideo(file);
+                                    const newId = await onAssetUpload('audio', audioFile);
+                                    if (newId) {
+                                        newlyUploadedIdRef.current = newId;
+                                    }
+                                } catch (error) {
+                                    console.error("Failed to process audio:", error);
+                                    alert("音频提取失败，请检查文件格式。");
                                 }
                                 e.target.value = '';
                             }
@@ -937,7 +983,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
                                     }}
                                     className="w-full py-1.5 text-xs text-indigo-600 dark:text-banana-400 bg-white dark:bg-dark-800 hover:bg-indigo-50 dark:hover:bg-banana-500/10 border border-indigo-200 dark:border-banana-500/30 rounded flex items-center justify-center gap-1 transition-colors"
                                 >
-                                    <span className="text-sm">+</span> 上传本地音频
+                                    <span className="text-sm">+</span> 上传本地音频 (支持MP4提取)
                                 </button>
                             </div>
                         )}
@@ -953,7 +999,27 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
                         }}
                         className="p-1 bg-white dark:bg-dark-900 border border-gray-200 dark:border-white/10 rounded-lg shadow-2xl pointer-events-none animate-in fade-in zoom-in duration-100"
                     >
-                        <img src={previewImage.url} className="max-w-[240px] max-h-[240px] rounded-md" style={{ objectFit: 'contain' }} />
+                        {previewImage.url === 'video' ? (
+                            mediaBlobUrl ? (
+                                <video src={mediaBlobUrl} autoPlay loop muted playsInline className="max-w-[240px] max-h-[240px] rounded-md" style={{ objectFit: 'contain' }} />
+                            ) : (
+                                <div className="w-[240px] h-[135px] flex items-center justify-center bg-gray-100 dark:bg-dark-800 rounded-md">
+                                    <span className="text-xs text-gray-400">加载视频中...</span>
+                                </div>
+                            )
+                        ) : previewImage.url === 'audio' ? (
+                            mediaBlobUrl ? (
+                                <div className="bg-white dark:bg-dark-900 rounded p-2">
+                                    <audio src={mediaBlobUrl} autoPlay controls className="w-[240px] h-10 outline-none" />
+                                </div>
+                            ) : (
+                                <div className="w-[240px] h-10 flex items-center justify-center bg-gray-100 dark:bg-dark-800 rounded-md">
+                                    <span className="text-xs text-gray-400">加载音频中...</span>
+                                </div>
+                            )
+                        ) : (
+                            <img src={previewImage.url} className="max-w-[240px] max-h-[240px] rounded-md" style={{ objectFit: 'contain' }} />
+                        )}
                     </div>
                 )}
                 </>,

@@ -238,7 +238,10 @@ export const generateAssetImage = async (
         console.warn("Asset Gen Attempt 1 Failed:", e.message);
 
         try {
-            const simplePrompt = `(Best quality), ${asset.type === 'character' ? 'Character Sheet, Three Views, white background' : asset.type === 'item' ? 'Item views, white background' : 'Environment concept art, no humans, empty scenery'}, Subject: ${asset.description}`;
+            let simplePrompt = `(Best quality), ${asset.type === 'character' ? 'Character Sheet, Three Views, white background' : asset.type === 'item' ? 'Item views, white background' : 'Environment concept art, no humans, empty scenery'}, Subject: ${asset.description}`;
+            if (stylePrefix && !simplePrompt.includes(stylePrefix.trim())) {
+                simplePrompt = `${stylePrefix}, ${simplePrompt}`;
+            }
             const imageUrl = await callModel(simplePrompt);
             return { imageUrl, prompt: simplePrompt };
         } catch (e2) {
@@ -263,10 +266,10 @@ export const generateSceneImage = async (
     const ar = globalStyle?.aspectRatio || '16:9';
 
     let basePrompt = prompt.substring(0, 1500);
-    const stylePrefix = globalStyle?.visualTags ? `${globalStyle.visualTags}. ` : "";
+    const stylePrefix = globalStyle ? computeStylePrefix(globalStyle) : "";
     let finalPrompt = basePrompt;
-    if (stylePrefix && !basePrompt.startsWith(stylePrefix.trim())) {
-        finalPrompt = `${stylePrefix}${basePrompt}`;
+    if (stylePrefix && !basePrompt.includes(stylePrefix.trim())) {
+        finalPrompt = `${stylePrefix}, ${basePrompt}`;
     }
 
     // 1. Identify Assets - Frontend SSOT provides exactly what is needed!
