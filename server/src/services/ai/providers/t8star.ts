@@ -437,7 +437,7 @@ export class T8StarProvider implements IAIProvider {
 
             let apiKey = this.imageApiKey;
             if (config?.imageConfig?.useOfficialKey) {
-                apiKey = "sk-vMpkhSBqFQQy3yT8shKIJCgCptW6uWdPXWpAzbofWRnYOlTa";
+                apiKey = process.env.T8_OFFICIAL_IMAGE_KEY || this.imageApiKey;
             }
 
             const imageBody: any = {
