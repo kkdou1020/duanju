@@ -437,7 +437,7 @@ export class T8StarProvider implements IAIProvider {
 
             let apiKey = this.imageApiKey;
             if (config?.imageConfig?.useOfficialKey) {
-                apiKey = "sk-vMpkhSBqFQQy3yT8shKIJCgCptW6uWdPXWpAzbofWRnYOlTa";
+                apiKey = process.env.T8_OFFICIAL_IMAGE_KEY || this.imageApiKey;
             }
 
             const imageBody: any = {
@@ -567,9 +567,11 @@ export class T8StarProvider implements IAIProvider {
     async generateVideos(args: GenerateVideosArgs): Promise<VideosOperation> {
         const { model, prompt, image, config } = args;
 
+        const isSeedance = model.includes("seedance") || model.includes("doubao");
         const isVeo = model.includes("veo");
+        const isV2Protocol = isVeo || isSeedance;
 
-        if (!isVeo) {
+        if (!isV2Protocol) {
             const form = new FormData();
             form.append("model", model);
             form.append("prompt", prompt);
@@ -626,6 +628,23 @@ export class T8StarProvider implements IAIProvider {
         const enhancePrompt = !!config?.enhance_prompt;
         const aspectRatio = config?.aspectRatio || '16:9';
 
+        const payload: any = {
+            prompt: prompt,
+            model,
+            enhance_prompt: enhancePrompt,
+            images: finalImages.map((x) => x.value),
+            aspect_ratio: aspectRatio,
+        };
+
+        if (isSeedance) {
+            if (config?.videos && config.videos.length > 0) {
+                payload.videos = config.videos;
+            }
+            if (config?.audios && config.audios.length > 0) {
+                payload.audios = config.audios;
+            }
+        }
+
         const url = `${this.mediaBaseUrl.replace(/\/+$/, "")}/v2/videos/generations`;
 
         const res = await fetch(url, {
@@ -634,13 +653,7 @@ export class T8StarProvider implements IAIProvider {
                 "Content-Type": "application/json",
                 "Authorization": `Bearer ${this.videoApiKey}`,
             },
-            body: JSON.stringify({
-                prompt: prompt,
-                model,
-                enhance_prompt: enhancePrompt,
-                images: finalImages.map((x) => x.value),
-                aspect_ratio: aspectRatio,
-            }),
+            body: JSON.stringify(payload),
         });
 
         if (!res.ok) {
@@ -720,7 +733,7 @@ export class T8StarProvider implements IAIProvider {
                 }
 
                 if (status === "SUCCESS") {
-                    const outputUrl = statusData?.data?.output || statusData?.output;
+                    const outputUrl = statusData?.data?.output || statusData?.output || statusData?.data?.video_url || statusData?.video_url;
                     return {
                         done: true,
                         operation: { id, status },
@@ -771,5 +784,41 @@ export class T8StarProvider implements IAIProvider {
         }
 
         return res.arrayBuffer();
+    }
+
+    async uploadFile(fileBuffer: Buffer, mimeType: string, filename: string): Promise<string> {
+        const NodeFormData = require('form-data');
+        const form = new NodeFormData();
+        
+        form.append("file", fileBuffer, {
+            filename: filename || "upload.bin",
+            contentType: mimeType || "application/octet-stream"
+        });
+        
+        const urlReq = `${this.mediaBaseUrl.replace(/\/+$/, "")}/v1/files`;
+        try {
+            const res = await fetch(urlReq, {
+                method: "POST",
+                headers: { 
+                    Accept: "application/json", 
+                    "Authorization": `Bearer ${this.videoApiKey}`,
+                    ...form.getHeaders()
+                },
+                body: form as any,
+            });
+            if (!res.ok) {
+                const text = await res.text().catch(() => "");
+                throw new Error(`HTTP Error: ${res.status} ${text}`);
+            }
+            const data = await res.json() as any;
+            const url = data?.url || data?.data?.url;
+            if (!url) {
+                throw new Error(`Upload succeeded but no URL in response: ${JSON.stringify(data)}`);
+            }
+            return url;
+        } catch (e: any) {
+            console.error("[T8StarProvider] File upload failed:", e);
+            throw e;
+        }
     }
 }
