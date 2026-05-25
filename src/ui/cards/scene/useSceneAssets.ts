@@ -10,14 +10,13 @@ export interface UseSceneAssetsProps {
     globalStyle: GlobalStyle;
     language: string;
     chapterScenes: Scene[];
-    allChunks: NovelChunk[];
     chunk: NovelChunk;
     onUpdate: (id: string, fieldOrUpdates: keyof Scene | Partial<Scene>, value?: any) => void;
     onUpdateChunk: (id: string, updates: Partial<NovelChunk> | ((c: NovelChunk) => Partial<NovelChunk>)) => void;
 }
 
 export function useSceneAssets(props: UseSceneAssetsProps) {
-    const { scene, assets, globalStyle, language, chapterScenes, allChunks, chunk, onUpdate, onUpdateChunk } = props;
+    const { scene, assets, globalStyle, language, chapterScenes, chunk, onUpdate, onUpdateChunk } = props;
 
     const [activeAssetSelector, setActiveAssetSelector] = useState<'none' | 'image' | 'video'>('none');
 
@@ -28,12 +27,6 @@ export function useSceneAssets(props: UseSceneAssetsProps) {
             ? (scene.startEndAssetIds || [])
             : (scene.videoAssetIds || [])
     );
-    const lastProcessedSpecsRef = useRef({
-        video_duration: scene.video_duration,
-        video_camera: scene.video_camera,
-        video_lens: scene.video_lens,
-        video_vfx: scene.video_vfx
-    });
 
     // Reset refs when scene ID changes
     const lastSceneIdRef = useRef(scene.id);
@@ -43,12 +36,6 @@ export function useSceneAssets(props: UseSceneAssetsProps) {
         lastProcessedVideoAssetsRef.current = scene.isStartEndFrameMode
             ? (scene.startEndAssetIds || [])
             : (scene.videoAssetIds || []);
-        lastProcessedSpecsRef.current = {
-            video_duration: scene.video_duration,
-            video_camera: scene.video_camera,
-            video_lens: scene.video_lens,
-            video_vfx: scene.video_vfx
-        };
     }
 
     // ── Scene Asset Resolver ──
@@ -83,14 +70,7 @@ export function useSceneAssets(props: UseSceneAssetsProps) {
         return assetsToUse;
     };
 
-    // ── Spec Commit (just save, no AI call) ──
-    const handleSpecCommit = (field: keyof Scene, value: string) => {
-        onUpdate(scene.id, field, value);
-    };
 
-    const handleLocalSpecChange = (field: keyof Scene, value: string) => {
-        onUpdate(scene.id, field, value);
-    };
 
     // ── Asset Add / Remove ──
     // Helper: append @图像 tag for newly added asset to prompt (with #id anchor)
@@ -263,59 +243,49 @@ export function useSceneAssets(props: UseSceneAssetsProps) {
     // ── Extract Global Videos & Audios ──
     const sceneVideos = useMemo(() => {
         const videos: any[] = [];
-        for (const c of allChunks) {
-            for (const s of c.scenes) {
-                if (s.prompt_options && s.prompt_options.length > 0) {
-                    s.prompt_options.forEach((opt, index) => {
-                        if (opt.videoUrl || opt.videoAssetId) {
-                            const optionLabel = String.fromCharCode(65 + index); // A, B, C
-                            videos.push({
-                                id: `scene_video_${c.id}_${s.id}_${opt.option_id}`,
-                                name: `E${c.index + 1}分镜S${s.id.replace('scene_', '')}-${opt.option_id || optionLabel}`,
-                                description: s.visual_desc || "Generated video",
-                                type: 'item',
-                                refImageUrl: opt.imageUrl || undefined, // Use thumbnail if available
-                                mediaUrl: opt.videoUrl,
-                                mediaAssetId: opt.videoAssetId
-                            });
-                        }
-                    });
-                } else if (s.videoUrl || s.videoAssetId || s.startEndVideoAssetId) {
-                    videos.push({
-                        id: `scene_video_${c.id}_${s.id}`,
-                        name: `E${c.index + 1}分镜S${s.id.replace('scene_', '')}-A`,
-                        description: s.visual_desc || "Generated video",
-                        type: 'item',
-                        refImageUrl: s.imageUrl || undefined,
-                        mediaUrl: s.videoUrl,
-                        mediaAssetId: s.videoAssetId
-                    });
-                }
+        for (const s of chapterScenes) {
+            if (s.prompt_options && s.prompt_options.length > 0) {
+                s.prompt_options.forEach((opt, index) => {
+                    if (opt.videoUrl || opt.videoAssetId) {
+                        const optionLabel = String.fromCharCode(65 + index); // A, B, C
+                        videos.push({
+                            id: `scene_video_${s.id}_${opt.option_id}`,
+                            name: `分镜${s.id.replace('scene_', '')}-${opt.option_id || optionLabel}视频`,
+                            description: s.visual_desc || "Generated video",
+                            type: 'item',
+                            refImageUrl: opt.imageUrl || undefined, // Use thumbnail if available
+                            mediaUrl: opt.videoUrl,
+                            mediaAssetId: opt.videoAssetId
+                        });
+                    }
+                });
+            } else if (s.videoUrl || s.videoAssetId || s.startEndVideoAssetId) {
+                videos.push({
+                    id: `scene_video_${s.id}`,
+                    name: `分镜${s.id.replace('scene_', '')}-A视频`,
+                    description: s.visual_desc || "Generated video",
+                    type: 'item',
+                    refImageUrl: s.imageUrl || undefined,
+                    mediaUrl: s.videoUrl,
+                    mediaAssetId: s.videoAssetId
+                });
             }
         }
         
         // Add chunk uploaded videos
         const uploadedVideos = chunk.assets.filter(a => a.type === 'video').map(a => ({
-            id: a.id,
-            name: a.name,
-            description: a.description,
-            type: 'item',
-            refImageUrl: a.refImageUrl,
+            ...a,
             mediaAssetId: a.id,
             canDelete: true
         }));
         
         return [...videos, ...uploadedVideos];
-    }, [allChunks, chunk.assets]);
+    }, [chapterScenes, chunk.assets, assets, scene.videoAssetIds]);
 
     const sceneAudios = useMemo(() => {
         // Add chunk uploaded audios
         const uploadedAudios = chunk.assets.filter(a => a.type === 'audio').map(a => ({
-            id: a.id,
-            name: a.name,
-            description: a.description,
-            type: 'item',
-            refImageUrl: a.refImageUrl,
+            ...a,
             mediaAssetId: a.id,
             canDelete: true
         }));
@@ -324,9 +294,29 @@ export function useSceneAssets(props: UseSceneAssetsProps) {
 
     const handleAssetUpload = async (type: 'video' | 'audio', file: File) => {
         try {
-            // Save to IndexedDB
-            const blob = new Blob([file], { type: file.type });
-            const assetId = await saveAsset(blob);
+            // Check file size (20MB max for video/audio)
+            if (file.size > 20 * 1024 * 1024) {
+                alert(`上传的${type === 'video' ? '视频' : '音频'}不可超过 20MB。建议截取核心片段或降低分辨率。`);
+                return undefined;
+            }
+
+            let assetId = `upload_${Date.now()}`;
+            let refVideoUrl: string | undefined = undefined;
+            let refAudioUrl: string | undefined = undefined;
+
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            const res = await fetch('/api/media/upload', {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (!res.ok) throw new Error(await res.text());
+            const data = await res.json();
+
+            if (type === 'video') refVideoUrl = data.url;
+            if (type === 'audio') refAudioUrl = data.url;
             
             // Generate a sequence name: video-1, audio-1, etc.
             const existingOfType = chunk.assets.filter(a => a.type === type);
@@ -347,6 +337,8 @@ export function useSceneAssets(props: UseSceneAssetsProps) {
                 name: fileName,
                 description: `上传的${type === 'video' ? '视频' : '音频'}素材`,
                 type: type as any,
+                refVideoUrl,
+                refAudioUrl
             };
             
             // Add to chunk assets
@@ -433,8 +425,6 @@ export function useSceneAssets(props: UseSceneAssetsProps) {
         // Handlers
         handleAddAsset,
         handleRemoveAsset,
-        handleSpecCommit,
-        handleLocalSpecChange,
         initializeVideoAssetIds,
         handleMentionVideo,
         handleUnmentionVideo,

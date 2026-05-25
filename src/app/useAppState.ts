@@ -1,12 +1,11 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { AnalysisStatus, Scene, Asset, GlobalStyle, NovelChunk } from '@/shared/types';
 import { generateSceneImage } from '@/services/ai';
-import { loadAssetBase64 } from '@/services/storage';
+import { loadAssetBase64, getStorageEstimate, cleanUnusedLocalBlobs } from '@/services/storage';
 import { translations, Translation } from '@/services/i18n/translations';
 import { STATE_KEY } from '@/shared/constants/defaults';
 import { useSessionRestore } from '@/features/useSessionRestore';
 import { useSceneManager } from '@/features/useSceneManager';
-import { useAutomation } from '@/features/useAutomation';
 import { useChunkManager } from '@/features/useChunkManager';
 import { buildCopiedChunk } from './chunkUtils';
 import { deleteAssetGlobal, deleteAssetLocal, pruneAssetsOnChunkDelete } from './assetUtils';
@@ -32,6 +31,79 @@ export function useAppState() {
     const [filename, setFilename] = useState("");
     const [fullNovelText, setFullNovelText] = useState("");
     
+    // Toast State
+    const [toast, setToast] = useState<{ message: string; type: 'info' | 'success' | 'warning' } | null>(null);
+    const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    const showToast = (message: string, type: 'info' | 'success' | 'warning' = 'info') => {
+        if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+        setToast({ message, type });
+        toastTimeoutRef.current = setTimeout(() => {
+            setToast(null);
+        }, 5000);
+    };
+
+    useEffect(() => {
+        return () => {
+            if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+        };
+    }, []);
+
+    // Background Storage auto-GC check
+    useEffect(() => {
+        const runBackgroundGC = async () => {
+            try {
+                const estimate = await getStorageEstimate();
+                // Trigger auto GC if usage is > 1GB or percentage is > 80%
+                const triggerGC = estimate.usage > 1024 * 1024 * 1024 || estimate.percentage > 80;
+                if (triggerGC) {
+                    const activeIds = new Set<string>();
+                    if (Array.isArray(globalAssetsRef.current)) {
+                        for (const asset of globalAssetsRef.current) {
+                            if (asset.refImageAssetId) activeIds.add(asset.refImageAssetId);
+                        }
+                    }
+                    if (Array.isArray(chunks)) {
+                        for (const chunk of chunks) {
+                            if (Array.isArray(chunk.assets)) {
+                                for (const asset of chunk.assets) {
+                                    if (asset.refImageAssetId) activeIds.add(asset.refImageAssetId);
+                                }
+                            }
+                            if (Array.isArray(chunk.scenes)) {
+                                for (const scene of chunk.scenes) {
+                                    if (scene.imageAssetId) activeIds.add(scene.imageAssetId);
+                                    if (scene.videoAssetId) activeIds.add(scene.videoAssetId);
+                                    if (scene.startEndVideoAssetId) activeIds.add(scene.startEndVideoAssetId);
+                                    if (Array.isArray(scene.prompt_options)) {
+                                        for (const opt of scene.prompt_options) {
+                                            if (opt.imageAssetId) activeIds.add(opt.imageAssetId);
+                                            if (opt.videoAssetId) activeIds.add(opt.videoAssetId);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    const { cleanedCount } = await cleanUnusedLocalBlobs(activeIds);
+                    if (cleanedCount > 0) {
+                        showToast(
+                            language === 'Chinese' 
+                                ? `[存储清理] 已自动为您清理了 ${cleanedCount} 个过期的草稿视频/图片缓存。` 
+                                : `[Storage] Cleaned ${cleanedCount} unused draft video/image caches.`,
+                            'info'
+                        );
+                    }
+                }
+            } catch (e) {
+                console.warn("Background auto-GC check failed:", e);
+            }
+        };
+
+        const timer = setTimeout(runBackgroundGC, 5000);
+        return () => clearTimeout(timer);
+    }, [chunks.length, globalAssets.length]);
+
     // Theme State
     const [theme, setTheme] = useState<'light' | 'dark'>(() => {
         const saved = localStorage.getItem('theme');
@@ -83,13 +155,7 @@ export function useAppState() {
         filename, setFilename, fullNovelText, setFullNovelText
     });
 
-    const {
-        isAutoMode, setIsAutoMode, autoAssetTrigger, setAutoAssetTrigger,
-        autoShootTrigger, handleAssetBatchComplete
-    } = useAutomation({
-        chunks, activeChunkId, setActiveChunkId, updateChunk,
-        handleChunkExtract, handleChunkScript, extractingChunksRef, t
-    });
+
 
     // ── Derived State ───────────────────────────────
     const targetChunkId = expandedId || activeChunkId;
@@ -199,9 +265,6 @@ export function useAppState() {
         filename, fullNovelText,
         t, targetChunkId, targetChunk, displayedAssets,
 
-        // Auto mode
-        isAutoMode, setIsAutoMode, autoAssetTrigger, setAutoAssetTrigger,
-        autoShootTrigger, handleAssetBatchComplete,
 
         // Chunk actions
         updateChunk, handleLoadNovel, handleAnalyze,
@@ -220,5 +283,8 @@ export function useAppState() {
 
         // Theme
         theme, toggleTheme,
+
+        // Toast Notification
+        toast, showToast,
     };
 }

@@ -19,7 +19,7 @@ interface SessionState {
 }
 
 /** Re-resolve a blob: URL from IndexedDB, or keep non-blob URLs as-is */
-async function resolveUrl(url?: string, assetId?: string): Promise<string | undefined> {
+export async function resolveUrl(url?: string, assetId?: string): Promise<string | undefined> {
     // Non-blob URLs (data:, http:) are valid across sessions
     if (url && !url.startsWith('blob:')) return url;
     // Re-resolve from IndexedDB if we have an asset ID
@@ -31,21 +31,42 @@ async function resolveUrl(url?: string, assetId?: string): Promise<string | unde
 }
 
 /** Re-resolve all blob URLs in an asset */
-async function hydrateAsset(asset: Asset): Promise<Asset> {
+export async function hydrateAsset(asset: Asset): Promise<Asset> {
     const refImageUrl = await resolveUrl(asset.refImageUrl, asset.refImageAssetId);
     if (refImageUrl === asset.refImageUrl) return asset;
     return { ...asset, refImageUrl };
 }
 
 /** Re-resolve all blob URLs in a scene */
-async function hydrateScene(scene: Scene): Promise<Scene> {
+export async function hydrateScene(scene: Scene): Promise<Scene> {
     const [imageUrl, videoUrl, startEndVideoUrl, narrationAudioUrl] = await Promise.all([
         resolveUrl(scene.imageUrl, scene.imageAssetId),
         resolveUrl(scene.videoUrl, scene.videoAssetId),
         resolveUrl(scene.startEndVideoUrl, scene.startEndVideoAssetId),
         resolveUrl(scene.narrationAudioUrl, undefined), // no separate assetId for audio
     ]);
-    return { ...scene, imageUrl, videoUrl, startEndVideoUrl, narrationAudioUrl };
+
+    let prompt_options = scene.prompt_options;
+    if (prompt_options && prompt_options.length > 0) {
+        prompt_options = await Promise.all(
+            prompt_options.map(async (opt) => {
+                const [optImg, optVid] = await Promise.all([
+                    resolveUrl(opt.imageUrl, opt.imageAssetId),
+                    resolveUrl(opt.videoUrl, opt.videoAssetId),
+                ]);
+                return { ...opt, imageUrl: optImg, videoUrl: optVid };
+            })
+        );
+    }
+
+    return { 
+        ...scene, 
+        imageUrl, 
+        videoUrl, 
+        startEndVideoUrl, 
+        narrationAudioUrl,
+        prompt_options
+    };
 }
 
 export function useSessionRestore(state: SessionState) {

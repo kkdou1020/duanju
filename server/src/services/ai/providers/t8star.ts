@@ -628,24 +628,91 @@ export class T8StarProvider implements IAIProvider {
         const enhancePrompt = !!config?.enhance_prompt;
         const aspectRatio = config?.aspectRatio || '16:9';
 
-        const payload: any = {
-            prompt: prompt,
-            model,
-            enhance_prompt: enhancePrompt,
-            images: finalImages.map((x) => x.value),
-            aspect_ratio: aspectRatio,
-        };
+        let url = `${this.mediaBaseUrl.replace(/\/+$/, "")}/v2/videos/generations`;
+        let payload: any = {};
 
-        if (isSeedance) {
-            if (config?.videos && config.videos.length > 0) {
-                payload.videos = config.videos;
+        if (isSeedance && config?.seedanceContent) {
+            url = `${this.mediaBaseUrl.replace(/\/+$/, "")}/seedance/v3/contents/generations/tasks`;
+            
+            const uploadMediaIfBase64 = async (mediaStr: string, defaultName: string): Promise<string> => {
+                if (mediaStr.startsWith('data:')) {
+                    const match = mediaStr.match(/^data:([^;]+);base64,(.+)$/);
+                    if (match) {
+                        const mimeType = match[1];
+                        const base64Data = match[2];
+                        const buffer = Buffer.from(base64Data, 'base64');
+                        let ext = mimeType.split('/')[1] || 'bin';
+                        if (ext === 'quicktime') ext = 'mov';
+                        const filename = `${defaultName}.${ext}`;
+                        console.log(`[T8Star] Uploading base64 media (${buffer.length} bytes) as ${filename}...`);
+                        return await this.uploadFile(buffer, mimeType, filename);
+                    }
+                }
+                return mediaStr; // Return as-is if not base64 or failed to parse
+            };
+
+            const finalContent = [{ type: 'text', text: prompt }];
+            
+            for (let i = 0; i < config.seedanceContent.length; i++) {
+                const item = config.seedanceContent[i];
+                if (item.type === 'image_url') {
+                    item.image_url.url = await uploadMediaIfBase64(item.image_url.url, `image_${Date.now()}_${i}`);
+                } else if (item.type === 'video_url') {
+                    item.video_url.url = await uploadMediaIfBase64(item.video_url.url, `video_${Date.now()}_${i}`);
+                } else if (item.type === 'audio_url') {
+                    item.audio_url.url = await uploadMediaIfBase64(item.audio_url.url, `audio_${Date.now()}_${i}`);
+                }
+                finalContent.push(item);
             }
-            if (config?.audios && config.audios.length > 0) {
-                payload.audios = config.audios;
+
+            payload = {
+                model,
+                content: finalContent,
+                generate_audio: true, // Let Seedance 2.0 decide based on prompt
+                ratio: aspectRatio,
+                duration: config?.seconds || 8,
+                watermark: false
+            };
+        } else {
+            // Old Veo / V2 Fallback Logic
+            payload = {
+                prompt: prompt,
+                model,
+                enhance_prompt: enhancePrompt,
+                images: finalImages.map((x) => x.value),
+                aspect_ratio: aspectRatio,
+            };
+
+            if (isSeedance) {
+                const uploadMediaIfBase64 = async (mediaStr: string, defaultName: string): Promise<string> => {
+                    if (mediaStr.startsWith('data:')) {
+                        const match = mediaStr.match(/^data:([^;]+);base64,(.+)$/);
+                        if (match) {
+                            const mimeType = match[1];
+                            const base64Data = match[2];
+                            const buffer = Buffer.from(base64Data, 'base64');
+                            let ext = mimeType.split('/')[1] || 'bin';
+                            if (ext === 'quicktime') ext = 'mov';
+                            const filename = `${defaultName}.${ext}`;
+                            console.log(`[T8Star] Uploading base64 media (${buffer.length} bytes) as ${filename}...`);
+                            return await this.uploadFile(buffer, mimeType, filename);
+                        }
+                    }
+                    return mediaStr;
+                };
+
+                if (config?.videos && config.videos.length > 0) {
+                    payload.videos = await Promise.all(
+                        config.videos.map((v: string, i: number) => uploadMediaIfBase64(v, `video_${Date.now()}_${i}`))
+                    );
+                }
+                if (config?.audios && config.audios.length > 0) {
+                    payload.audios = await Promise.all(
+                        config.audios.map((a: string, i: number) => uploadMediaIfBase64(a, `audio_${Date.now()}_${i}`))
+                    );
+                }
             }
         }
-
-        const url = `${this.mediaBaseUrl.replace(/\/+$/, "")}/v2/videos/generations`;
 
         const res = await fetch(url, {
             method: "POST",
@@ -712,7 +779,11 @@ export class T8StarProvider implements IAIProvider {
         if (!id) return args.operation;
 
         try {
-            const url = `${this.mediaBaseUrl.replace(/\/+$/, "")}/v2/videos/generations/${encodeURIComponent(id)}`;
+            let url = `${this.mediaBaseUrl.replace(/\/+$/, "")}/v2/videos/generations/${encodeURIComponent(id)}`;
+            if (id.startsWith("cgt-")) {
+                url = `${this.mediaBaseUrl.replace(/\/+$/, "")}/seedance/v3/contents/generations/tasks/${encodeURIComponent(id)}`;
+            }
+            
             const res = await fetch(url, {
                 method: "GET",
                 headers: {
@@ -722,18 +793,18 @@ export class T8StarProvider implements IAIProvider {
 
             if (res.ok) {
                 const statusData: any = await res.json().catch(() => ({}));
-                const status = statusData?.status;
+                const status = statusData?.status || statusData?.data?.status;
 
-                if (status === "FAILURE") {
+                if (status === "failed" || status === "FAILURE") {
                     return {
                         done: true,
                         operation: { id, status },
-                        error: statusData?.fail_reason || "Video generation failed"
+                        error: statusData?.fail_reason || statusData?.data?.fail_reason || statusData?.error?.message || "Video generation failed"
                     };
                 }
 
-                if (status === "SUCCESS") {
-                    const outputUrl = statusData?.data?.output || statusData?.output || statusData?.data?.video_url || statusData?.video_url;
+                if (status === "succeeded" || status === "SUCCESS") {
+                    const outputUrl = statusData?.data?.content?.video_url || statusData?.data?.output || statusData?.output || statusData?.data?.video_url || statusData?.video_url || statusData?.content?.video_url;
                     return {
                         done: true,
                         operation: { id, status },

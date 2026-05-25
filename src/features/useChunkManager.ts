@@ -316,12 +316,6 @@ export function useChunkManager(deps: ChunkManagerDeps) {
                         if (scene.visual_desc && scene.visual_desc !== originalDesc) {
                             updated.visual_action = scene.visual_desc;
                         }
-                        if (scene.video_camera && scene.video_camera !== (beat.camera_movement || '')) {
-                            updated.camera_movement = scene.video_camera;
-                        }
-                        if (scene.video_lens && scene.video_lens !== (beat.shot_id || '')) {
-                            updated.shot_id = scene.video_lens;
-                        }
                         if (scene.audio_sfx && scene.audio_sfx !== (beat.audio_subtext || '')) {
                             updated.audio_subtext = scene.audio_sfx;
                         }
@@ -391,8 +385,6 @@ export function useChunkManager(deps: ChunkManagerDeps) {
                                     startEndAssetIds: old.startEndAssetIds || ns.startEndAssetIds,
                                     useAssets: old.useAssets !== undefined ? old.useAssets : ns.useAssets,
                                     isStartEndFrameMode: old.isStartEndFrameMode !== undefined ? old.isStartEndFrameMode : ns.isStartEndFrameMode,
-                                    video_duration: old.video_duration || ns.video_duration,
-                                    video_vfx: old.video_vfx || ns.video_vfx,
                                 };
                             });
 

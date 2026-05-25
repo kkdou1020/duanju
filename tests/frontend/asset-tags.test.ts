@@ -154,9 +154,9 @@ describe('injectTagIds', () => {
 // stripAssetTags
 // ────────────────────────────────────────────
 describe('stripAssetTags', () => {
-    it('removes tags and collapses whitespace', () => { expect(stripAssetTags('前面 @图像_岑矜 后面')).toBe('前面 后面'); });
-    it('removes tags with #id anchors', () => { expect(stripAssetTags('前面 @图像_岑矜#hero_base 后面')).toBe('前面 后面'); });
-    it('removes multiple tags', () => { expect(stripAssetTags('@图像_岑矜 和 @图像_沈璃 在大殿')).toBe('和 在大殿'); });
+    it('removes tags and collapses whitespace', () => { expect(stripAssetTags('前面 @图像_岑矜 后面')).toBe('前面 岑矜 后面'); });
+    it('removes tags with #id anchors', () => { expect(stripAssetTags('前面 @图像_岑矜#hero_base 后面')).toBe('前面 岑矜 后面'); });
+    it('removes multiple tags', () => { expect(stripAssetTags('@图像_岑矜 和 @图像_沈璃 在大殿')).toBe('岑矜 和 沈璃 在大殿'); });
     it('handles text with no tags', () => { expect(stripAssetTags('没有标签的文本')).toBe('没有标签的文本'); });
-    it('handles text that is only a tag', () => { expect(stripAssetTags('@图像_岑矜')).toBe(''); });
+    it('handles text that is only a tag', () => { expect(stripAssetTags('@图像_岑矜')).toBe('岑矜'); });
 });

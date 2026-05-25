@@ -10,15 +10,15 @@ export interface Scene {
 
   // Replaced simple visual_desc with detailed video specs
   visual_desc: string; // Keeps backward compatibility, but now acts as "Video Description"
-  video_duration?: string; // e.g. "3s"
-  video_camera?: string; // e.g. "Pan right", "Dolly in"
-  video_lens?: string; // e.g. "35mm", "Wide angle"
-  video_vfx?: string; // e.g. "Rain particles"
 
   np_prompt: string; // The Image Prompt
 
   // Multimodal Fields (Agent B)
   video_prompt?: string; // Full constructed video prompt
+  camera?: string;        // Camera model
+  lens?: string;          // Lens model
+  focal_length?: string;  // Focal Length (mm)
+  aperture?: string;      // Aperture (f-stop)
   prompt_options?: Array<{
     option_id: string;
     lens_reference: {
@@ -28,8 +28,6 @@ export interface Scene {
       video_url: string;
       timestamp: string;
     };
-    video_lens: string;
-    video_camera: string;
     video_prompt: string;
     np_prompt: string;
     imageUrl?: string;
@@ -38,6 +36,11 @@ export interface Scene {
     videoAssetId?: string;
     assetIds?: string[];
     videoAssetIds?: string[];
+    operation?: any; // Cache of AI operation for re-signing URL
+    camera?: string;
+    lens?: string;
+    focal_length?: string;
+    aperture?: string;
   }>;
   audio_dialogue?: DialogueLine[];
   audio_sfx?: string;
@@ -57,6 +60,8 @@ export interface Scene {
   useAssets?: boolean; // Whether to use assets for video generation
   isStartEndFrameMode?: boolean; // Whether to use Start/End Frame Mode (veo3.1-pro-4k)
   video_prompt_backup?: string; // Backup of video prompt for Start/End Frame Mode undo
+  operation?: any; // Cache of standard video operation
+  startEndVideoOperation?: any; // Cache of start/end video operation
 }
 
 
@@ -73,7 +78,9 @@ export interface Asset {
   type: 'character' | 'location' | 'item' | 'video' | 'audio';
   visualDna?: string; // Specific visual tags for this asset
   refImageUrl?: string;
-  refImageAssetId?: string; // New: Persistent ID for ref image Blob in IndexedDB
+  refImageAssetId?: string; // Persistent ID for ref image Blob in IndexedDB
+  refVideoUrl?: string; // URL for video reference (Seedance)
+  refAudioUrl?: string; // URL for audio reference (Seedance)
   prompt?: string; // The prompt used to generate the reference image
   parentId?: string;
   variantName?: string;

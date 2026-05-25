@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Asset } from '@/shared/types';
 import { Translation } from '@/services/i18n/translations';
 import { LazyMedia } from '@/ui/common/LazyMedia';
+import { saveAsset } from '@/services/storage';
 import { User, MapPin, Package, Plus, Trash2, Wand2, Image as ImageIcon, Camera, RefreshCw, Download, ChevronRight, CornerDownRight, Copy, Maximize2, X, Video } from 'lucide-react';
 
 export interface AssetRowProps {
@@ -166,12 +167,17 @@ const AssetRow: React.FC<AssetRowProps> = ({
                     <div className="mt-1 flex justify-end">
                         <label className="text-[10px] text-gray-500 hover:text-indigo-600 dark:hover:text-banana-400 cursor-pointer flex items-center gap-1">
                             <ImageIcon className="w-3 h-3" /> Update Image
-                            <input type="file" className="hidden" accept="image/*" onChange={(e) => {
+                            <input type="file" className="hidden" accept="image/*" onChange={async (e) => {
                                 const file = e.target.files?.[0];
                                 if (file) {
-                                    const reader = new FileReader();
-                                    reader.onload = (ev) => onUpdateAsset({ ...asset, refImageUrl: ev.target?.result as string });
-                                    reader.readAsDataURL(file);
+                                    try {
+                                        const assetId = await saveAsset(file);
+                                        const localUrl = URL.createObjectURL(file);
+                                        onUpdateAsset({ ...asset, refImageUrl: localUrl, refImageAssetId: assetId });
+                                    } catch (err) {
+                                        console.error("Failed to save uploaded asset image:", err);
+                                        alert("上传图片失败，请重试。");
+                                    }
                                 }
                             }} />
                         </label>

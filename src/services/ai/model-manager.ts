@@ -1,3 +1,5 @@
+import { useState, useEffect } from 'react';
+
 // Frontend model-manager — config only (AI logic moved to backend)
 
 export type ModelType = "text" | "image" | "video";
@@ -21,6 +23,7 @@ export interface ModelConfig {
   t8starImageQuality?: string;
   t8starNanoImageSize?: string;
   t8starNanoAspectRatio?: string;
+  t8starVideoModel?: string;
 }
 
 const DEFAULT_CONFIG: ModelConfig = {
@@ -32,6 +35,7 @@ const DEFAULT_CONFIG: ModelConfig = {
   t8starImageQuality: "auto",
   t8starNanoImageSize: "2K",
   t8starNanoAspectRatio: "16:9",
+  t8starVideoModel: "veo",
 };
 
 const VALID_PROVIDERS: ProviderType[] = ["polo", "t8star"];
@@ -72,6 +76,7 @@ class ModelManager {
         validated.t8starImageQuality = parsed.t8starImageQuality || "auto";
         validated.t8starNanoImageSize = parsed.t8starNanoImageSize || "2K";
         validated.t8starNanoAspectRatio = parsed.t8starNanoAspectRatio || "16:9";
+        validated.t8starVideoModel = parsed.t8starVideoModel || "veo";
       return validated;
     } catch {
       return DEFAULT_CONFIG;
@@ -89,6 +94,10 @@ class ModelManager {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(this.config),
     }).catch(e => console.warn('Failed to sync config to backend:', e));
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event('model_config_changed'));
+    }
   }
 
   public getConfig(): ModelConfig {
@@ -97,3 +106,19 @@ class ModelManager {
 }
 
 export const modelManager = new ModelManager();
+
+export function useModelConfig(): ModelConfig {
+  const [config, setConfig] = useState<ModelConfig>(modelManager.getConfig());
+
+  useEffect(() => {
+    const handleConfigChange = () => {
+      setConfig(modelManager.getConfig());
+    };
+    window.addEventListener('model_config_changed', handleConfigChange);
+    return () => {
+      window.removeEventListener('model_config_changed', handleConfigChange);
+    };
+  }, []);
+
+  return config;
+}

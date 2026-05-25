@@ -20,8 +20,6 @@ interface InputPanelProps {
   styleState: GlobalStyle;
   onStyleChange: (style: GlobalStyle) => void;
   language?: string;
-  autoAssetTrigger?: boolean;
-  onAssetBatchComplete?: () => void;
   onImportFromGlobal?: () => void;
   progressMessage?: string;
   initialText?: string;
@@ -41,8 +39,6 @@ const InputPanel: React.FC<InputPanelProps> = ({
   styleState,
   onStyleChange,
   language = "Chinese",
-  autoAssetTrigger = false,
-  onAssetBatchComplete,
   onImportFromGlobal,
   progressMessage,
   initialText
@@ -246,8 +242,6 @@ const InputPanel: React.FC<InputPanelProps> = ({
             labels={labels}
             hasText={!!text.trim() || novelStatus.hasNovel}
             currentStyle={styleState}
-            autoStart={autoAssetTrigger}
-            onBatchComplete={onAssetBatchComplete}
             onImportFromGlobal={onImportFromGlobal}
             language={language}
           />

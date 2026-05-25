@@ -22,8 +22,8 @@ interface SceneCardProps {
     isGeneratingPrompts?: boolean;
     isPromptCompleted?: boolean;
     onGenerateImageOverride?: (scene: Scene) => Promise<string>;
-    onImageGenerated?: (id: string, url: string) => void;
-    onVideoGenerated?: (id: string, url: string, assetId?: string) => void;
+    onImageGenerated?: (id: string, url: string, imageAssetId?: string, optionId?: string) => void;
+    onVideoGenerated?: (id: string, url: string, assetId?: string, optionId?: string) => void;
     globalStyle: GlobalStyle;
     areAssetsReady?: boolean;
     videoAssetsReady?: boolean;
@@ -35,7 +35,6 @@ interface SceneCardProps {
     isOptimizing?: boolean;
     flash?: boolean;
     chapterScenes?: Scene[];
-    allChunks: NovelChunk[];
     chunk: NovelChunk;
     onUpdateChunk: (id: string, updates: Partial<NovelChunk> | ((c: NovelChunk) => Partial<NovelChunk>)) => void;
 }
@@ -56,28 +55,41 @@ const SceneCard: React.FC<SceneCardProps> = (props) => {
     const viewingOption = state.scene.prompt_options?.find(o => o.option_id === (viewingOptionId || adoptedOption?.option_id));
     const isAdopted = viewingOption?.video_prompt === state.scene.video_prompt;
 
-    const handleSynchronizedUpdate = (id: string, field: keyof Scene, value: any) => {
+    const handleSynchronizedUpdate = (id: string, fieldOrUpdates: keyof Scene | Partial<Scene>, value?: any) => {
         const currentOptId = viewingOption?.option_id;
+
+        // Normalize to a Partial<Scene> updates object
+        const updates: Partial<Scene> = typeof fieldOrUpdates === 'string'
+            ? { [fieldOrUpdates]: value }
+            : fieldOrUpdates;
+
         if (state.scene.prompt_options && currentOptId) {
             const syncedFields = [
-                'np_prompt', 'video_prompt', 'video_lens', 'video_camera', 
-                'video_vfx', 'video_duration', 'imageUrl', 'imageAssetId', 
-                'videoUrl', 'videoAssetId', 'assetIds', 'videoAssetIds'
+                'np_prompt', 'video_prompt', 'imageUrl', 'imageAssetId', 
+                'videoUrl', 'videoAssetId', 'assetIds', 'videoAssetIds',
+                'camera', 'lens', 'focal_length', 'aperture'
             ];
-            if (syncedFields.includes(field)) {
+
+            const hasSyncedField = Object.keys(updates).some(k => syncedFields.includes(k));
+            if (hasSyncedField) {
                 const newOptions = [...state.scene.prompt_options];
                 const optionIndex = newOptions.findIndex(o => o.option_id === currentOptId);
                 if (optionIndex !== -1) {
-                    newOptions[optionIndex] = { ...newOptions[optionIndex], [field]: value };
+                    newOptions[optionIndex] = { ...newOptions[optionIndex] };
+                    Object.entries(updates).forEach(([k, v]) => {
+                        if (syncedFields.includes(k)) {
+                            (newOptions[optionIndex] as any)[k] = v;
+                        }
+                    });
                     state.onUpdate(id, {
-                        [field]: value,
+                        ...updates,
                         prompt_options: newOptions
                     });
                     return;
                 }
             }
         }
-        state.onUpdate(id, field, value);
+        state.onUpdate(id, updates);
     };
 
     return (
@@ -163,16 +175,36 @@ const SceneCard: React.FC<SceneCardProps> = (props) => {
                                             onClick={() => {
                                                 setViewingOptionId(opt.option_id);
                                                 // Always Auto-adopt the option's media when clicking its tab
-                                                state.onUpdate(state.scene.id, 'video_prompt', opt.video_prompt);
-                                                state.onUpdate(state.scene.id, 'np_prompt', opt.np_prompt);
-                                                state.onUpdate(state.scene.id, 'video_lens', opt.video_lens || '');
-                                                state.onUpdate(state.scene.id, 'video_camera', opt.video_camera || '');
-                                                state.onUpdate(state.scene.id, 'imageUrl', opt.imageUrl);
-                                                state.onUpdate(state.scene.id, 'imageAssetId', opt.imageAssetId);
-                                                state.onUpdate(state.scene.id, 'videoUrl', opt.videoUrl);
-                                                state.onUpdate(state.scene.id, 'videoAssetId', opt.videoAssetId);
-                                                state.onUpdate(state.scene.id, 'assetIds', opt.assetIds || []);
-                                                state.onUpdate(state.scene.id, 'videoAssetIds', opt.videoAssetIds || []);
+                                                const isAlreadyAdopted = 
+                                                    state.scene.video_prompt === opt.video_prompt &&
+                                                    state.scene.np_prompt === opt.np_prompt &&
+                                                    state.scene.imageUrl === opt.imageUrl &&
+                                                    state.scene.imageAssetId === opt.imageAssetId &&
+                                                    state.scene.videoUrl === opt.videoUrl &&
+                                                    state.scene.videoAssetId === opt.videoAssetId &&
+                                                    JSON.stringify(state.scene.assetIds || []) === JSON.stringify(opt.assetIds || []) &&
+                                                    JSON.stringify(state.scene.videoAssetIds || []) === JSON.stringify(opt.videoAssetIds || []) &&
+                                                    state.scene.camera === opt.camera &&
+                                                    state.scene.lens === opt.lens &&
+                                                    state.scene.focal_length === opt.focal_length &&
+                                                    state.scene.aperture === opt.aperture;
+
+                                                if (!isAlreadyAdopted) {
+                                                    state.onUpdate(state.scene.id, {
+                                                        video_prompt: opt.video_prompt,
+                                                        np_prompt: opt.np_prompt,
+                                                        imageUrl: opt.imageUrl,
+                                                        imageAssetId: opt.imageAssetId,
+                                                        videoUrl: opt.videoUrl,
+                                                        videoAssetId: opt.videoAssetId,
+                                                        assetIds: opt.assetIds || [],
+                                                        videoAssetIds: opt.videoAssetIds || [],
+                                                        camera: opt.camera,
+                                                        lens: opt.lens,
+                                                        focal_length: opt.focal_length,
+                                                        aperture: opt.aperture
+                                                    });
+                                                }
                                             }}
                                             className={`flex-1 py-2 text-xs font-bold transition-all border-b-2 rounded-t-md flex justify-center items-center ${isActive ? 'bg-white dark:bg-[#1e1e1e] text-indigo-600 dark:text-yellow-500 border-indigo-600 dark:border-yellow-500 shadow-sm' : 'bg-gray-100 dark:bg-black/40 text-gray-500 border-transparent hover:bg-gray-200 dark:hover:bg-white/5 hover:text-gray-700 dark:hover:text-gray-300'}`}
                                         >
@@ -215,39 +247,44 @@ const SceneCard: React.FC<SceneCardProps> = (props) => {
                         </div>
                     )}
 
-                    {/* Middle: Split Content (Video Left, Image/Dialogue Right) */}
+                    {/* Middle: Split Content (Video/Dialogue Left, Image Right) */}
                     <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-gray-200 dark:divide-white/5">
-                        {/* LEFT PANE: VIDEO PROMPT */}
-                        <SceneVideoPane
-                            scene={state.scene}
-                            labels={state.labels}
-                            onUpdate={handleSynchronizedUpdate}
-                            hasImage={state.hasImage}
-                            assets={props.assets || []}
-                            chapterScenes={state.chapterScenes}
-                            onRemoveAsset={state.handleRemoveAsset}
-                            onOpenAssetSelector={() => state.setActiveAssetSelector('video')}
-                            sceneImages={state.sceneImages}
-                            videos={state.sceneVideos}
-                            audios={state.sceneAudios}
-                            onMentionAsset={state.handleMentionVideo}
-                            onUnmentionAsset={state.handleUnmentionVideo}
-                            onAssetUpload={state.handleAssetUpload}
-                            onAssetDelete={state.handleAssetDelete}
-                            onSpecCommit={state.handleSpecCommit}
-                            onLocalSpecChange={state.handleLocalSpecChange}
-                            isStartEndFrameMode={state.scene.isStartEndFrameMode}
-                            startEndAssetIds={state.scene.startEndAssetIds}
-                            onOpenEndFrameSelector={() => state.setActiveAssetSelector('video')}
-                            onRemoveEndFrame={() => state.handleRemoveAsset(state.scene.startEndAssetIds?.[1] || '', 'video')}
-                            onToggleStartEndMode={(enabled) => state.onUpdate(state.scene.id, 'isStartEndFrameMode', enabled)}
-                            isGeneratingPrompts={props.isGeneratingPrompts}
-                            isPromptCompleted={props.isPromptCompleted}
-                        />
-
-                        {/* RIGHT PANE: IMAGE + DIALOGUE */}
+                        {/* LEFT PANE: VIDEO PROMPT + DIALOGUE */}
                         <div className="flex flex-col h-full divide-y divide-gray-200 dark:divide-white/5">
-                            {/* Top: Image Prompt */}
+                            <SceneVideoPane
+                                scene={state.scene}
+                                labels={state.labels}
+                                onUpdate={handleSynchronizedUpdate}
+                                hasImage={state.hasImage}
+                                assets={props.assets || []}
+                                chapterScenes={state.chapterScenes}
+                                onRemoveAsset={state.handleRemoveAsset}
+                                onOpenAssetSelector={() => state.setActiveAssetSelector('video')}
+                                sceneImages={state.sceneImages}
+                                videos={state.sceneVideos}
+                                audios={state.sceneAudios}
+                                onMentionAsset={state.handleMentionVideo}
+                                onUnmentionAsset={state.handleUnmentionVideo}
+                                onAssetUpload={state.handleAssetUpload}
+                                onAssetDelete={state.handleAssetDelete}
+                                isStartEndFrameMode={state.scene.isStartEndFrameMode}
+                                startEndAssetIds={state.scene.startEndAssetIds}
+                                onOpenEndFrameSelector={() => state.setActiveAssetSelector('video')}
+                                onRemoveEndFrame={() => state.handleRemoveAsset(state.scene.startEndAssetIds?.[1] || '', 'video')}
+                                onToggleStartEndMode={(enabled) => state.onUpdate(state.scene.id, 'isStartEndFrameMode', enabled)}
+                                isGeneratingPrompts={props.isGeneratingPrompts}
+                                isPromptCompleted={props.isPromptCompleted}
+                            />
+
+                            <SceneDialoguePane
+                                scene={state.scene}
+                                labels={state.labels}
+                                onUpdate={handleSynchronizedUpdate}
+                            />
+                        </div>
+
+                        {/* RIGHT PANE: IMAGE ONLY */}
+                        <div className="flex flex-col h-full">
                             <SceneImagePane
                                 scene={state.scene}
                                 labels={state.labels}
@@ -265,13 +302,6 @@ const SceneCard: React.FC<SceneCardProps> = (props) => {
                                 onAssetDelete={state.handleAssetDelete}
                                 isGeneratingPrompts={props.isGeneratingPrompts}
                                 isPromptCompleted={props.isPromptCompleted}
-                            />
-
-                            {/* Bottom: Dialogue & Audio Section */}
-                            <SceneDialoguePane
-                                scene={state.scene}
-                                labels={state.labels}
-                                onUpdate={handleSynchronizedUpdate}
                             />
                         </div>
                     </div>
@@ -300,16 +330,6 @@ const SceneCard: React.FC<SceneCardProps> = (props) => {
     );
 };
 
-const getGlobalMediaHash = (chunks: any[]) => {
-    let hash = '';
-    for (const c of chunks) {
-        for (const s of c.scenes) {
-            hash += (s.videoAssetId || '') + (s.videoUrl || '') + (s.imageAssetId || '') + (s.imageUrl || '');
-        }
-    }
-    return hash;
-};
-
 export default React.memo(SceneCard, (prev, next) => {
     return prev.scene === next.scene
         && prev.isGeneratingExternal === next.isGeneratingExternal
@@ -322,5 +342,5 @@ export default React.memo(SceneCard, (prev, next) => {
         && prev.globalStyle === next.globalStyle
         && prev.language === next.language
         && prev.chunk.assets === next.chunk.assets
-        && getGlobalMediaHash(prev.allChunks) === getGlobalMediaHash(next.allChunks);
+        && prev.chapterScenes === next.chapterScenes;
 });

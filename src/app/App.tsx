@@ -4,7 +4,7 @@ import InputPanel from '@/ui/panels/InputPanel';
 import ChunkPanel from '@/ui/cards/chunk/ChunkPanel';
 import ModelSelector from '@/ui/panels/ModelSelector';
 import { AssetSelector } from '@/ui/panels/asset-library/AssetSelector';
-import { Film, Globe, Book, Trash2, PlayCircle, PauseCircle, Upload, Sun, Moon } from 'lucide-react';
+import { Film, Globe, Book, Trash2, Upload, Sun, Moon, Info } from 'lucide-react';
 import { STATE_KEY } from '@/shared/constants/defaults';
 import { useAppState } from './useAppState';
 
@@ -15,8 +15,6 @@ const App: React.FC = () => {
         expandedId, setExpandedId, activeChunkId, setActiveChunkId,
         showGlobalSelector, setShowGlobalSelector,
         filename, t, targetChunkId, targetChunk, displayedAssets,
-        isAutoMode, setIsAutoMode, autoAssetTrigger, setAutoAssetTrigger,
-        autoShootTrigger, handleAssetBatchComplete,
         updateChunk, handleLoadNovel, handleAnalyze,
         handleChunkExtract, handleChunkScript, handleGenerateBeats, handleGeneratePrompts, handleImportChunk,
         handleManualExtractAssets,
@@ -26,6 +24,7 @@ const App: React.FC = () => {
         handleCopyChunk,
         theme, toggleTheme,
         fullNovelText,
+        toast,
     } = useAppState();
 
 
@@ -45,38 +44,7 @@ const App: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-3 text-xs md:text-sm">
-                        <button
-                            onClick={() => {
-                                const nextMode = !isAutoMode;
-                                setIsAutoMode(nextMode);
-                                if (nextMode && chunks.length > 0) {
-                                    let target = activeChunkId ? chunks.find(c => c.id === activeChunkId) : null;
-                                    if (!target) {
-                                        target = chunks.find(c => c.status !== 'completed') || chunks[0];
-                                        setActiveChunkId(target.id);
-                                    }
-                                    if (target) {
-                                        if (target.status === 'idle') {
-                                            handleChunkExtract(target).then(() => updateChunk(target.id, { status: 'extracted' }));
-                                        } else if (target.status === 'scripted') {
-                                            const needsAssets = target.assets.some(a => !a.refImageUrl);
-                                            if (needsAssets) {
-                                                setAutoAssetTrigger(true);
-                                                setTimeout(() => setAutoAssetTrigger(false), 1000);
-                                            }
-                                        }
-                                    }
-                                }
-                            }}
-                            className={`flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all ${isAutoMode
-                                ? 'bg-indigo-600 dark:bg-banana-500 text-white dark:text-black border-indigo-500 dark:border-banana-400 shadow-lg shadow-indigo-500/20 dark:shadow-banana-500/20 animate-pulse'
-                                : 'bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-white/10 hover:bg-gray-200 dark:hover:bg-white/10'
-                                }`}
-                            title={isAutoMode ? "Turn Off Automation" : "Turn On Automation"}
-                        >
-                            {isAutoMode ? <PauseCircle className="w-4 h-4" /> : <PlayCircle className="w-4 h-4" />}
-                            <span className="font-bold">{isAutoMode ? "AUTO ON" : "AUTO OFF"}</span>
-                        </button>
+
 
                         <button
                             onClick={toggleTheme}
@@ -152,8 +120,6 @@ const App: React.FC = () => {
                         styleState={globalStyle}
                         onStyleChange={setGlobalStyle}
                         language={language}
-                        autoAssetTrigger={autoAssetTrigger}
-                        onAssetBatchComplete={handleAssetBatchComplete}
                         onImportFromGlobal={targetChunkId ? () => setShowGlobalSelector(true) : undefined}
                         progressMessage={analysisProgress}
                     />
@@ -193,12 +159,8 @@ const App: React.FC = () => {
                             flashSceneId={flashScene?.chunkId === chunk.id ? flashScene.sceneId : undefined}
                             onToggle={() => {
                                 setExpandedId(expandedId === chunk.id ? null : chunk.id);
-                                if (!isAutoMode) {
-                                    setActiveChunkId(activeChunkId === chunk.id ? null : chunk.id);
-                                }
+                                setActiveChunkId(activeChunkId === chunk.id ? null : chunk.id);
                             }}
-                            autoShoot={activeChunkId === chunk.id ? autoShootTrigger : false}
-                            isLocked={isAutoMode && activeChunkId !== chunk.id}
                         />
                     ))}
 
@@ -224,6 +186,16 @@ const App: React.FC = () => {
                         setShowGlobalSelector(false);
                     }}
                 />
+            )}
+            {toast && (
+                <div className="fixed bottom-6 right-6 z-[9999] flex items-center gap-3 bg-white/95 dark:bg-dark-800/95 border border-indigo-500/30 dark:border-banana-400/30 shadow-xl shadow-indigo-500/10 dark:shadow-banana-500/10 backdrop-blur-md px-4 py-3 rounded-xl max-w-sm animate-in slide-in-from-bottom-2 fade-in duration-300">
+                    <div className="w-8 h-8 rounded-lg bg-indigo-500/10 dark:bg-banana-400/10 flex items-center justify-center shrink-0">
+                        <Info className="w-4 h-4 text-indigo-600 dark:text-banana-400" />
+                    </div>
+                    <div className="text-xs md:text-sm font-medium text-gray-700 dark:text-gray-200">
+                        {toast.message}
+                    </div>
+                </div>
             )}
         </div>
     );

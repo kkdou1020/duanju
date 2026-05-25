@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { NovelChunk, Asset, GlobalStyle, Scene } from '@/shared/types';
 import { generateVideo, pollVideoUntilDone } from '@/services/ai';
-import { loadAssetUrl } from '@/services/storage';
+import { loadAssetUrl, saveAsset, downloadAndSaveVideo } from '@/services/storage';
+
 import { extractAssetTags, resolveTagToAsset, isStoryboardTag } from '@/shared/asset-tags';
 import { matchAssetsToPrompt } from '@/services/ai/media/video';
 import JSZip from 'jszip';
@@ -11,6 +12,7 @@ import saveAs from 'file-saver';
 export interface UseChunkActionsProps {
     chunk: NovelChunk;
     allChunks: NovelChunk[];
+    globalAssets?: Asset[];
     styleState: GlobalStyle;
     language: string;
     isActive: boolean;
@@ -26,7 +28,7 @@ export interface UseChunkActionsProps {
 }
 
 export function useChunkActions({
-    chunk, allChunks, styleState, language, isActive,
+    chunk, allChunks, globalAssets = [], styleState, language, isActive,
     onUpdateChunk, onSceneUpdate, onDuplicateScene,
     onExtract, onGenerateScript, onGenerateBeats, onGeneratePrompts, onGenerateImage, onToggle
 }: UseChunkActionsProps) {
@@ -39,8 +41,10 @@ export function useChunkActions({
     const [showTextModal, setShowTextModal] = useState(false);
     const [editingText, setEditingText] = useState('');
 
+    const combinedAssets = [...globalAssets, ...(chunk.assets || [])];
+
     // Chunk-level check for header warning only (not blocking)
-    const anyAssetPending = chunk.assets.length > 0 && chunk.assets.some(a => !a.refImageUrl && !a.refImageAssetId);
+    const anyAssetPending = chunk.assets.length > 0 && chunk.assets.some(a => !a.refImageUrl && !a.refImageAssetId && !a.refVideoUrl && !a.refAudioUrl);
 
     // Per-scene asset readiness
     const getSceneAssetsReady = (scene: Scene, optionId?: string): boolean => {
@@ -53,18 +57,17 @@ export function useChunkActions({
 
         // No prompt generated yet → not ready
         if (!prompt.trim()) return false;
-        if (chunk.assets.length === 0) return true;
         const tags = extractAssetTags(prompt).filter(t => !isStoryboardTag(t.name));
         if (tags.length === 0) return true;
         const referencedAssets: Asset[] = [];
         for (const tag of tags) {
-            const asset = resolveTagToAsset(tag, chunk.assets);
+            const asset = resolveTagToAsset(tag, combinedAssets);
             if (asset && !referencedAssets.some(a => a.id === asset.id)) {
                 referencedAssets.push(asset);
             }
         }
         if (referencedAssets.length === 0) return true;
-        return referencedAssets.every(a => !!a.refImageUrl || !!a.refImageAssetId);
+        return referencedAssets.every(a => !!a.refImageUrl || !!a.refImageAssetId || !!a.refVideoUrl || !!a.refAudioUrl);
     };
 
 
@@ -92,6 +95,9 @@ export function useChunkActions({
             if (isStoryboardTag(tag.name)) {
                 // 分镜标签 → check corresponding scene's imageUrl
                 let idPart = tag.name.replace('分镜', '');
+                // 必须先剥离末尾的“视频”或“video”，否则后面的 -([a-zA-Z0-9]+)$ 正则匹配不到
+                idPart = idPart.replace(/(视频|video)$/, '');
+                
                 let optionSuffix: string | undefined;
                 
                 const suffixMatch = idPart.match(/-([a-zA-Z0-9]+)$/);
@@ -100,7 +106,8 @@ export function useChunkActions({
                     idPart = idPart.substring(0, idPart.length - suffixMatch[0].length);
                 }
 
-                const target = chunk.scenes.find(s => s.id === idPart || s.id.endsWith(`_${idPart}`));
+                const allScenes = allChunks.flatMap(c => c.scenes);
+                const target = allScenes.find(s => s.id === idPart || s.id.endsWith(`_${idPart}`));
                 
                 if (target) {
                     if (optionSuffix && target.prompt_options) {
@@ -113,9 +120,9 @@ export function useChunkActions({
                     return false; // Target scene not found
                 }
             } else {
-                // 资产标签 → check chunk.assets refImageUrl
-                const asset = resolveTagToAsset(tag, chunk.assets);
-                if (asset && !asset.refImageUrl && !asset.refImageAssetId) return false;
+                // 资产标签 → check refImageUrl or refVideoUrl
+                const asset = resolveTagToAsset(tag, combinedAssets);
+                if (asset && !asset.refImageUrl && !asset.refImageAssetId && !asset.refVideoUrl && !asset.refAudioUrl) return false;
             }
         }
         return true;
@@ -408,11 +415,14 @@ export function useChunkActions({
                     const { operation } = await generateVideo(imageToUse, scene, styleState.aspectRatio, (scene.useAssets !== false) ? chunk.assets : [], styleState, chunk.scenes);
                     // Step 2: Poll until done
                     const { url } = await pollVideoUntilDone(operation);
+                    
+                    // Step 3: Download and save to IndexedDB to prevent CDN expiration
+                    const { localUrl, assetId } = await downloadAndSaveVideo(url);
 
                     if (scene.isStartEndFrameMode) {
-                        onSceneUpdate(chunk.id, scene.id, { startEndVideoUrl: url });
+                        onSceneUpdate(chunk.id, scene.id, { startEndVideoUrl: localUrl, ...(assetId ? { startEndVideoAssetId: assetId } : {}), startEndVideoOperation: operation });
                     } else {
-                        onSceneUpdate(chunk.id, scene.id, { videoUrl: url });
+                        onSceneUpdate(chunk.id, scene.id, { videoUrl: localUrl, ...(assetId ? { videoAssetId: assetId } : {}), operation });
                     }
                     return;
                 } catch (e: any) {
@@ -467,7 +477,11 @@ export function useChunkActions({
                 const newOptions = [...prevScene.prompt_options];
                 const optIdx = newOptions.findIndex(o => o.option_id === optionId);
                 if (optIdx !== -1) {
-                    newOptions[optIdx] = { ...newOptions[optIdx], imageUrl: url };
+                    newOptions[optIdx] = { 
+                        ...newOptions[optIdx], 
+                        imageUrl: url, 
+                        imageAssetId: imageAssetId 
+                    };
                     updates.prompt_options = newOptions;
                 }
             }
@@ -489,16 +503,18 @@ export function useChunkActions({
         return await onGenerateImage(scene, chunk.assets, optionId, chunk.scenes);
     };
 
-    const handleVideoGenerated = (sceneId: string, url: string, assetId?: string, optionId?: string) => {
+    const handleVideoGenerated = (sceneId: string, url: string, assetId?: string, optionId?: string, operation?: any) => {
         onSceneUpdate(chunk.id, sceneId, (prevScene) => {
             const updates: Partial<Scene> = {};
 
             if (prevScene.isStartEndFrameMode) {
                 updates.startEndVideoUrl = url;
                 updates.startEndVideoAssetId = assetId;
+                updates.startEndVideoOperation = operation;
             } else {
                 updates.videoUrl = url;
                 updates.videoAssetId = assetId;
+                updates.operation = operation;
             }
 
             // Synchronize into prompt_options if this was a refresh for a specific option
@@ -509,7 +525,8 @@ export function useChunkActions({
                     newOptions[optIdx] = { 
                         ...newOptions[optIdx], 
                         videoUrl: url,
-                        ...(assetId ? { videoAssetId: assetId } : {})
+                        ...(assetId ? { videoAssetId: assetId } : {}),
+                        operation: operation
                     };
                     updates.prompt_options = newOptions;
                 }

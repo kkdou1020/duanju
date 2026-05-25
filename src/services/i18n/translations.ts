@@ -180,7 +180,7 @@ export const translations: Record<string, Translation> = {
     vfxLabel: "特效",
     dialogueBtn: "旁白生成",
     dialogueLabel: "对白",
-    sfxLabel: "音效/BGM",
+    sfxLabel: "音效",
     genVideo: "生成视频",
     videoGenerating: "视频生成中...",
     allChaptersDone: "所有章节已完成！"
@@ -271,7 +271,7 @@ export const translations: Record<string, Translation> = {
     vfxLabel: "VFX",
     dialogueBtn: "Generate Narration",
     dialogueLabel: "Dialogue",
-    sfxLabel: "SFX/BGM",
+    sfxLabel: "SFX",
     genVideo: "Gen Video",
     videoGenerating: "Generating...",
     allChaptersDone: "All chapters completed!"

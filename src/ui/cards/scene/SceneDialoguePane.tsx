@@ -15,7 +15,7 @@ const SceneDialoguePane: React.FC<SceneDialoguePaneProps> = ({
     onUpdate,
 }) => {
     return (
-        <div className="bg-gray-100 dark:bg-black/20 p-2 h-[120px] overflow-y-auto">
+        <div className="bg-gray-100 dark:bg-black/20 p-2 h-[140px] shrink-0 overflow-y-auto">
             <div className="flex items-center justify-between mb-1 sticky top-0 bg-gray-100/90 dark:bg-black/20 backdrop-blur-sm z-10">
                 <div className="flex items-center gap-2">
                     <MessageSquare className="w-3 h-3 text-green-400" />
@@ -76,23 +76,27 @@ const SceneDialoguePane: React.FC<SceneDialoguePaneProps> = ({
 
             {/* SFX / BGM */}
             <div className="flex flex-col gap-1 text-[10px] text-gray-500 border-t border-gray-200 dark:border-white/5 pt-1 mt-1">
-                <div className="flex items-center gap-2 group/sfx">
-                    <Music className="w-2.5 h-2.5 text-gray-600 group-focus-within/sfx:text-indigo-600 dark:group-focus-within/sfx:text-banana-500" />
-                    <span className="w-6 shrink-0 truncate">{labels.sfxLabel}:</span>
-                    <input
+                <div className="flex items-start gap-2 group/sfx">
+                    <div className="flex items-center gap-1 shrink-0 mt-1">
+                        <Music className="w-2.5 h-2.5 text-gray-600 group-focus-within/sfx:text-indigo-600 dark:group-focus-within/sfx:text-banana-500" />
+                        <span className="w-10 shrink-0 text-gray-500 dark:text-gray-400 font-semibold">{labels.sfxLabel}:</span>
+                    </div>
+                    <textarea
                         value={scene.audio_sfx || ''}
                         onChange={(e) => onUpdate(scene.id, 'audio_sfx', e.target.value)}
-                        className="bg-transparent border-b border-transparent hover:border-gray-300 dark:hover:border-white/10 focus:border-indigo-500 dark:focus:border-banana-500 outline-none flex-1 text-gray-700 dark:text-gray-400 transition-colors px-1"
+                        className="bg-transparent border border-transparent hover:border-gray-300 dark:hover:border-white/10 focus:border-indigo-500 dark:focus:border-banana-500 outline-none flex-1 text-gray-700 dark:text-gray-400 transition-colors px-1 py-0.5 resize-none h-9 text-[10px] leading-normal"
                         placeholder="SFX..."
                     />
                 </div>
-                <div className="flex items-center gap-2 group/bgm">
-                    <Music className="w-2.5 h-2.5 text-gray-600 opacity-50 group-focus-within/bgm:text-indigo-600 dark:group-focus-within/bgm:text-banana-500 group-focus-within/bgm:opacity-100" />
-                    <span className="w-6 shrink-0 truncate">BGM:</span>
-                    <input
+                <div className="flex items-start gap-2 group/bgm">
+                    <div className="flex items-center gap-1 shrink-0 mt-1">
+                        <Music className="w-2.5 h-2.5 text-gray-600 opacity-50 group-focus-within/bgm:text-indigo-600 dark:group-focus-within/bgm:text-banana-500 group-focus-within/bgm:opacity-100" />
+                        <span className="w-10 shrink-0 text-gray-500 dark:text-gray-400 font-semibold">BGM:</span>
+                    </div>
+                    <textarea
                         value={scene.audio_bgm || ''}
                         onChange={(e) => onUpdate(scene.id, 'audio_bgm', e.target.value)}
-                        className="bg-transparent border-b border-transparent hover:border-gray-300 dark:hover:border-white/10 focus:border-indigo-500 dark:focus:border-banana-500 outline-none flex-1 text-gray-700 dark:text-gray-400 transition-colors px-1"
+                        className="bg-transparent border border-transparent hover:border-gray-300 dark:hover:border-white/10 focus:border-indigo-500 dark:focus:border-banana-500 outline-none flex-1 text-gray-700 dark:text-gray-400 transition-colors px-1 py-0.5 resize-none h-9 text-[10px] leading-normal"
                         placeholder="BGM..."
                     />
                 </div>

@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
-import { Settings, ChevronDown, PlayCircle, Trash2, X, Box, Type, Image, Video, Sparkles, Maximize, Upload } from 'lucide-react';
+import { Settings, ChevronDown, PlayCircle, X, Box, Type, Image, Video, Sparkles, Maximize, Upload } from 'lucide-react';
 import { modelManager, ModelConfig, ProviderType } from '@/services/ai/model-manager';
 
 export const ModelSelector: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [config, setConfig] = useState<ModelConfig>(modelManager.getConfig());
+
+  const handleOpenToggle = () => {
+    setIsOpen(!isOpen);
+  };
 
   const handleUpdateString = (key: keyof ModelConfig, value: string) => {
     const newConfig = { ...config, [key]: value };
@@ -23,7 +27,7 @@ export const ModelSelector: React.FC = () => {
   return (
     <div className="relative z-50">
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={handleOpenToggle}
         className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-white/10 text-gray-500 hover:text-gray-900 dark:text-white/70 dark:hover:text-white transition-colors"
         title="Model Settings"
       >
@@ -39,23 +43,7 @@ export const ModelSelector: React.FC = () => {
           <div className="absolute right-0 mt-2 w-[360px] max-h-[85vh] flex flex-col bg-white dark:bg-[#12141A] border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden">
             <div className="p-5 flex-1 overflow-y-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
 
-              {/* Top Action Bar */}
-              <div className="flex items-center justify-end mb-2">
-                <div className="w-6 h-6 rounded-full bg-gray-100 dark:bg-white/5 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-white/10 transition-colors cursor-pointer" onClick={() => setIsOpen(false)}>
-                  <X size={14} className="text-gray-500 dark:text-white" />
-                </div>
-              </div>
 
-              {/* Main Header */}
-              <div className="flex items-center space-x-3 mb-6">
-                <div className="bg-indigo-600 dark:bg-[#4D58B8] p-2.5 rounded-xl text-white shadow-lg">
-                  <Box size={22} />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-gray-900 dark:text-white leading-tight mb-0.5">Model Providers</h3>
-                  <p className="text-[11px] text-gray-500 dark:text-slate-400 leading-tight">配置与管理模型服务</p>
-                </div>
-              </div>
 
               {/* Cards Container */}
               <div className="space-y-3">
@@ -334,28 +322,61 @@ export const ModelSelector: React.FC = () => {
                   )}
                 </div>
 
-                {/* Video Model Card */}
-                <div className="bg-gray-50 dark:bg-[#1A1D24] border border-gray-200 dark:border-white/5 rounded-xl p-3.5 flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="bg-white dark:bg-[#242832] border border-gray-200 dark:border-none p-2 rounded-lg text-indigo-600 dark:text-slate-300">
-                      <Video size={16} />
+                {/* Video Model Main Wrapper */}
+                <div className="bg-gray-50 dark:bg-[#1A1D24] border border-gray-200 dark:border-white/5 rounded-xl flex flex-col overflow-hidden">
+                  {/* Video Model Base Card */}
+                  <div className="p-3.5 flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className="bg-white dark:bg-[#242832] border border-gray-200 dark:border-none p-2 rounded-lg text-indigo-600 dark:text-slate-300">
+                        <Video size={16} />
+                      </div>
+                      <div>
+                        <div className="text-[13px] font-semibold text-gray-800 dark:text-slate-200 leading-tight mb-0.5">Video Model</div>
+                        <div className="text-[10px] text-gray-500 dark:text-slate-500 leading-tight">选择用于视频生成的模型提供商</div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="text-[13px] font-semibold text-gray-800 dark:text-slate-200 leading-tight mb-0.5">Video Model</div>
-                      <div className="text-[10px] text-gray-500 dark:text-slate-500 leading-tight">选择用于视频生成的模型</div>
+                    <div className="relative w-[110px]">
+                      <select
+                        value={config.videomodel}
+                        onChange={(e) => handleUpdate('videomodel', e.target.value as ProviderType)}
+                        className="w-full bg-white dark:bg-[#0D0F12] text-gray-800 dark:text-slate-200 text-xs rounded-md pl-3 pr-8 py-2 border border-gray-300 dark:border-white/5 focus:border-indigo-500 dark:focus:border-[#7B8BFF] outline-none appearance-none font-medium cursor-pointer"
+                      >
+                        {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                      </select>
+                      <ChevronDown className="absolute right-2.5 top-[9px] text-slate-500 pointer-events-none" size={14} />
                     </div>
                   </div>
-                  <div className="relative w-[110px]">
-                    <select
-                      value={config.videomodel}
-                      onChange={(e) => handleUpdate('videomodel', e.target.value as ProviderType)}
-                      className="w-full bg-white dark:bg-[#0D0F12] text-gray-800 dark:text-slate-200 text-xs rounded-md pl-3 pr-8 py-2 border border-gray-300 dark:border-white/5 focus:border-indigo-500 dark:focus:border-[#7B8BFF] outline-none appearance-none font-medium cursor-pointer"
-                    >
-                      {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                    </select>
-                    <ChevronDown className="absolute right-2.5 top-[9px] text-slate-500 pointer-events-none" size={14} />
-                  </div>
+
+                  {/* T8Star Video Config Expansion */}
+                  {config.videomodel === 't8star' && (
+                    <div className="border-t border-gray-200 dark:border-white/5 p-4 pt-4">
+                      {/* Left border wrapper */}
+                      <div className="border-l-[3px] border-indigo-500 dark:border-[#4D58B8] pl-4 flex flex-col space-y-5">
+
+                        {/* T8star Video Model Select */}
+                        <div>
+                          <div className="flex items-center space-x-2 text-indigo-600 dark:text-[#7B8BFF] mb-3">
+                            <PlayCircle size={14} />
+                            <span className="text-[13px] font-semibold">T8star Video Engine</span>
+                          </div>
+                          <div className="relative">
+                            <select
+                              value={config.t8starVideoModel || 'veo'}
+                              onChange={(e) => handleUpdateString('t8starVideoModel', e.target.value)}
+                              className="w-full bg-white dark:bg-[#0D0F12] text-gray-800 dark:text-slate-200 text-xs rounded-lg px-3 py-2.5 border border-gray-300 dark:border-white/5 focus:border-indigo-500 dark:focus:border-[#7B8BFF] outline-none appearance-none font-medium cursor-pointer"
+                            >
+                              <option value="veo">veo 3.1</option>
+                              <option value="doubao-seedance-2-0-260128">seedance 2.0</option>
+                            </select>
+                            <ChevronDown className="absolute right-3 top-3 text-slate-500 pointer-events-none" size={14} />
+                          </div>
+                        </div>
+
+                      </div>
+                    </div>
+                  )}
                 </div>
+
 
               </div>
             </div>

@@ -29,6 +29,7 @@ interface MentionTextareaProps {
 
     maxMentions?: number;
     mode?: 'video' | 'image';
+    disableVideos?: boolean;
     className?: string;
     placeholder?: string;
 }
@@ -119,7 +120,8 @@ const textToHtml = (
     sceneImages: SceneImageCandidate[],
     mode: 'video' | 'image' = 'video',
     videos: SceneImageCandidate[] = [],
-    audios: SceneImageCandidate[] = []
+    audios: SceneImageCandidate[] = [],
+    disableVideos: boolean = false
 ): string => {
     if (!text) return '';
     const escaped = text
@@ -133,14 +135,24 @@ const textToHtml = (
             const tagName = p1 || p3;
             const tagId = (p2 || p4) as string | undefined;
             const info = findAssetInfo(tagName, assets, sceneImages, tagId, videos, audios);
-            const colors = CHIP_COLORS[mode];
+            
+            const isInvalidMedia = disableVideos && (info.category === 'video' || info.category === 'audio');
+            
+            const colors = isInvalidMedia 
+                ? { bg: 'rgba(239,68,68,0.1)', border: 'rgba(248,113,113,0.5)', text: '#ef4444' } 
+                : CHIP_COLORS[mode];
+                
             const defaultEmoji = info.category === 'audio' ? '🎵' : info.category === 'video' ? '🎬' : '🧑';
             const imgHtml = info.thumb
                 ? `<img src="${info.thumb}" style="width:14px;height:14px;border-radius:2px;object-fit:cover;vertical-align:-2px;margin-right:3px;display:inline-block;" />`
                 : `<span style="vertical-align:-1px;margin-right:3px;display:inline-block;font-size:inherit;">${defaultEmoji}</span>`;
             // Store both name and optional id in data attributes
             const idAttr = tagId ? ` data-mention-id="${tagId}"` : '';
-            return `<span contenteditable="false" data-mention="${tagName}"${idAttr} style="display:inline;background:${colors.bg};border:1px solid ${colors.border};border-radius:4px;padding:1px 5px;margin:0;font-size:inherit;color:${colors.text};cursor:default;vertical-align:baseline;line-height:normal;user-select:all;font-weight:500;-webkit-box-decoration-break:clone;box-decoration-break:clone;">${imgHtml}${info.displayName}</span>\u200B`;
+            
+            const extraStyles = isInvalidMedia ? 'text-decoration:line-through;' : '';
+            const titleAttr = isInvalidMedia ? ` title="当前模型不支持此类型素材，请删除"` : '';
+            
+            return `<span contenteditable="false" data-mention="${tagName}"${idAttr}${titleAttr} style="display:inline;background:${colors.bg};border:1px solid ${colors.border};border-radius:4px;padding:1px 5px;margin:0;font-size:inherit;color:${colors.text};cursor:default;vertical-align:baseline;line-height:normal;user-select:all;font-weight:500;-webkit-box-decoration-break:clone;box-decoration-break:clone;${extraStyles}">${imgHtml}${info.displayName}</span>\u200B`;
         }
     );
 };
@@ -195,6 +207,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
     onAssetDelete,
     maxMentions,
     mode = 'video',
+    disableVideos = false,
     className = '',
     placeholder = ''
 }) => {
@@ -216,6 +229,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
     const isUploadingRef = useRef(false);
     const isDeletingRef = useRef(false);
     const newlyUploadedIdRef = useRef<string | null>(null);
+    const lastDisableVideosRef = useRef<boolean>(disableVideos);
 
     const availableAssets = assets; // Removed filter to allow assets without reference images
 
@@ -231,17 +245,18 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
             isInternalChange.current = false;
             return;
         }
-        if (value !== lastRenderedValue.current) {
-            const html = textToHtml(value, assets, sceneImages, mode as 'video' | 'image', videos, audios);
+        if (value !== lastRenderedValue.current || disableVideos !== lastDisableVideosRef.current) {
+            const html = textToHtml(value, assets, sceneImages, mode as 'video' | 'image', videos, audios, disableVideos);
             editorRef.current.innerHTML = html || '';
             lastRenderedValue.current = value;
+            lastDisableVideosRef.current = disableVideos;
         }
-    }, [value, assets, sceneImages, videos, audios, mode]);
+    }, [value, assets, sceneImages, videos, audios, mode, disableVideos]);
 
     // Initial render
     useEffect(() => {
         if (editorRef.current && !editorRef.current.innerHTML) {
-            editorRef.current.innerHTML = textToHtml(value, assets, sceneImages, mode as 'video' | 'image', videos, audios) || '';
+            editorRef.current.innerHTML = textToHtml(value, assets, sceneImages, mode as 'video' | 'image', videos, audios, disableVideos) || '';
         }
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -274,7 +289,11 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
                 continue;
             }
             const isInPrompt = promptIdSet.has(asset.id) || promptNameSet.has(asset.name);
-            const isDisabled = atLimit && !isInPrompt;
+            let isAssetDisabled = atLimit && !isInPrompt;
+            if (disableVideos && (asset.type === 'video' || asset.type === 'audio')) {
+                isAssetDisabled = true;
+            }
+            const isDisabled = isAssetDisabled;
             if (!query || asset.name.toLowerCase().includes(query.toLowerCase()) || asset.id.toLowerCase().includes(query.toLowerCase())) {
                 let category: 'asset' | 'scene' | 'video' | 'audio' = 'asset';
                 if (asset.type === 'video') category = 'video';
@@ -336,7 +355,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
 
         for (const v of videos) {
             const isInPrompt = promptIdSet.has(v.id) || promptNameSet.has(v.name);
-            const isDisabled = atLimit && !isInPrompt;
+            const isDisabled = (atLimit && !isInPrompt) || disableVideos;
             if (!query || v.name.toLowerCase().includes(query.toLowerCase()) || v.id.toLowerCase().includes(query.toLowerCase())) {
                 items.push({
                     id: v.id,
@@ -355,7 +374,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
 
         for (const a of audios) {
             const isInPrompt = promptIdSet.has(a.id) || promptNameSet.has(a.name);
-            const isDisabled = atLimit && !isInPrompt;
+            const isDisabled = (atLimit && !isInPrompt) || disableVideos;
             if (!query || a.name.toLowerCase().includes(query.toLowerCase()) || a.id.toLowerCase().includes(query.toLowerCase())) {
                 items.push({
                     id: a.id,
@@ -453,10 +472,10 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
         }
         
         prevTagsRef.current = currentTags;
-    }, [onChange, assets, sceneImages, onUnmention]);
+    }, [onChange, assets, sceneImages, onUnmention, onMention]);
 
     // Insert a mention chip at cursor
-    const insertMentionAtCursor = useCallback((tagName: string, assetId?: string, thumb?: string) => {
+    const insertMentionAtCursor = useCallback((tagName: string, assetId?: string, thumb?: string, category?: string) => {
         const el = editorRef.current;
         if (!el) return;
 
@@ -501,7 +520,9 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
             chip.appendChild(img);
         } else {
             const icon = document.createElement('span');
-            icon.textContent = '🧑';
+            // Use correct emoji based on asset category, matching textToHtml defaultEmoji logic
+            const resolvedCategory = category || info.category;
+            icon.textContent = resolvedCategory === 'audio' ? '🎵' : resolvedCategory === 'video' ? '🎬' : '🧑';
             icon.style.cssText = 'vertical-align:-1px;margin-right:3px;display:inline-block;font-size:inherit;';
             chip.appendChild(icon);
         }
@@ -523,13 +544,13 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
 
         // Trigger update
         handleInput();
-    }, [handleInput]);
+    }, [handleInput, mode, assets, sceneImages, videos, audios]);
 
     // Select a candidate
     const selectCandidate = useCallback((candidate: typeof candidates[0]) => {
         if (candidate.disabled) return;
 
-        insertMentionAtCursor(candidate.name, candidate.id, candidate.thumb);
+        insertMentionAtCursor(candidate.name, candidate.id, candidate.thumb, candidate.category);
         setShowDropdown(false);
         setQuery('');
 
@@ -870,7 +891,9 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
                             <div className="p-1 border-t border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-dark-900 shrink-0">
                                 <button
                                     onMouseDown={(e) => e.preventDefault()}
+                                    disabled={disableVideos}
                                     onClick={() => {
+                                        if (disableVideos) return;
                                         isUploadingRef.current = true;
                                         videoUploadRef.current?.click();
                                         const onWindowFocus = () => {
@@ -883,7 +906,11 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
                                         };
                                         window.addEventListener('focus', onWindowFocus);
                                     }}
-                                    className="w-full py-1.5 text-xs text-indigo-600 dark:text-banana-400 bg-white dark:bg-dark-800 hover:bg-indigo-50 dark:hover:bg-banana-500/10 border border-indigo-200 dark:border-banana-500/30 rounded flex items-center justify-center gap-1 transition-colors"
+                                    className={`w-full py-1.5 text-xs bg-white dark:bg-dark-800 rounded flex items-center justify-center gap-1 transition-colors ${
+                                        disableVideos
+                                            ? 'text-gray-400 dark:text-gray-500 border border-gray-200 dark:border-white/10 cursor-not-allowed opacity-50'
+                                            : 'text-indigo-600 dark:text-banana-400 hover:bg-indigo-50 dark:hover:bg-banana-500/10 border border-indigo-200 dark:border-banana-500/30'
+                                    }`}
                                 >
                                     <span className="text-sm">+</span> 上传本地视频
                                 </button>
@@ -968,7 +995,9 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
                             <div className="p-1 border-t border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-dark-900 shrink-0">
                                 <button
                                     onMouseDown={(e) => e.preventDefault()}
+                                    disabled={disableVideos}
                                     onClick={() => {
+                                        if (disableVideos) return;
                                         isUploadingRef.current = true;
                                         audioUploadRef.current?.click();
                                         const onWindowFocus = () => {
@@ -981,7 +1010,11 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
                                         };
                                         window.addEventListener('focus', onWindowFocus);
                                     }}
-                                    className="w-full py-1.5 text-xs text-indigo-600 dark:text-banana-400 bg-white dark:bg-dark-800 hover:bg-indigo-50 dark:hover:bg-banana-500/10 border border-indigo-200 dark:border-banana-500/30 rounded flex items-center justify-center gap-1 transition-colors"
+                                    className={`w-full py-1.5 text-xs bg-white dark:bg-dark-800 rounded flex items-center justify-center gap-1 transition-colors ${
+                                        disableVideos
+                                            ? 'text-gray-400 dark:text-gray-500 border border-gray-200 dark:border-white/10 cursor-not-allowed opacity-50'
+                                            : 'text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10 border border-orange-200 dark:border-orange-500/30'
+                                    }`}
                                 >
                                     <span className="text-sm">+</span> 上传本地音频 (支持MP4提取)
                                 </button>

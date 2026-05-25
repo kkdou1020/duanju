@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Scene, ImageGenStatus, GlobalStyle, Asset } from '@/shared/types';
 import { generateSceneImage, generateSpeech, pcmToWav, generateVideo, pollVideoUntilDone } from '@/services/ai';
-import { loadAssetUrl } from '@/services/storage';
+import { loadAssetUrl, saveAsset, downloadAndSaveVideo } from '@/services/storage';
 
 export interface UseSceneMediaProps {
     scene: Scene;
@@ -14,7 +14,7 @@ export interface UseSceneMediaProps {
     onUpdate: (id: string, fieldOrUpdates: keyof Scene | Partial<Scene>, value?: any) => void;
     onGenerateImageOverride?: (scene: Scene, optionId?: string) => Promise<string>;
     onImageGenerated?: (id: string, url: string, imageAssetId?: string, optionId?: string) => void;
-    onVideoGenerated?: (id: string, url: string, assetId?: string, optionId?: string) => void;
+    onVideoGenerated?: (id: string, url: string, assetId?: string, optionId?: string, operation?: any) => void;
     checkImageReady?: (optionId?: string) => boolean;
     checkVideoReady?: (optionId?: string) => boolean;
 }
@@ -47,47 +47,64 @@ export function useSceneMedia(props: UseSceneMediaProps) {
         ? (!!scene.startEndVideoUrl || !!scene.startEndVideoAssetId)
         : (!!scene.videoUrl || !!scene.videoAssetId);
 
-    // Reset latestImageRef when scene ID changes
-    const lastSceneIdRef = useRef(scene.id);
-    if (lastSceneIdRef.current !== scene.id) {
-        lastSceneIdRef.current = scene.id;
-        latestImageRef.current = null;
-    }
+    // Helper to save Base64 image to IndexedDB and return local URL and asset ID
+    const saveBase64Image = async (urlOrBase64: string): Promise<{ localUrl: string; assetId: string }> => {
+        if (!urlOrBase64 || !urlOrBase64.startsWith('data:')) {
+            return { localUrl: urlOrBase64, assetId: '' };
+        }
+        try {
+            const res = await fetch(urlOrBase64);
+            const blob = await res.blob();
+            const assetId = await saveAsset(blob);
+            const localUrl = URL.createObjectURL(blob);
+            return { localUrl, assetId };
+        } catch (e) {
+            console.error("Failed to save generated image to storage:", e);
+            return { localUrl: urlOrBase64, assetId: '' };
+        }
+    };
 
     // ── File upload ──
     const handleUploadClick = () => {
         fileInputRef.current?.click();
     };
 
-    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (file) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const result = e.target?.result as string;
-                if (result) {
-                    latestImageRef.current = result;
-                    
-                    const updates: Partial<Scene> = { imageUrl: result };
-                    if (scene.isStartEndFrameMode) {
-                        const currentSceneImgId = `scene_img_${scene.id}`;
-                        updates.startEndAssetIds = [currentSceneImgId];
-                    }
-
-                    if (scene.prompt_options) {
-                        const newOptions = [...scene.prompt_options];
-                        const activeOptIdx = newOptions.findIndex((o) => o.video_prompt === scene.video_prompt);
-                        if (activeOptIdx !== -1) {
-                            newOptions[activeOptIdx] = { ...newOptions[activeOptIdx], imageUrl: result };
-                            updates.prompt_options = newOptions;
-                        }
-                    }
-
-                    onUpdate(scene.id, updates);
-                    setGenStatusMap(prev => ({ ...prev, 'default': ImageGenStatus.COMPLETED }));
+            try {
+                const assetId = await saveAsset(file);
+                const localUrl = URL.createObjectURL(file);
+                latestImageRef.current = localUrl;
+                
+                const updates: Partial<Scene> = { 
+                    imageUrl: localUrl,
+                    imageAssetId: assetId
+                };
+                if (scene.isStartEndFrameMode) {
+                    const currentSceneImgId = `scene_img_${scene.id}`;
+                    updates.startEndAssetIds = [currentSceneImgId];
                 }
-            };
-            reader.readAsDataURL(file);
+
+                if (scene.prompt_options) {
+                    const newOptions = [...scene.prompt_options];
+                    const activeOptIdx = newOptions.findIndex((o) => o.video_prompt === scene.video_prompt);
+                    if (activeOptIdx !== -1) {
+                        newOptions[activeOptIdx] = { 
+                            ...newOptions[activeOptIdx], 
+                            imageUrl: localUrl,
+                            imageAssetId: assetId
+                        };
+                        updates.prompt_options = newOptions;
+                    }
+                }
+
+                onUpdate(scene.id, updates);
+                setGenStatusMap(prev => ({ ...prev, 'default': ImageGenStatus.COMPLETED }));
+            } catch (e) {
+                console.error("Failed to save uploaded image file:", e);
+                alert("上传图片失败，请重试。");
+            }
         }
     };
 
@@ -110,6 +127,13 @@ export function useSceneMedia(props: UseSceneMediaProps) {
                 url = result.imageUrl || result;
                 imageAssetId = result.imageAssetId;
             }
+
+            if (url.startsWith('data:')) {
+                const saved = await saveBase64Image(url);
+                url = saved.localUrl;
+                imageAssetId = saved.assetId;
+            }
+
             setGenStatusMap(prev => ({ ...prev, [key]: ImageGenStatus.COMPLETED }));
             if (onImageGenerated) {
                 onImageGenerated(scene.id, url, imageAssetId, optionId);
@@ -140,8 +164,15 @@ export function useSceneMedia(props: UseSceneMediaProps) {
                 }
                 try {
                     const result = await generateSceneImage(scene, globalStyle, assets, opt.option_id, chapterScenes);
-                    const url = result.imageUrl || result;
-                    const assetId = result.imageAssetId;
+                    let url = result.imageUrl || result;
+                    let assetId = result.imageAssetId;
+
+                    if (url.startsWith('data:')) {
+                        const saved = await saveBase64Image(url);
+                        url = saved.localUrl;
+                        assetId = saved.assetId;
+                    }
+
                     newOptions[idx] = { 
                         ...newOptions[idx], 
                         imageUrl: url,
@@ -158,7 +189,8 @@ export function useSceneMedia(props: UseSceneMediaProps) {
             if (activeOpt.imageUrl) {
                onUpdate(scene.id, {
                    prompt_options: newOptions,
-                   imageUrl: activeOpt.imageUrl
+                   imageUrl: activeOpt.imageUrl,
+                   imageAssetId: activeOpt.imageAssetId
                });
                latestImageRef.current = activeOpt.imageUrl;
             } else {
@@ -189,11 +221,12 @@ export function useSceneMedia(props: UseSceneMediaProps) {
                 try {
                     let imageToUse = opt.imageUrl || scene.imageUrl;
                     // Preload asset if possible (simplification: assumes URL is ready if already loaded)
-                    const tempScene = { ...scene, video_prompt: opt.video_prompt, np_prompt: opt.np_prompt, video_lens: opt.video_lens, video_camera: opt.video_camera };
+                    const tempScene = { ...scene, video_prompt: opt.video_prompt, np_prompt: opt.np_prompt };
                     
                     const { operation } = await generateVideo(imageToUse || '', tempScene, globalStyle.aspectRatio, assets, globalStyle, chapterScenes, opt.option_id);
                     const { url } = await pollVideoUntilDone(operation);
-                    newOptions[idx] = { ...newOptions[idx], videoUrl: url };
+                    const { localUrl, assetId } = await downloadAndSaveVideo(url);
+                    newOptions[idx] = { ...newOptions[idx], videoUrl: localUrl, videoAssetId: assetId || undefined };
                     setVideoStatusMap(prev => ({ ...prev, [opt.option_id]: ImageGenStatus.COMPLETED }));
                 } catch (e) {
                     console.error("Batch video gen failed for option", opt.option_id, e);
@@ -205,7 +238,8 @@ export function useSceneMedia(props: UseSceneMediaProps) {
             if (activeOpt.videoUrl) {
                onUpdate(scene.id, {
                    prompt_options: newOptions,
-                   videoUrl: activeOpt.videoUrl
+                   videoUrl: activeOpt.videoUrl,
+                   ...(activeOpt.videoAssetId ? { videoAssetId: activeOpt.videoAssetId } : {})
                });
             } else {
                onUpdate(scene.id, 'prompt_options', newOptions);
@@ -246,10 +280,13 @@ export function useSceneMedia(props: UseSceneMediaProps) {
             const { operation } = await generateVideo(imageToUse || '', scene, globalStyle.aspectRatio, assets, globalStyle, chapterScenes, optionId);
             // Step 2: Poll until done
             const { url } = await pollVideoUntilDone(operation);
+            
+            // Step 3: Download and save to IndexedDB to prevent CDN expiration
+            const { localUrl, assetId } = await downloadAndSaveVideo(url);
 
             setVideoStatusMap(prev => ({ ...prev, [key]: ImageGenStatus.COMPLETED }));
             if (onVideoGenerated) {
-                onVideoGenerated(scene.id, url, undefined, optionId);
+                onVideoGenerated(scene.id, localUrl, assetId || undefined, optionId, operation);
             }
             // Auto-switch to video view
             setViewMode('video');
@@ -404,29 +441,60 @@ export function useSceneMedia(props: UseSceneMediaProps) {
         videoFileInputRef.current?.click();
     };
 
-    const handleVideoFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const handleVideoFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (file) {
-            const url = URL.createObjectURL(file);
-            const updates: Partial<Scene> = {};
-            if (scene.isStartEndFrameMode) {
-                updates.startEndVideoUrl = url;
-            } else {
-                updates.videoUrl = url;
+            if (file.size > 20 * 1024 * 1024) {
+                alert('视频文件大小不能超过20MB，请压缩后上传');
+                event.target.value = '';
+                return;
             }
 
-            if (scene.prompt_options) {
-                const newOptions = [...scene.prompt_options];
-                const activeOptIdx = newOptions.findIndex((o) => o.video_prompt === scene.video_prompt);
-                if (activeOptIdx !== -1) {
-                    newOptions[activeOptIdx] = { ...newOptions[activeOptIdx], videoUrl: url };
-                    updates.prompt_options = newOptions;
+            setVideoStatusMap(prev => ({ ...prev, 'default': ImageGenStatus.GENERATING }));
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                const response = await fetch('/api/media/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(errText);
                 }
-            }
+                
+                const data = await response.json();
+                const url = data.url;
+                
+                if (!url) throw new Error("服务器没有返回有效的 URL");
 
-            onUpdate(scene.id, updates);
-            setVideoStatusMap(prev => ({ ...prev, 'default': ImageGenStatus.COMPLETED }));
-            setViewMode('video');
+                const updates: Partial<Scene> = {};
+                if (scene.isStartEndFrameMode) {
+                    updates.startEndVideoUrl = url;
+                } else {
+                    updates.videoUrl = url;
+                }
+
+                if (scene.prompt_options) {
+                    const newOptions = [...scene.prompt_options];
+                    const activeOptIdx = newOptions.findIndex((o) => o.video_prompt === scene.video_prompt);
+                    if (activeOptIdx !== -1) {
+                        newOptions[activeOptIdx] = { ...newOptions[activeOptIdx], videoUrl: url };
+                        updates.prompt_options = newOptions;
+                    }
+                }
+
+                onUpdate(scene.id, updates);
+                setVideoStatusMap(prev => ({ ...prev, 'default': ImageGenStatus.COMPLETED }));
+                setViewMode('video');
+            } catch (e: any) {
+                console.error("Failed to upload video:", e);
+                alert("上传视频失败: " + e.message);
+                setVideoStatusMap(prev => ({ ...prev, 'default': ImageGenStatus.ERROR }));
+            }
         }
         event.target.value = '';
     };

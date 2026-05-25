@@ -1,4 +1,4 @@
-import { GoogleProvider } from './server/src/services/ai/providers/google.ts';
+import { GoogleProvider } from '../server/src/services/ai/providers/google';
 import dotenv from 'dotenv';
 dotenv.config();
 

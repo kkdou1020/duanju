@@ -6,14 +6,8 @@ export const useAssetUrl = (assetId?: string, fallbackUrl?: string) => {
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
-        // If we have a fallback URL (e.g. newly generated base64), use it directly
-        if (fallbackUrl) {
-            setUrl(fallbackUrl);
-            return;
-        }
-
         if (!assetId) {
-            setUrl(null);
+            setUrl(fallbackUrl || null);
             return;
         }
 
@@ -27,11 +21,17 @@ export const useAssetUrl = (assetId?: string, fallbackUrl?: string) => {
                 if (active && blobUrl) {
                     objectUrl = blobUrl;
                     setUrl(blobUrl);
+                    return;
                 }
             } catch (e) {
                 //console.error(`Failed to load asset ${assetId}`, e);
             } finally {
                 if (active) setLoading(false);
+            }
+
+            // Fallback if IndexedDB loading fails or is empty
+            if (active && fallbackUrl) {
+                setUrl(fallbackUrl);
             }
         };
 

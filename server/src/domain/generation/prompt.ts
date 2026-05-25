@@ -376,6 +376,11 @@ ${fullLensLibrary}
 - \`video_duration\`: **致命时长同步协议 (Lethal Time Sync Protocol)**：你必须要重新测算本场的台词总字数（中文 3-4字/秒），**给出的总时长绝不能小于台词物理耗时**！并且，该数值必须严格等于你在下文 \`video_prompt\` 里时间切片的终点时间！例如：设为 8s，时间片只能写到 8s，绝不能写出 \`0-2s, 2-6s, 6-9s\` 这种荒唐且相悖的时间轴！
 - \`video_prompt\`: **必须使用 ${language} 编写提示词！**必须遵循 0-Xs 的 Seedance 分度规范。纯粹输出动作流与画面调度即可，**绝对不用写入 ${stylePrefix}！系统在调用生图API前会自动拼接风格，如果写进去会导致风格冗余堆叠报错！**
 - \`np_prompt\`: **必须使用 ${language} 编写提示词！**必须包含至少8个描述性元素（主体、动作、表情、环境、构图、光影、色调、材质）。同样**绝对不要混入 ${stylePrefix}**！如果当前是大特写(Close-Up)或突出细节情绪，允许你抛弃繁杂的背景环境描述（用"Out of focus blurry background"代替），防范大模型因堆叠过多要素而跑焦失控。
+- \`camera\`, \`lens\`, \`focal_length\`, \`aperture\`: 为了实现 1:1 专业摄像机参数选择联动，你必须为每个方案选择最贴合运镜与画面氛围的专业摄影机、镜头、焦距和光圈值（全部使用英文）：
+  - \`camera\` (相机型号): 例如 "Arri Alexa Mini LF", "Red V-Raptor", "Sony Venice 2", "Panavision DXL2", "BMD Ursa Mini Pro" 或 "None"。
+  - \`lens\` (镜头型号): 例如 "Arri Signature Prime", "Zeiss Supreme Prime", "Cooke SF 1.8x", "Panavision Primo", "Leica Summilux-C" 等。
+  - \`focal_length\` (焦距): 只能是数字字符串，例如 "18", "24", "35", "50", "75", "85", "100", "125", "135", "150"。广角全景用 18-35，中焦标准用 50，特写拉近用 85-150。
+  - \`aperture\` (光圈值): 例如 "f/1.2", "f/1.4", "f/1.8", "f/2.0", "f/2.8", "f/4.0", "f/5.6", "f/8.0"。大虚化背景浅景深用 f/1.4-f/2.0，深景深多人物场景用 f/4.0-f/8.0。
 
 5. Assets Context (输入资产)
 - Style Prefix: ${stylePrefix}
@@ -405,7 +410,11 @@ Output language: ${language}.
         "video_lens": "对应当前系统内的 Shot ID（从内置库挑选最接近该方案的）",
         "video_camera": "对应该方案的运镜指令",
         "video_prompt": "0-Xs: [该方案动作...]",
-        "np_prompt": "[该方案构图与主体]..."
+        "np_prompt": "[该方案构图与主体]...",
+        "camera": "Arri Alexa Mini LF",
+        "lens": "Arri Signature Prime",
+        "focal_length": "35",
+        "aperture": "f/2.8"
       },
       {
         "option_id": "B",
@@ -413,7 +422,11 @@ Output language: ${language}.
         "video_lens": "⚠️完全不同的另外一种焦段机位",
         "video_camera": "⚠️完全不同的摄影机运动",
         "video_prompt": "0-Xs: [根据B镜头的全新视角，重新编写区别于A的动作与画面流]",
-        "np_prompt": "[采用对应B镜头的全新构图结构特征，描述主角及所处场景细节]"
+        "np_prompt": "[采用对应B镜头的全新构图结构特征，描述主角及所处场景细节]",
+        "camera": "Sony Venice 2",
+        "lens": "Zeiss Supreme Prime",
+        "focal_length": "85",
+        "aperture": "f/1.8"
       },
       {
         "option_id": "C",
@@ -421,7 +434,11 @@ Output language: ${language}.
         "video_lens": "第三种构图焦段",
         "video_camera": "第三种调度运动",
         "video_prompt": "0-Xs: [第三种终极拍摄解法，与A/B彻底隔绝开来的动作描写写法]",
-        "np_prompt": "[基于C镜头独特的构图结构特征描述静态画面质感]"
+        "np_prompt": "[基于C镜头独特的构图结构特征描述静态画面质感]",
+        "camera": "Red V-Raptor",
+        "lens": "Cooke SF 1.8x",
+        "focal_length": "125",
+        "aperture": "f/1.4"
       }
     ]
   }

@@ -4,6 +4,18 @@ import cors from 'cors';
 import path from 'path';
 import dotenv from 'dotenv';
 
+// Global error handlers to prevent backend from crashing on unhandled promise rejections
+process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
+    console.error('🔥 [Unhandled Rejection] caught globally:');
+    console.error('Promise:', promise);
+    console.error('Reason:', reason?.stack || reason);
+});
+
+process.on('uncaughtException', (error: Error) => {
+    console.error('🔥 [Uncaught Exception] caught globally:');
+    console.error('Error Stack:', error.stack || error);
+});
+
 // Load environment variables
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 dotenv.config({ path: path.join(__dirname, '../.env') });
@@ -150,6 +162,12 @@ app.get('*', (req, res) => {
     } else {
         res.status(404).send('Not Found');
     }
+});
+
+// Global Express Error Handler Middleware
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error('❌ [Express Router Error] caught globally:', err?.stack || err);
+    res.status(500).json({ error: err?.message || 'Internal Server Error' });
 });
 
 const server = app.listen(PORT, () => {

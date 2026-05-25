@@ -221,6 +221,194 @@ export const reverseEngineerAngles = async (
     return post('/media/reverse-angles', { description, targetAngles, imageBase64, language });
 };
 
+const blobUrlToBase64 = async (blobUrl: string): Promise<string | null> => {
+    try {
+        const response = await fetch(blobUrl);
+        const blob = await response.blob();
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                if (typeof reader.result === 'string') {
+                    resolve(reader.result);
+                } else {
+                    resolve(null);
+                }
+            };
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(blob);
+        });
+    } catch (e) {
+        console.error("[API] Failed to convert blob URL to base64", e);
+        return null;
+    }
+};
+
+/** 
+ * Unified Dual-Track Asset Extraction Logic
+ * Track 1: Strict ID match (scene_img_xxx or scene_video_xxx)
+ * Track 2: Smart Name Fallback (E1分镜S03-A or 分镜S03)
+ */
+const resolveUsedAssets = async (prompt: string, assets: Asset[], allScenes: Scene[]): Promise<Asset[]> => {
+    const tags = extractAssetTags(prompt);
+    const usedAssets: Asset[] = [];
+
+    for (const tag of tags) {
+        let refUrl: string | undefined;
+        let refAssetId: string | undefined;
+        let isVideoRef = false;
+        let resolved = false;
+
+        // ── 1. Smart Name Fallback parsing (used if ID is missing or not a normal asset) ──
+        let expectVideo = false;
+        let expectImage = false;
+        let parsedSceneId: string | undefined;
+        let parsedOptionId: string | undefined;
+        let exactSceneMatch: Scene | undefined;
+
+        // Analyze explicit ID prefix
+        if (tag.id) {
+            if (tag.id.startsWith('scene_video_')) {
+                expectVideo = true;
+                exactSceneMatch = allScenes.find(s => tag.id!.includes(s.id));
+            } else if (tag.id.startsWith('scene_img_')) {
+                expectImage = true;
+                exactSceneMatch = allScenes.find(s => tag.id!.includes(s.id));
+            }
+        }
+
+        // Analyze Name pattern (Fallback)
+        // Match things like "E1分镜SE1_S01-B", "E1分镜S03-A", "分镜S03"
+        const nameMatch = tag.name.match(/^(?:E\d+)?分镜(?:E\d+_)?(?:scene_)?([a-zA-Z0-9_]+?)(?:-([a-zA-Z0-9]+))?$/);
+        if (nameMatch) {
+            parsedSceneId = nameMatch[1]; // e.g. S03 or SE1_S01
+            parsedOptionId = nameMatch[2]; // e.g. A
+            // If the name starts with E\d+分镜, it strongly implies a generated video
+            if (/^(E\d+)分镜/.test(tag.name)) expectVideo = true;
+            else if (!expectVideo) expectImage = true; // default to image
+        }
+
+        // ── 2. Scene Media Extraction (Image/Video) ──
+        if (expectVideo || expectImage) {
+            let targetScene = exactSceneMatch;
+
+            if (!targetScene && parsedSceneId && allScenes.length > 0) {
+                // The UI sometimes prepends 'S' to the raw scene ID (e.g. S03 for scene_03, or SE1_S01 for scene_E1_S01)
+                const strippedSceneId = parsedSceneId.replace(/^S/, '');
+                targetScene = allScenes.find(s => 
+                    s.id === parsedSceneId || 
+                    s.id.endsWith(`_${parsedSceneId}`) ||
+                    s.id === strippedSceneId ||
+                    s.id === `scene_${strippedSceneId}` ||
+                    s.id.endsWith(`_${strippedSceneId}`)
+                );
+            }
+
+            if (targetScene) {
+                // Determine option ID (prefer parsed from name, fallback to last part of ID)
+                let optId = parsedOptionId;
+                if (!optId && tag.id) {
+                    const parts = tag.id.split('_');
+                    optId = parts[parts.length - 1]; 
+                }
+
+                if (expectVideo) {
+                    // Extract Video
+                    if (optId && targetScene.prompt_options) {
+                        const opt = targetScene.prompt_options.find(o => o.option_id === optId || o.option_id === optId.toUpperCase());
+                        if (opt && (opt.videoUrl || opt.videoAssetId)) {
+                            refUrl = opt.videoUrl; refAssetId = opt.videoAssetId;
+                        }
+                    }
+                    if (!refUrl && !refAssetId) {
+                        refUrl = targetScene.videoUrl; refAssetId = targetScene.videoAssetId;
+                    }
+                } else {
+                    // Extract Image
+                    if (optId && targetScene.prompt_options) {
+                        const opt = targetScene.prompt_options.find(o => o.option_id === optId || o.option_id === optId.toUpperCase());
+                        if (opt && (opt.imageUrl || opt.imageAssetId)) {
+                            refUrl = opt.imageUrl; refAssetId = opt.imageAssetId;
+                        }
+                    }
+                    if (!refUrl && !refAssetId) {
+                        refUrl = targetScene.imageUrl; refAssetId = targetScene.imageAssetId;
+                    }
+                }
+                resolved = !!(refUrl || refAssetId);
+                if (resolved) isVideoRef = expectVideo;
+            }
+        }
+
+        // ── 3. Normal Asset Resolution (if not resolved as Scene Media) ──
+        if (!resolved) {
+            const asset = resolveTagToAsset(tag, assets);
+            if (asset) {
+                let finalAsset = { ...asset };
+                if (finalAsset.refImageUrl?.startsWith('blob:') && finalAsset.refImageAssetId) {
+                    try {
+                        const base64 = await loadAssetBase64(finalAsset.refImageAssetId);
+                        if (base64) {
+                            finalAsset.refImageUrl = base64.replace(/^data:[^;]+/, 'data:image/png');
+                        }
+                    } catch (e) {
+                        console.error("[API Debug] Failed to unpack normal asset reference from IndexedDB", e);
+                    }
+                }
+                usedAssets.push(finalAsset);
+                resolved = true;
+            }
+        }
+
+        // ── 4. Finalize Scene Media Asset ──
+        if (resolved && (refUrl || refAssetId)) {
+            // Unpack from IndexedDB if necessary (including when refUrl is a browser local blob: URL)
+            if (refAssetId && (!refUrl || refUrl.startsWith('blob:'))) {
+                try {
+                    refUrl = await loadAssetBase64(refAssetId) || undefined;
+                } catch (e) {
+                    console.error("[API Debug] Failed to unpack reference Blob from IndexedDB", e);
+                }
+            }
+
+            // Push to used assets as a standard asset object
+            usedAssets.push({
+                id: tag.id || `scene_ref_${tag.name}`,
+                name: tag.name,
+                description: 'Storyboard Reference',
+                type: 'item', 
+                refImageUrl: isVideoRef ? undefined : refUrl,
+                refVideoUrl: isVideoRef ? refUrl : undefined,
+                refImageAssetId: isVideoRef ? undefined : refAssetId,
+            });
+        }
+    }
+
+    const finalizedAssets: Asset[] = [];
+    for (const asset of usedAssets) {
+        let finalAsset = { ...asset };
+        if (finalAsset.refImageUrl?.startsWith('blob:')) {
+            if (finalAsset.refImageAssetId) {
+                try {
+                    const base64 = await loadAssetBase64(finalAsset.refImageAssetId);
+                    if (base64) {
+                        finalAsset.refImageUrl = base64.replace(/^data:[^;]+/, 'data:image/png');
+                    }
+                } catch (e) {
+                    console.error("[API Debug] Failed to unpack asset from IndexedDB in final check", e);
+                }
+            }
+            if (finalAsset.refImageUrl?.startsWith('blob:')) {
+                const base64 = await blobUrlToBase64(finalAsset.refImageUrl);
+                if (base64) {
+                    finalAsset.refImageUrl = base64.replace(/^data:[^;]+/, 'data:image/png');
+                }
+            }
+        }
+        finalizedAssets.push(finalAsset);
+    }
+    return finalizedAssets;
+};
+
 /** Generate a scene image (storyboard) */
 export const generateSceneImage = async (
     scene: Scene,
@@ -232,82 +420,8 @@ export const generateSceneImage = async (
     const option = optionId && scene.prompt_options ? scene.prompt_options.find(o => o.option_id === optionId) : null;
     const prompt = option ? (option.np_prompt || option.video_prompt || '') : (scene.np_prompt || scene.visual_desc || '');
 
-    // SSOT: The prompt text is the ONLY source of truth for assets in this generation
-    const tags = extractAssetTags(prompt);
-
-    // Separate Standard Tags from Storyboard Tags
-    const storyboardTags = tags.filter(t => isStoryboardTag(t.name));
-    const normalTags = tags.filter(t => !isStoryboardTag(t.name));
-
-    // 1. Resolve standard assets
-    const usedAssets: Asset[] = [];
-    for (const tag of normalTags) {
-        const asset = resolveTagToAsset(tag, assets);
-        if (asset) usedAssets.push(asset);
-    }
-
-    // 2. Resolve storyboard reference images and treat them as normal assets!
-    if (storyboardTags.length > 0 && allScenes) {
-        for (const tag of storyboardTags) {
-            let idPart = tag.name.replace('分镜', ''); // e.g. "S03-A"
-            let optionSuffix: string | undefined;
-
-            const suffixMatch = idPart.match(/-([a-zA-Z0-9]+)$/);
-            if (suffixMatch) {
-                optionSuffix = suffixMatch[1]; // "A"
-                idPart = idPart.substring(0, idPart.length - suffixMatch[0].length); // "S03"
-            }
-
-            const targetRefId = tag.id || (optionSuffix ? `scene_img_${idPart}_${optionSuffix}` : `scene_img_${idPart}`);
-
-            // Find the scene and option that matches the reference tag
-            let refUrl: string | undefined;
-            let refAssetId: string | undefined;
-
-            // Resilient lookup: handle prefixes like 'E1_S03' when UI tag is just 'S03'
-            const targetScene = allScenes.find(s => s.id === idPart || s.id.endsWith(`_${idPart}`));
-
-            if (targetScene) {
-                // Priority 1: Requesting a specific option (e.g., S03-A)
-                if (optionSuffix && targetScene.prompt_options) {
-                    const matchedOpt = targetScene.prompt_options.find(o =>
-                        o.option_id === optionSuffix || o.option_id === optionSuffix.toUpperCase()
-                    );
-                    if (matchedOpt && (matchedOpt.imageUrl || matchedOpt.imageAssetId)) {
-                        refUrl = matchedOpt.imageUrl;
-                        refAssetId = matchedOpt.imageAssetId;
-                    }
-                }
-
-                // Priority 2: Fallback to scene's default main image
-                if (!refUrl && !refAssetId && (targetScene.imageUrl || targetScene.imageAssetId)) {
-                    refUrl = targetScene.imageUrl;
-                    refAssetId = targetScene.imageAssetId;
-                }
-            }
-
-            if (refAssetId && !refUrl) {
-                try {
-                    // Unpack from IndexedDB if necessary
-                    refUrl = await loadAssetBase64(refAssetId) || undefined;
-                } catch (e) {
-                    console.error("[API Debug] Failed to unpack reference image Blob from IndexedDB", e);
-                }
-            }
-
-            if (refUrl || refAssetId) {
-                // Treat the storyboard image as a normal asset and append it to our array
-                usedAssets.push({
-                    id: targetRefId,
-                    name: tag.name,
-                    description: 'Storyboard Reference',
-                    type: 'item',
-                    refImageUrl: refUrl,
-                    refImageAssetId: refAssetId
-                });
-            }
-        }
-    }
+    // Resolve all tags using unified dual-track logic
+    const usedAssets = await resolveUsedAssets(prompt, assets, allScenes || []);
 
     const styleToUse = getStyleWithLockedDna(globalStyle);
 
@@ -317,6 +431,49 @@ export const generateSceneImage = async (
         assets: usedAssets,
         optionId
     });
+};
+
+const uploadCache = new Map<string, string>();
+
+/** 
+ * Pre-upload local blob/base64 to cloud CDN to bypass Node.js memory limits and Base64 size expansion.
+ * Uses FormData to upload directly via backend proxy.
+ */
+export const uploadLocalMediaToCloud = async (urlOrBase64: string, idHint?: string): Promise<string> => {
+    if (!urlOrBase64) return urlOrBase64;
+    if (urlOrBase64.startsWith('http')) return urlOrBase64; // Already a cloud URL
+
+    const cacheKey = idHint || (urlOrBase64.length < 1000 ? urlOrBase64 : urlOrBase64.substring(0, 50) + urlOrBase64.length);
+    if (uploadCache.has(cacheKey)) {
+        return uploadCache.get(cacheKey)!;
+    }
+
+    try {
+        const response = await fetch(urlOrBase64);
+        const blob = await response.blob();
+        const formData = new FormData();
+        const ext = blob.type.split('/')[1] || 'bin';
+        formData.append('file', blob, `upload.${ext}`);
+
+        const res = await fetch(`${API_BASE}/media/upload`, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!res.ok) {
+            throw new Error(`Upload failed: ${res.status}`);
+        }
+
+        const data = await res.json();
+        if (data.url) {
+            uploadCache.set(cacheKey, data.url);
+            return data.url;
+        }
+        return urlOrBase64;
+    } catch (e) {
+        console.error("Failed to pre-upload media to cloud:", e);
+        return urlOrBase64; // Fallback to original data if upload fails
+    }
 };
 
 /** Submit a video generation task (returns immediately) */
@@ -330,87 +487,98 @@ export const generateVideo = async (
     optionId?: string
 ): Promise<{ taskId: string; operation: any }> => {
     const option = optionId && scene.prompt_options ? scene.prompt_options.find(o => o.option_id === optionId) : null;
-    const prompt = option ? (option.np_prompt || option.video_prompt || '') : (scene.np_prompt || scene.visual_desc || '');
+    const prompt = option ? (option.video_prompt || option.np_prompt || '') : (scene.video_prompt || scene.np_prompt || scene.visual_desc || '');
 
-    // SSOT: The video_prompt text is the ONLY source of truth for assets in this generation
-    const tags = extractAssetTags(prompt);
+    // Resolve all tags using unified dual-track logic
+    const usedAssets = await resolveUsedAssets(prompt, assets, allScenes || []);
 
-    // Separate Standard Tags from Storyboard Tags
-    const storyboardTags = tags.filter(t => isStoryboardTag(t.name));
-    const normalTags = tags.filter(t => !isStoryboardTag(t.name));
-
-    // 1. Resolve standard assets
-    const usedAssets: Asset[] = [];
-    for (const tag of normalTags) {
-        const asset = resolveTagToAsset(tag, assets);
-        if (asset) usedAssets.push(asset);
-    }
-
-    // 2. Resolve storyboard reference images and treat them as normal assets!
-    if (storyboardTags.length > 0 && allScenes) {
-        for (const tag of storyboardTags) {
-            let idPart = tag.name.replace('分镜', ''); // e.g. "S03-A"
-            let optionSuffix: string | undefined;
-
-            const suffixMatch = idPart.match(/-([a-zA-Z0-9]+)$/);
-            if (suffixMatch) {
-                optionSuffix = suffixMatch[1]; // "A"
-                idPart = idPart.substring(0, idPart.length - suffixMatch[0].length); // "S03"
-            }
-
-            const targetRefId = tag.id || (optionSuffix ? `scene_img_${idPart}_${optionSuffix}` : `scene_img_${idPart}`);
-
-            // Find the scene and option that matches the reference tag
-            let refUrl: string | undefined;
-            let refAssetId: string | undefined;
-
-            // Resilient lookup: handle prefixes like 'E1_S03' when UI tag is just 'S03'
-            const targetScene = allScenes.find(s => s.id === idPart || s.id.endsWith(`_${idPart}`));
-
-            if (targetScene) {
-                // Priority 1: Requesting a specific option (e.g., S03-A)
-                if (optionSuffix && targetScene.prompt_options) {
-                    const matchedOpt = targetScene.prompt_options.find(o =>
-                        o.option_id === optionSuffix || o.option_id === optionSuffix.toUpperCase()
+    // 关键修复：首尾帧可能没写在提示词里，也可能是“另一个分镜的图片”，强制构造为 Asset
+    if (scene.isStartEndFrameMode && scene.startEndAssetIds) {
+        for (const id of scene.startEndAssetIds) {
+            if (id && !usedAssets.find(a => a.id === id)) {
+                const asset = assets.find(a => a.id === id);
+                if (asset) {
+                    usedAssets.push(asset);
+                } else {
+                    // 可能是分镜图片，去 allScenes 里找 (支持以 scene_img_S02_A 等 option 后缀形式匹配)
+                    const sceneMatch = allScenes.find(s => 
+                        s.id === id || 
+                        s.imageAssetId === id || 
+                        `scene_img_${s.id}` === id ||
+                        id.startsWith(`scene_img_${s.id}_`)
                     );
-                    if (matchedOpt && (matchedOpt.imageUrl || matchedOpt.imageAssetId)) {
-                        refUrl = matchedOpt.imageUrl;
-                        refAssetId = matchedOpt.imageAssetId;
+                    if (sceneMatch) {
+                        // 解析可选的 Option ID (如从 scene_img_S02_A 提取出 A)
+                        const prefix = `scene_img_${sceneMatch.id}_`;
+                        const optId = id.startsWith(prefix) ? id.slice(prefix.length) : null;
+                        
+                        let actualUrl = '';
+                        let imageAssetId = '';
+                        
+                        if (optId && sceneMatch.prompt_options) {
+                            const opt = sceneMatch.prompt_options.find(
+                                o => o.option_id === optId || o.option_id === optId.toUpperCase()
+                            );
+                            if (opt) {
+                                actualUrl = opt.imageUrl || '';
+                                imageAssetId = opt.imageAssetId || '';
+                            }
+                        }
+                        
+                        if (!actualUrl && !imageAssetId) {
+                            actualUrl = sceneMatch.imageUrl || '';
+                            imageAssetId = sceneMatch.imageAssetId || '';
+                        }
+                        
+                        if (!actualUrl && imageAssetId) {
+                            try {
+                                const b64 = await loadAssetBase64(imageAssetId);
+                                if (b64) {
+                                    // loadAssetBase64 already returns a full data URL, so we just sanitize the mime type
+                                    actualUrl = b64.replace(/^data:[^;]+/, 'data:image/png');
+                                }
+                            } catch (e) {
+                                console.error('Failed to load scene asset base64', e);
+                            }
+                        }
+                        
+                        if (actualUrl) {
+                            usedAssets.push({
+                                id: id,
+                                name: optId ? `Scene ${sceneMatch.id} Option ${optId}` : `Scene ${sceneMatch.id}`,
+                                type: 'item', // generic type
+                                description: '', // Required by Asset interface
+                                refImageUrl: actualUrl,
+                                refImageAssetId: imageAssetId || undefined
+                            });
+                        }
                     }
                 }
-
-                // Priority 2: Fallback to scene's default main image
-                if (!refUrl && !refAssetId && (targetScene.imageUrl || targetScene.imageAssetId)) {
-                    refUrl = targetScene.imageUrl;
-                    refAssetId = targetScene.imageAssetId;
-                }
-            }
-
-            if (refAssetId && !refUrl) {
-                try {
-                    // Unpack from IndexedDB if necessary
-                    refUrl = await loadAssetBase64(refAssetId) || undefined;
-                } catch (e) {
-                    console.error("[API Debug] Failed to unpack reference image Blob from IndexedDB", e);
-                }
-            }
-
-            if (refUrl || refAssetId) {
-                // Treat the storyboard image as a normal asset and append it to our array
-                usedAssets.push({
-                    id: targetRefId,
-                    name: tag.name,
-                    description: 'Storyboard Reference',
-                    type: 'item',
-                    refImageUrl: refUrl,
-                    refImageAssetId: refAssetId
-                });
             }
         }
     }
 
+    // Pre-upload heavy local assets to Cloud CDN to prevent Base64 payload bloat
+    for (const asset of usedAssets) {
+        if (asset.refVideoUrl) {
+            asset.refVideoUrl = await uploadLocalMediaToCloud(asset.refVideoUrl, `${asset.id}_video`);
+        }
+        if (asset.refImageUrl) {
+            asset.refImageUrl = await uploadLocalMediaToCloud(asset.refImageUrl, `${asset.id}_image`);
+        }
+        if (asset.refAudioUrl) {
+            asset.refAudioUrl = await uploadLocalMediaToCloud(asset.refAudioUrl, `${asset.id}_audio`);
+        }
+    }
+
+    // Also pre-upload the base storyboard image if provided as a local blob/base64
+    let finalImageBase64 = imageBase64;
+    if (finalImageBase64 && !finalImageBase64.startsWith('http')) {
+        finalImageBase64 = await uploadLocalMediaToCloud(finalImageBase64, `${scene.id}_${optionId || 'default'}_baseImage`);
+    }
+
     const styleToUse = getStyleWithLockedDna(globalStyle);
-    return post('/media/video', { imageBase64, scene, aspectRatio, assets: usedAssets, globalStyle: styleToUse, optionId });
+    return post('/media/video', { imageBase64: finalImageBase64, scene, aspectRatio, assets: usedAssets, globalStyle: styleToUse, optionId });
 };
 
 /** Poll video generation status (single check) */
@@ -422,7 +590,7 @@ export const getVideoStatus = async (operation: any): Promise<{ done: boolean; u
 export const pollVideoUntilDone = async (
     operation: any,
     intervalMs: number = 5000,
-    maxRetries: number = 60,
+    maxRetries: number = 180,
     onPoll?: (attempt: number) => void
 ): Promise<{ url: string }> => {
     for (let i = 0; i < maxRetries; i++) {
@@ -523,3 +691,8 @@ export const setModelConfig = async (config: {
 
 // =================== UTILITY (constructVideoPrompt stays frontend-side) =====================
 export { constructVideoPrompt } from '@/services/ai/media/video';
+
+/** Refresh expired signed CDN video URLs using the task operation cache */
+export const refreshVideoUrl = async (operation: any): Promise<{ url: string }> => {
+    return post('/media/refresh-url', { operation });
+};

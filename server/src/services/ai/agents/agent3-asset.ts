@@ -84,10 +84,6 @@ export const runAgent3_AssetProductionStream = async function* (
                             id: { type: Type.STRING },
                             narration: { type: Type.STRING },
                             visual_desc: { type: Type.STRING },
-                            video_duration: { type: Type.STRING },
-                            video_camera: { type: Type.STRING },
-                            video_lens: { type: Type.STRING },
-                            video_vfx: { type: Type.STRING },
                             prompt_options: {
                                 type: Type.ARRAY,
                                 items: {
@@ -105,10 +101,12 @@ export const runAgent3_AssetProductionStream = async function* (
                                             },
                                             required: ["shot_name", "description"]
                                         },
-                                        video_lens: { type: Type.STRING },
-                                        video_camera: { type: Type.STRING },
                                         video_prompt: { type: Type.STRING },
-                                        np_prompt: { type: Type.STRING }
+                                        np_prompt: { type: Type.STRING },
+                                        camera: { type: Type.STRING },
+                                        lens: { type: Type.STRING },
+                                        focal_length: { type: Type.STRING },
+                                        aperture: { type: Type.STRING }
                                     }
                                 }
                             },
@@ -127,7 +125,7 @@ export const runAgent3_AssetProductionStream = async function* (
                             audio_bgm: { type: Type.STRING },
                             assetIds: { type: Type.ARRAY, items: { type: Type.STRING } }
                         },
-                        required: ["id", "narration", "visual_desc", "video_duration", "audio_dialogue", "prompt_options"]
+                        required: ["id", "narration", "visual_desc", "audio_dialogue", "prompt_options"]
                     }
                 }
             },
@@ -182,8 +180,10 @@ export const runAgent3_AssetProductionStream = async function* (
                     if (scene.prompt_options && scene.prompt_options.length > 0) {
                         scene.np_prompt = scene.prompt_options[0].np_prompt;
                         scene.video_prompt = scene.prompt_options[0].video_prompt;
-                        scene.video_lens = scene.prompt_options[0].video_lens;
-                        scene.video_camera = scene.prompt_options[0].video_camera;
+                        scene.camera = scene.prompt_options[0].camera;
+                        scene.lens = scene.prompt_options[0].lens;
+                        scene.focal_length = scene.prompt_options[0].focal_length;
+                        scene.aperture = scene.prompt_options[0].aperture;
                     }
 
                     let np = scene.np_prompt || "";
@@ -286,7 +286,6 @@ export const runAgent3_AssetProductionStream = async function* (
                     prevBatchEndContext = [
                         lastScene.visual_desc || '',
                         `video_prompt 尾段: ${(lastScene.video_prompt || '').slice(-200)}`,
-                        lastScene.video_camera ? `运镜: ${lastScene.video_camera}` : '',
                         lastScene.audio_sfx ? `音效: ${lastScene.audio_sfx}` : ''
                     ].filter(Boolean).join(' | ');
                 }

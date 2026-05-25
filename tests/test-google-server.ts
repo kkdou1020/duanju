@@ -2,7 +2,7 @@ import { config } from 'dotenv';
 import path from 'path';
 config({ path: path.join(__dirname, '../.env') });
 
-import { GoogleProvider } from './src/services/ai/providers/google';
+import { GoogleProvider } from '../server/src/services/ai/providers/google';
 
 async function test() {
     try {

@@ -1,7 +1,14 @@
 import { Router, Request, Response } from 'express';
-import { generateAssetImage, generateSceneImage, buildAssetPrompt } from '../services/ai/media/image';
+import { generateAssetImage, generateSceneImage, buildAssetPrompt, reverseEngineerAngles } from '../services/ai/media/image';
 import { submitVideoGeneration, pollVideoStatus } from '../services/ai/media/video';
 import { generateSpeech } from '../services/ai/media/audio';
+import { getModelManager } from '../services/ai/model-manager';
+import multer from 'multer';
+
+const upload = multer({
+    limits: { fileSize: 25 * 1024 * 1024 }, // 25MB limit
+    storage: multer.memoryStorage()
+});
 
 const router = Router();
 
@@ -18,6 +25,55 @@ router.post('/asset-image', async (req: Request, res: Response) => {
     } catch (e: any) {
         console.error('[Media/asset-image]', e);
         res.status(500).json({ error: e?.message || 'Internal error' });
+    }
+});
+
+// POST /api/media/upload
+router.post('/upload', upload.single('file'), async (req: Request, res: Response) => {
+    try {
+        const file = req.file;
+        if (!file) {
+            return res.status(400).json({ error: 'No file uploaded' });
+        }
+
+        const modelManager = getModelManager();
+        const url = await modelManager.uploadFile(file.buffer, file.mimetype, file.originalname || 'upload.bin');
+        res.json({ url });
+    } catch (e: any) {
+        console.error('[Media/upload]', e);
+        res.status(500).json({ error: e?.message || 'Internal error' });
+    }
+});
+
+import fetch from 'node-fetch';
+
+// GET /api/media/download-proxy
+// Proxies video/image downloads from external CDNs to bypass browser CORS restrictions
+router.get('/download-proxy', async (req: Request, res: Response) => {
+    const mediaUrl = req.query.url as string;
+    if (!mediaUrl) {
+        return res.status(400).send('Missing url parameter');
+    }
+
+    try {
+        const response = await fetch(mediaUrl);
+        if (!response.ok) {
+            console.error(`[Media/download-proxy] Remote fetch failed with status: ${response.status}`);
+            return res.status(response.status).send(`Failed to fetch media: ${response.statusText}`);
+        }
+        res.writeHead(response.status, {
+            'Content-Type': response.headers.get('content-type') || 'application/octet-stream',
+            'Content-Length': response.headers.get('content-length') || '',
+            'Cache-Control': 'no-cache'
+        });
+        
+        const arrayBuf = await response.arrayBuffer();
+        res.end(Buffer.from(arrayBuf));
+    } catch (e: any) {
+        console.error('[Media/download-proxy] Exception:', e);
+        if (!res.headersSent) {
+            res.status(500).send(e?.message || 'Internal error');
+        }
     }
 });
 
@@ -122,12 +178,26 @@ router.post('/reverse-angles', async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Missing description or targetAngles' });
         }
         
-        // Dynamic import since it's a new export that might not be at the top level here yet
-        const { reverseEngineerAngles } = require('../services/ai/media/image');
         const result = await reverseEngineerAngles(description, targetAngles, imageBase64, language);
         res.json({ result });
     } catch (e: any) {
         console.error('[Media/reverse-angles]', e);
+        res.status(500).json({ error: e?.message || 'Internal error' });
+    }
+});
+
+// POST /api/media/refresh-url
+router.post('/refresh-url', async (req: Request, res: Response) => {
+    try {
+        const { operation } = req.body;
+        if (!operation) {
+            return res.status(400).json({ error: 'Missing required field: operation' });
+        }
+
+        const result = await pollVideoStatus(operation);
+        res.json(result);
+    } catch (e: any) {
+        console.error('[Media/refresh-url]', e);
         res.status(500).json({ error: e?.message || 'Internal error' });
     }
 });

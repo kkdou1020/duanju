@@ -8,8 +8,10 @@ interface LazyMediaProps {
   type: 'image' | 'video';
   alt?: string;
   className?: string;
+  imgClassName?: string;
   onClick?: () => void;
   controls?: boolean;
+  onError?: (error: any) => void;
 }
 
 const useInView = (options: IntersectionObserverInit) => {
@@ -43,7 +45,8 @@ export const LazyMedia: React.FC<LazyMediaProps> = ({
   className,
   imgClassName,
   onClick,
-  controls
+  controls,
+  onError
 }) => {
   // Use a large rootMargin to preload when close to viewport
   const [ref, isInView] = useInView({ rootMargin: '200px' });
@@ -76,9 +79,9 @@ export const LazyMedia: React.FC<LazyMediaProps> = ({
 
           {url ? (
             type === 'image' ? (
-              <img src={url} alt={alt} className={imgClassName || "w-full h-full object-contain"} />
+              <img src={url} alt={alt} className={imgClassName || "w-full h-full object-contain"} onError={onError} />
             ) : (
-              <video src={url} controls={controls} className={imgClassName || "w-full h-full object-contain"} />
+              <video src={url} controls={controls} className={imgClassName || "w-full h-full object-contain"} onError={onError} />
             )
           ) : (
             !loading && (

@@ -3,6 +3,7 @@ import { Scene, Asset } from '@/shared/types';
 import { Translation } from '@/services/i18n/translations';
 import { Video, Clock, Camera, Zap, Plus, X, Image as ImageIcon, Loader2, CheckCircle } from 'lucide-react';
 import MentionTextarea, { SceneImageCandidate } from '@/ui/components/MentionTextarea';
+import { modelManager, useModelConfig } from '@/services/ai/model-manager';
 
 interface SceneVideoPaneProps {
     scene: Scene;
@@ -20,8 +21,6 @@ interface SceneVideoPaneProps {
     onUnmentionAsset: (assetId: string) => void;
     onAssetUpload?: (type: 'video' | 'audio', file: File) => Promise<string | undefined>;
     onAssetDelete?: (assetId: string) => void;
-    onSpecCommit: (field: keyof Scene, value: string) => void;
-    onLocalSpecChange: (field: keyof Scene, value: string) => void;
     isStartEndFrameMode?: boolean;
     startEndAssetIds?: string[];
     onOpenEndFrameSelector: () => void;
@@ -46,8 +45,6 @@ const SceneVideoPane: React.FC<SceneVideoPaneProps> = ({
     onUnmentionAsset,
     onAssetUpload,
     onAssetDelete,
-    onSpecCommit,
-    onLocalSpecChange,
     isStartEndFrameMode,
     startEndAssetIds,
     onOpenEndFrameSelector,
@@ -61,8 +58,14 @@ const SceneVideoPane: React.FC<SceneVideoPaneProps> = ({
     // Also check sceneImages for scene_img_ type IDs
     const endFrameSceneImg = endFrameId && !endFrameAsset ? sceneImages?.find(s => s.id === endFrameId) : null;
     const endFrameName = endFrameAsset?.name || endFrameSceneImg?.name || endFrameId;
+
+    // Filter UI options based on selected model (Seedance vs Veo)
+    const config = useModelConfig();
+    const modelName = config.t8starVideoModel || "veo";
+    const isSeedance = modelName.includes("seedance") || modelName.includes("doubao");
+
     return (
-        <div className="p-3 flex flex-col gap-2 bg-gray-50 dark:bg-black/10 h-full">
+        <div className="p-3 flex flex-col gap-2 bg-gray-50 dark:bg-black/10 flex-1 min-h-0">
             <div className="flex justify-between items-center">
                 <h4 className="text-[10px] uppercase tracking-widest text-blue-400 font-bold flex items-center gap-2">
                     <Video className="w-3 h-3" />
@@ -70,58 +73,6 @@ const SceneVideoPane: React.FC<SceneVideoPaneProps> = ({
                     {isGeneratingPrompts && <Loader2 className="w-3 h-3 animate-spin text-blue-400" />}
                     {isPromptCompleted && !isGeneratingPrompts && <CheckCircle className="w-3 h-3 text-green-500" />}
                 </h4>
-            </div>
-
-            {/* Video Params Grid */}
-            <div className="grid grid-cols-2 gap-2 text-[10px] font-mono mb-1">
-                <div className="bg-blue-50 dark:bg-blue-500/10 p-1.5 rounded flex items-center gap-2 text-blue-800 dark:text-blue-200">
-                    <Clock className="w-3 h-3 text-blue-400" />
-                    <span className="opacity-50">{labels.durationLabel}:</span>
-                    <input
-                        value={scene.video_duration || ''}
-                        onChange={e => onLocalSpecChange('video_duration', e.target.value)}
-                        onBlur={e => onSpecCommit('video_duration', e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') { e.currentTarget.blur(); } }}
-                        className="bg-transparent w-full outline-none"
-                        placeholder="3s"
-                    />
-                </div>
-                <div className="bg-blue-50 dark:bg-blue-500/10 p-1.5 rounded flex items-center gap-2 text-blue-800 dark:text-blue-200">
-                    <Camera className="w-3 h-3 text-blue-400" />
-                    <span className="opacity-50">{labels.lensLabel}:</span>
-                    <input
-                        value={scene.video_lens || ''}
-                        onChange={e => onLocalSpecChange('video_lens', e.target.value)}
-                        onBlur={e => onSpecCommit('video_lens', e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') { e.currentTarget.blur(); } }}
-                        className="bg-transparent w-full outline-none"
-                        placeholder="35mm"
-                    />
-                </div>
-                <div className="bg-blue-50 dark:bg-blue-500/10 p-1.5 rounded flex items-center gap-2 text-blue-800 dark:text-blue-200">
-                    <Video className="w-3 h-3 text-blue-400" />
-                    <span className="opacity-50">{labels.cameraLabel}:</span>
-                    <input
-                        value={scene.video_camera || ''}
-                        onChange={e => onLocalSpecChange('video_camera', e.target.value)}
-                        onBlur={e => onSpecCommit('video_camera', e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') { e.currentTarget.blur(); } }}
-                        className="bg-transparent w-full outline-none"
-                        placeholder="Pan"
-                    />
-                </div>
-                <div className="bg-blue-50 dark:bg-blue-500/10 p-1.5 rounded flex items-center gap-2 text-blue-800 dark:text-blue-200">
-                    <Zap className="w-3 h-3 text-blue-400" />
-                    <span className="opacity-50">{labels.vfxLabel}:</span>
-                    <input
-                        value={scene.video_vfx || ''}
-                        onChange={e => onLocalSpecChange('video_vfx', e.target.value)}
-                        onBlur={e => onSpecCommit('video_vfx', e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') { e.currentTarget.blur(); } }}
-                        className="bg-transparent w-full outline-none"
-                        placeholder="-"
-                    />
-                </div>
             </div>
 
             {/* Start/End Frame Panel */}
@@ -178,6 +129,7 @@ const SceneVideoPane: React.FC<SceneVideoPaneProps> = ({
                 sceneImages={sceneImages}
                 videos={videos}
                 audios={audios}
+                disableVideos={!isSeedance}
                 referencedAssetIds={isStartEndFrameMode ? (startEndAssetIds || []) : (scene.videoAssetIds || [])}
                 onMention={onMentionAsset}
                 onUnmention={onUnmentionAsset}

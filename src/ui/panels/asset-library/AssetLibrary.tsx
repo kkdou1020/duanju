@@ -4,7 +4,7 @@ import { Translation } from '@/services/i18n/translations';
 import { Virtuoso } from 'react-virtuoso';
 import { Plus, Wand2, Camera, Upload, Package, Pause } from 'lucide-react';
 import { generateAssetImage } from '@/services/ai';
-import { loadAssetUrl, loadAssetBase64 } from '@/services/storage';
+import { loadAssetUrl, loadAssetBase64, saveAsset } from '@/services/storage';
 import { reverseEngineerAngles } from '@/services/api';
 import AssetRow from './AssetRow';
 
@@ -18,8 +18,6 @@ interface AssetLibraryProps {
     labels: Translation;
     hasText: boolean;
     currentStyle: GlobalStyle;
-    autoStart?: boolean;
-    onBatchComplete?: () => void;
     onImportFromGlobal?: () => void;
     language?: string;
 }
@@ -27,7 +25,7 @@ interface AssetLibraryProps {
 const AssetLibrary: React.FC<AssetLibraryProps> = ({
     assets, onUpdateAsset, onAddAsset, onDeleteAsset,
     onExtract, isExtracting, labels, hasText, currentStyle,
-    autoStart = false, onBatchComplete, onImportFromGlobal, language = "English"
+    onImportFromGlobal, language = "English"
 }) => {
     const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
     const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -35,15 +33,6 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
     const [isBatchGenerating, setIsBatchGenerating] = useState(false);
     const stopBatchRef = useRef(false);
 
-    // Auto-start mechanism
-    useEffect(() => {
-        if (autoStart && !isBatchGenerating) {
-            const t = setTimeout(() => {
-                handleBatchGenerate();
-            }, 500);
-            return () => clearTimeout(t);
-        }
-    }, [autoStart]);
 
     const toggleExpand = (id: string) => {
         const newSet = new Set(expandedIds);
@@ -67,6 +56,22 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
             const newSet = new Set(expandedIds);
             newSet.add(parentId);
             setExpandedIds(newSet);
+        }
+    };
+
+    const saveBase64Image = async (urlOrBase64: string): Promise<{ localUrl: string; assetId: string }> => {
+        if (!urlOrBase64 || !urlOrBase64.startsWith('data:')) {
+            return { localUrl: urlOrBase64, assetId: '' };
+        }
+        try {
+            const res = await fetch(urlOrBase64);
+            const blob = await res.blob();
+            const assetId = await saveAsset(blob);
+            const localUrl = URL.createObjectURL(blob);
+            return { localUrl, assetId };
+        } catch (e) {
+            console.error("Failed to save generated asset image to storage:", e);
+            return { localUrl: urlOrBase64, assetId: '' };
         }
     };
 
@@ -102,7 +107,14 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
                 }
             }
             const { imageUrl, prompt } = await generateAssetImage(asset, currentStyle, overridePrompt, referenceImage);
-            onUpdateAsset({ ...asset, refImageUrl: imageUrl, prompt });
+            let finalUrl = imageUrl;
+            let refImageAssetId: string | undefined;
+            if (imageUrl && imageUrl.startsWith('data:')) {
+                const saved = await saveBase64Image(imageUrl);
+                finalUrl = saved.localUrl;
+                refImageAssetId = saved.assetId;
+            }
+            onUpdateAsset({ ...asset, refImageUrl: finalUrl, refImageAssetId, prompt });
         } catch (e) {
             console.error("Meta Image Error", e);
         } finally {
@@ -131,9 +143,6 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
             return true;
         });
         if (missing.length === 0) {
-            if (onBatchComplete && !stopBatchRef.current) {
-                onBatchComplete();
-            }
             return;
         }
 
@@ -177,7 +186,14 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
                     }
                 }
                 const { imageUrl, prompt } = await generateAssetImage(asset, currentStyle, undefined, referenceImage);
-                onUpdateAsset({ ...asset, refImageUrl: imageUrl, prompt });
+                let finalUrl = imageUrl;
+                let refImageAssetId: string | undefined;
+                if (imageUrl && imageUrl.startsWith('data:')) {
+                    const saved = await saveBase64Image(imageUrl);
+                    finalUrl = saved.localUrl;
+                    refImageAssetId = saved.assetId;
+                }
+                onUpdateAsset({ ...asset, refImageUrl: finalUrl, refImageAssetId, prompt });
             } catch (e) {
                 console.error(`Failed to gen image for ${asset.name}`, e);
             } finally {
@@ -202,9 +218,6 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
             await Promise.all(workers);
         } finally {
             setIsBatchGenerating(false);
-            if (onBatchComplete && !stopBatchRef.current) {
-                onBatchComplete();
-            }
         }
     };
 
@@ -291,22 +304,68 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
         }
     };
 
-    const handleUploadAsset = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleUploadAsset = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-            const imageUrl = ev.target?.result as string;
-            const newAsset: Asset = {
-                id: `upload_${Date.now()}`,
-                name: file.name.split('.')[0],
-                description: 'Uploaded asset',
-                type: 'character',
-                refImageUrl: imageUrl
-            };
-            onAddAsset(newAsset);
-        };
-        reader.readAsDataURL(file);
+
+        // Check file size (20MB max for video/audio)
+        if (!file.type.startsWith('image/') && file.size > 20 * 1024 * 1024) {
+            alert("参考视频不可超过 20MB。由于 AI 模型仅需提取动作或运镜特征，建议您截取最核心的 5-15 秒片段，或使用 720P 分辨率上传以获得最快体验。");
+            e.target.value = '';
+            return;
+        }
+
+        const isVideo = file.type.startsWith('video/');
+        const isAudio = file.type.startsWith('audio/');
+        const baseName = file.name.split('.')[0];
+
+        if (isVideo || isAudio) {
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                const res = await fetch('/api/media/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!res.ok) throw new Error(await res.text());
+                const data = await res.json();
+                
+                const newAsset: Asset = {
+                    id: `upload_${Date.now()}`,
+                    name: baseName,
+                    description: `Uploaded ${isVideo ? 'video' : 'audio'} asset`,
+                    type: isVideo ? 'video' : 'audio',
+                };
+
+                if (isVideo) newAsset.refVideoUrl = data.url;
+                if (isAudio) newAsset.refAudioUrl = data.url;
+
+                onAddAsset(newAsset);
+            } catch (err) {
+                console.error("Upload failed", err);
+                alert("Upload failed. Check console for details.");
+            }
+        } else {
+            try {
+                const assetId = await saveAsset(file);
+                const localUrl = URL.createObjectURL(file);
+                const newAsset: Asset = {
+                    id: `upload_${Date.now()}`,
+                    name: baseName,
+                    description: 'Uploaded asset',
+                    type: 'character',
+                    refImageUrl: localUrl,
+                    refImageAssetId: assetId
+                };
+                onAddAsset(newAsset);
+            } catch (err) {
+                console.error("Failed to save uploaded asset image:", err);
+                alert("上传图片失败，请重试。");
+            }
+        }
+        
         e.target.value = '';
     };
 
@@ -335,9 +394,9 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
                     <span className="bg-indigo-100 dark:bg-banana-500/20 text-indigo-600 dark:text-banana-500 text-[10px] px-1.5 py-0.5 rounded-full">{assets.length}</span>
                 </h2>
                 <div className="flex gap-2">
-                    <label className="p-1.5 bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 rounded-lg text-gray-500 dark:text-gray-300 transition-colors cursor-pointer" title="Upload Asset">
+                    <label className="p-1.5 bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 rounded-lg text-gray-500 dark:text-gray-300 transition-colors cursor-pointer" title="Upload Asset (Image, Video or Audio)">
                         <Upload className="w-4 h-4" />
-                        <input type="file" className="hidden" accept="image/*" onChange={handleUploadAsset} />
+                        <input type="file" className="hidden" accept="image/*,video/*,audio/*" onChange={handleUploadAsset} />
                     </label>
                     <button onClick={handleBatchGenerate} className={`p-1.5 rounded-lg transition-colors ${isBatchGenerating ? 'bg-indigo-600 dark:bg-banana-500 text-white dark:text-black hover:bg-indigo-700 dark:hover:bg-banana-400' : 'bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 text-gray-500 dark:text-gray-300'}`} title={isBatchGenerating ? "暂停生成" : labels.genMissing}>
                         {isBatchGenerating ? <Pause className="w-4 h-4" /> : <Camera className="w-4 h-4" />}

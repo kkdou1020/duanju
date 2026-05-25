@@ -3,6 +3,8 @@ import { Scene, ImageGenStatus, GlobalStyle, Asset } from '@/shared/types';
 import { Translation } from '@/services/i18n/translations';
 import { LazyMedia } from '@/ui/common/LazyMedia';
 import { Image as ImageIcon, Aperture, RefreshCw, Download, Video, Film, Upload, Trash2 } from 'lucide-react';
+import { refreshVideoUrl } from '@/services/api';
+import { downloadAndSaveVideo } from '@/services/storage';
 
 interface SceneMediaViewerProps {
     scene: Scene;
@@ -45,6 +47,33 @@ const SceneMediaViewer: React.FC<SceneMediaViewerProps> = ({
 }) => {
     const isStartEndMode = !!scene.isStartEndFrameMode;
 
+    const handleVideoError = async () => {
+        const operation = isStartEndMode ? scene.startEndVideoOperation : scene.operation;
+        if (!operation) {
+            console.warn("No operation cache found on scene for auto re-signature.");
+            return;
+        }
+
+        try {
+            console.log(`[CDN Refresh] Refreshing URL for scene ${scene.id}...`);
+            const refreshRes = await refreshVideoUrl(operation);
+            if (refreshRes && refreshRes.url) {
+                console.log(`[CDN Refresh] Obtained fresh URL, downloading to IndexedDB...`);
+                const { localUrl, assetId } = await downloadAndSaveVideo(refreshRes.url);
+                if (isStartEndMode) {
+                    onUpdate(scene.id, 'startEndVideoUrl', localUrl);
+                    if (assetId) onUpdate(scene.id, 'startEndVideoAssetId', assetId);
+                } else {
+                    onUpdate(scene.id, 'videoUrl', localUrl);
+                    if (assetId) onUpdate(scene.id, 'videoAssetId', assetId);
+                }
+                console.log(`[CDN Refresh] Successfully recovered expired video for scene ${scene.id}`);
+            }
+        } catch (e) {
+            console.error("Auto failover re-signature failed:", e);
+        }
+    };
+
     // ── START/END FRAME MODE: keep original behavior ──
     if (isStartEndMode) {
         return (
@@ -77,6 +106,7 @@ const SceneMediaViewer: React.FC<SceneMediaViewerProps> = ({
                                 type="video" controls
                                 className="w-full h-full max-h-[320px]"
                                 imgClassName="max-w-full max-h-[320px] object-contain"
+                                onError={handleVideoError}
                             />
                         ) : (
                             <LazyMedia
@@ -221,6 +251,7 @@ const SceneMediaViewer: React.FC<SceneMediaViewerProps> = ({
                                 type="video" controls
                                 className="w-full h-full max-h-[320px]"
                                 imgClassName="max-w-full max-h-[320px] object-contain"
+                                onError={handleVideoError}
                             />
                             {/* Video Toolbar */}
                             <div className="absolute top-2 right-2 flex flex-col gap-2 z-10">

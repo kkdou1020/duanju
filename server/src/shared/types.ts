@@ -10,12 +10,15 @@ export interface PromptOption {
   lens_reference: LensReference;
   np_prompt: string;        
   video_prompt: string;     
-  video_camera: string;
-  video_lens: string;       
   imageUrl?: string;        // Option-specific image URL
   imageAssetId?: string;    // Option-specific image asset ID
   videoUrl?: string;        // Option-specific video URL
   videoAssetId?: string;    // Option-specific video asset ID
+  operation?: any;          // Cache of AI operation for re-signing URL
+  camera?: string;
+  lens?: string;
+  focal_length?: string;
+  aperture?: string;
 }
 
 export interface DialogueLine {
@@ -27,12 +30,12 @@ export interface Scene {
     id: string;
     narration: string;
     visual_desc: string;
-    video_duration?: string;
-    video_camera?: string;
-    video_lens?: string;
-    video_vfx?: string;
     np_prompt: string;
     video_prompt?: string;
+    camera?: string;
+    lens?: string;
+    focal_length?: string;
+    aperture?: string;
     audio_dialogue?: DialogueLine[];
     audio_sfx?: string;
     audio_bgm?: string;
@@ -53,6 +56,8 @@ export interface Scene {
     video_prompt_backup?: string;
     status?: 'success' | 'failed' | 'pending';
     error?: string;
+    operation?: any;                 // Cache of standard video operation
+    startEndVideoOperation?: any;    // Cache of start/end video operation
 }
 
 
@@ -66,10 +71,12 @@ export interface Asset {
     id: string;
     name: string;
     description: string;
-    type: 'character' | 'location' | 'item';
+    type: 'character' | 'location' | 'item' | 'video' | 'audio';
     visualDna?: string;
     refImageUrl?: string;
     refImageAssetId?: string;
+    refVideoUrl?: string; // URL for video reference (Seedance)
+    refAudioUrl?: string; // URL for audio reference (Seedance)
     prompt?: string;
     parentId?: string;
     variantName?: string;

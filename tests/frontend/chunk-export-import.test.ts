@@ -17,9 +17,6 @@ function makeScene(overrides: Partial<Scene> = {}): Scene {
         startEndVideoUrl: 'http://vid.test/se1.mp4',
         startEndVideoAssetId: 'asset_se_1',
         narrationAudioUrl: 'http://audio.test/1.wav',
-        video_camera: 'Pan right',
-        video_lens: '35mm',
-        video_duration: '3s',
         assetIds: ['hero'],
         ...overrides,
     };

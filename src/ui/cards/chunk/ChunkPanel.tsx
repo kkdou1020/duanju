@@ -24,8 +24,6 @@ interface ChunkPanelProps {
     language: string;
     isActive: boolean;
     onToggle: () => void;
-    autoShoot?: boolean;
-    isLocked?: boolean;
     flashSceneId?: string;
 }
 
@@ -34,7 +32,7 @@ const ChunkPanel: React.FC<ChunkPanelProps> = ({
     onUpdateChunk, onDeleteChunk, onCopyChunk, onSceneUpdate, onDuplicateScene,
     onExtract, onGenerateScript, onGenerateBeats, onGeneratePrompts, onGenerateImage,
     language, isActive, onToggle,
-    autoShoot = false, isLocked = false, flashSceneId
+    flashSceneId
 }) => {
     const {
         loadingStep, scriptError, exportProgress,
@@ -53,22 +51,12 @@ const ChunkPanel: React.FC<ChunkPanelProps> = ({
         onExtract, onGenerateScript, onGenerateBeats, onGeneratePrompts, onGenerateImage, onToggle
     });
 
-    // Auto-Shoot mechanism
-    useEffect(() => {
-        if (autoShoot) {
-            const t = setTimeout(() => {
-                handleShoot();
-            }, 500);
-            return () => clearTimeout(t);
-        }
-    }, [autoShoot]);
-
     return (
         <>
             <div className={`bg-white dark:bg-dark-800 rounded-xl border overflow-hidden shadow-md dark:shadow-lg transition-all duration-300 ease-in-out w-[75%] ${isActive ? 'border-indigo-500/30 dark:border-banana-500/30 ring-1 ring-indigo-500/20 dark:ring-banana-500/20' : 'border-gray-200 dark:border-white/10'}`}>
 
                 {/* Header */}
-                <div className={`p-4 flex items-center justify-between bg-gray-50 dark:bg-white/5 cursor-pointer hover:bg-gray-100 dark:hover:bg-white/10 ${isLocked ? 'opacity-75' : ''}`} onClick={onToggle}>
+                <div className="p-4 flex items-center justify-between bg-gray-50 dark:bg-white/5 cursor-pointer hover:bg-gray-100 dark:hover:bg-white/10" onClick={onToggle}>
                     <div className="flex items-center gap-4">
                         <button className="text-gray-400 dark:text-gray-500">
                             {isActive ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
@@ -81,7 +69,6 @@ const ChunkPanel: React.FC<ChunkPanelProps> = ({
                                     onChange={(e) => onUpdateChunk(chunk.id, { title: e.target.value })}
                                     className="bg-transparent text-sm font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500/50 dark:focus:ring-banana-500/50 rounded px-1 -ml-1 hover:bg-gray-200 dark:hover:bg-white/5 transition-colors w-full"
                                 />
-                                {isLocked && <span className="text-[10px] bg-indigo-100 dark:bg-banana-500/20 text-indigo-600 dark:text-banana-400 px-2 py-0.5 rounded-full border border-indigo-200 dark:border-banana-500/30 whitespace-nowrap">Auto-Focus</span>}
                             </div>
                             <p
                                 className="text-xs text-gray-500 font-mono mt-1 cursor-pointer hover:text-indigo-600 dark:hover:text-banana-400 transition-colors flex items-center gap-1 group"
@@ -289,7 +276,6 @@ const ChunkPanel: React.FC<ChunkPanelProps> = ({
                                         onAddAsset={handleAddChunkAssets}
                                         language={language}
                                         chapterScenes={chunk.scenes}
-                                        allChunks={allChunks}
                                         chunk={chunk}
                                         onUpdateChunk={onUpdateChunk}
                                     />

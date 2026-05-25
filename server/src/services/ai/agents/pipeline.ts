@@ -7,6 +7,8 @@ import { runAgent2_Annotation } from "./agent2-visual";
 import { runAgent3_AssetProduction, runAgent3_AssetProductionStream } from "./agent3-asset";
 import { extractAssetsFromBeats } from "../style/index";
 import { segmentScript, countBeatSegments } from "./script-segmenter";
+import { computeStylePrefix } from "../media/image";
+export { computeStylePrefix };
 
 // --- HELPER for Agent 2/3 Retry with Validation ---
 export async function executeWithRetryAndValidation<T>(
@@ -46,12 +48,6 @@ export const analyzeNarrative = async (
 ): Promise<NarrativeBlueprint> => {
     return await runAgent1_NarrativeAnalysis(text, language, prevContext, episodeCount, onProgress, onBatchComplete, directorStyle, directorStrength);
 };
-
-// --- Helper: compute stylePrefix from GlobalStyle ---
-export function computeStylePrefix(style: GlobalStyle): string {
-    // 视觉 DNA 只需要直接使用全局定义的标签，不需要额外的拼装逻辑
-    return style.visualTags || "";
-}
 
 // --- Step 1: Generate Beat Sheet + Extract Assets ---
 export const generateBeatSheet = async (
@@ -157,10 +153,6 @@ export const generateBeatSheet = async (
         visual_desc: `[${beat.shot_name || beat.shot_id || ''}] ${beat.visual_action || ''}`,
         np_prompt: '',
         video_prompt: '',
-        video_duration: '',
-        video_camera: beat.camera_movement || '',
-        video_lens: beat.shot_id || '',
-        video_vfx: '',
         audio_sfx: beat.audio_subtext || '',
         audio_dialogue: [],
         assetIds: [],

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { Scene, ImageGenStatus, GlobalStyle, Asset, NovelChunk } from '@/shared/types';
 import { Translation } from '@/services/i18n/translations';
 import { useSceneAssets } from './useSceneAssets';
@@ -26,7 +26,6 @@ export interface UseSceneCardProps {
     isOptimizing?: boolean;
     flash?: boolean;
     chapterScenes?: Scene[];
-    allChunks: NovelChunk[];
     chunk: NovelChunk;
     onUpdateChunk: (id: string, updates: Partial<NovelChunk> | ((c: NovelChunk) => Partial<NovelChunk>)) => void;
 }
@@ -48,18 +47,21 @@ export function useSceneCard(props: UseSceneCardProps) {
         isOptimizing = false,
         flash = false,
         chapterScenes = [],
-        allChunks,
         chunk,
         onUpdateChunk
     } = props;
 
     // ── Sub-hooks ──
     const assetState = useSceneAssets({
-        scene, assets, globalStyle, language, chapterScenes, allChunks, chunk, onUpdate, onUpdateChunk
+        scene, assets, globalStyle, language, chapterScenes, chunk, onUpdate, onUpdateChunk
     });
 
+    const combinedAssets = useMemo(() => {
+        return [...assets, ...(chunk.assets || [])];
+    }, [assets, chunk.assets]);
+
     const mediaState = useSceneMedia({
-        scene, characterDesc, globalStyle, assets,
+        scene, characterDesc, globalStyle, assets: combinedAssets,
         areAssetsReady, language, chapterScenes, onUpdate,
         onGenerateImageOverride, onImageGenerated, onVideoGenerated,
         checkImageReady, checkVideoReady
@@ -72,12 +74,17 @@ export function useSceneCard(props: UseSceneCardProps) {
         if (scene.imageUrl) {
             if (scene.isStartEndFrameMode) {
                 const currentSceneImgId = `scene_img_${scene.id}`;
-                onUpdate(scene.id, 'startEndAssetIds', [currentSceneImgId]);
+                const alreadySynced = Array.isArray(scene.startEndAssetIds) &&
+                    scene.startEndAssetIds.length === 1 &&
+                    scene.startEndAssetIds[0] === currentSceneImgId;
+                if (!alreadySynced) {
+                    onUpdate(scene.id, 'startEndAssetIds', [currentSceneImgId]);
+                }
             } else {
                 assetState.initializeVideoAssetIds();
             }
         }
-    }, [scene.imageUrl, scene.videoUrl, scene.narrationAudioUrl, scene.isStartEndFrameMode, scene.startEndVideoUrl, scene.startEndVideoAssetId]);
+    }, [scene.imageUrl, scene.videoUrl, scene.narrationAudioUrl, scene.isStartEndFrameMode, scene.startEndVideoUrl, scene.startEndVideoAssetId, scene.startEndAssetIds]);
 
     // ── Reload video element on source change ──
     useEffect(() => {
@@ -138,8 +145,6 @@ export function useSceneCard(props: UseSceneCardProps) {
         // Handlers from assets
         handleAddAsset: assetState.handleAddAsset,
         handleRemoveAsset: assetState.handleRemoveAsset,
-        handleSpecCommit: assetState.handleSpecCommit,
-        handleLocalSpecChange: assetState.handleLocalSpecChange,
         handleMentionVideo: assetState.handleMentionVideo,
         handleUnmentionVideo: assetState.handleUnmentionVideo,
         handleMentionImage: assetState.handleMentionImage,

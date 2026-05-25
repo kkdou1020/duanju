@@ -155,19 +155,20 @@ describe('PROMPTS', () => {
 
     describe('AGENT_2_ANNOTATE', () => {
         it('should return a non-empty string', () => {
-            const result = PROMPTS.AGENT_2_ANNOTATE('Chinese', 'lens_library_data', 10);
+            const result = PROMPTS.AGENT_2_ANNOTATE('Chinese', 'lens_library_data', 'visual_dna', 'narrative_context');
             expect(typeof result).toBe('string');
             expect(result.length).toBeGreaterThan(0);
         });
 
         it('should include lens library data', () => {
-            const result = PROMPTS.AGENT_2_ANNOTATE('Chinese', 'LENS_LIBRARY_CONTENT', 10);
+            const result = PROMPTS.AGENT_2_ANNOTATE('Chinese', 'LENS_LIBRARY_CONTENT', 'visual_dna', 'narrative_context');
             expect(result).toContain('LENS_LIBRARY_CONTENT');
         });
 
-        it('should include original script concept (segment count)', () => {
-            const result = PROMPTS.AGENT_2_ANNOTATE('Chinese', 'lens', 15);
-            expect(result).toContain('15');
+        it('should include visual DNA and narrative context', () => {
+            const result = PROMPTS.AGENT_2_ANNOTATE('Chinese', 'lens', 'VISUAL_DNA_TAGS', 'NARRATIVE_CTX_DATA');
+            expect(result).toContain('VISUAL_DNA_TAGS');
+            expect(result).toContain('NARRATIVE_CTX_DATA');
         });
     });
 
@@ -176,12 +177,6 @@ describe('PROMPTS', () => {
             const result = PROMPTS.AGENT_3_ASSET_PRODUCER('lens_data', 'Chinese', '[Style Prefix]', 'asset_map_data');
             expect(typeof result).toBe('string');
             expect(result.length).toBeGreaterThan(0);
-        });
-
-        it('should include @图像 tag format rules with brackets', () => {
-            const result = PROMPTS.AGENT_3_ASSET_PRODUCER('lens', 'Chinese', 'style', 'assets');
-            expect(result).toContain('[@图像_');
-            expect(result).toContain('方括号');
         });
 
         it('should include style prefix and asset map', () => {

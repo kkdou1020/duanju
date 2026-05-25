@@ -83,7 +83,7 @@ export const computeStylePrefix = (style: GlobalStyle): string => {
     }
     const workStyle = style.work?.custom || (style.work?.selected !== 'None' ? style.work?.selected : '') || '';
     const useOriginalCharacters = style.work?.useOriginalCharacters || false;
-    const textureStyle = style.texture?.custom || (style.texture?.selected !== 'None' ? style.texture?.selected : 'Realistic') || 'Realistic';
+    const textureStyle = style.texture?.custom || (style.texture?.selected !== 'None' ? style.texture?.selected : '') || '';
     const visualDna = style.visualTags || "";
 
     const isStandardPrefix = visualDna.trim().startsWith("[") && visualDna.includes("]");
@@ -92,7 +92,7 @@ export const computeStylePrefix = (style: GlobalStyle): string => {
 
     if (useOriginalCharacters) {
         if (!workStyle || !workStyle.trim()) {
-            stylePrefix = "Cinematic";
+            stylePrefix = visualDna || "Cinematic";
         } else {
             const normalizedWork = workStyle.trim();
             const hasChinese = /[\u4e00-\u9fa5]/.test(normalizedWork);
@@ -105,13 +105,17 @@ export const computeStylePrefix = (style: GlobalStyle): string => {
         }
     } else if (isStandardPrefix) {
         stylePrefix = visualDna;
+    } else if (visualDna) {
+        stylePrefix = visualDna;
+    } else if (!workStyle && !textureStyle) {
+        stylePrefix = "";
     } else {
         const medium = workStyle || "Cinematic";
         const era = "Modern";
         const color = "Cinematic Color";
         const lighting = "Volumetric Lighting";
-        const texture = textureStyle || "High Quality";
-        stylePrefix = `[${medium}][${era}][${color}][${lighting}][${texture}], ((Art Style: ${workStyle})), ((Texture: ${textureStyle}))`;
+        const texture = textureStyle || "Realistic";
+        stylePrefix = `[${medium}][${era}][${color}][${lighting}][${texture}], ((Art Style: ${workStyle})), ((Texture: ${textureStyle || 'Realistic'}))`;
     }
     return stylePrefix;
 };
@@ -270,6 +274,23 @@ export const generateSceneImage = async (
     let finalPrompt = basePrompt;
     if (stylePrefix && !basePrompt.includes(stylePrefix.trim())) {
         finalPrompt = `${stylePrefix}, ${basePrompt}`;
+    }
+
+    // Append camera parameters if present
+    const camera = option?.camera || scene.camera;
+    const lens = option?.lens || scene.lens;
+    const focal_length = option?.focal_length || scene.focal_length;
+    const aperture = option?.aperture || scene.aperture;
+
+    const cameraVal = camera && camera !== 'None' ? `Shot on ${camera}` : null;
+    const lensVal = lens && lens !== 'None' ? `${lens} lens` : null;
+    const focalVal = focal_length && focal_length !== 'None' ? `${focal_length}mm` : null;
+    const apertureVal = aperture && aperture !== 'None' ? aperture : null;
+
+    const cameraParts = [cameraVal, lensVal, focalVal, apertureVal].filter(Boolean);
+    if (cameraParts.length > 0) {
+        const cameraSuffix = cameraParts.join(', ');
+        finalPrompt = `${finalPrompt}, ${cameraSuffix}`;
     }
 
     // 1. Identify Assets - Frontend SSOT provides exactly what is needed!

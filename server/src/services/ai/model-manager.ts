@@ -25,6 +25,7 @@ export interface ModelConfig {
     t8starImageQuality?: string;
     t8starNanoImageSize?: string;
     t8starNanoAspectRatio?: string;
+    t8starVideoModel?: string;
 }
 
 const DEFAULT_CONFIG: ModelConfig = {
@@ -36,6 +37,7 @@ const DEFAULT_CONFIG: ModelConfig = {
     t8starImageQuality: "auto",
     t8starNanoImageSize: "2K",
     t8starNanoAspectRatio: "16:9",
+    t8starVideoModel: "veo",
 };
 
 const VALID_PROVIDERS: ProviderType[] = ["polo", "t8star", "google"];
@@ -89,6 +91,9 @@ class ModelManager {
         }
         if (config.t8starNanoAspectRatio && typeof config.t8starNanoAspectRatio === 'string') {
             this.config.t8starNanoAspectRatio = config.t8starNanoAspectRatio;
+        }
+        if (config.t8starVideoModel && typeof config.t8starVideoModel === 'string') {
+            this.config.t8starVideoModel = config.t8starVideoModel;
         }
     }
 
@@ -158,6 +163,13 @@ class ModelManager {
             return this.t8star.speech(body);
         }
         throw new Error("Speech generation not supported");
+    }
+
+    public async uploadFile(fileBuffer: Buffer, mimeType: string, filename: string): Promise<string> {
+        if (this.t8star.uploadFile) {
+            return this.t8star.uploadFile(fileBuffer, mimeType, filename);
+        }
+        throw new Error("File upload not supported by current provider");
     }
 }
 

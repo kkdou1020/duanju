@@ -17,9 +17,6 @@ function makeScene(overrides: Partial<Scene> = {}): Scene {
         startEndVideoUrl: 'http://vid.test/se1.mp4',
         startEndVideoAssetId: 'asset_se_1',
         narrationAudioUrl: 'http://audio.test/1.wav',
-        video_camera: 'Pan right',
-        video_lens: '35mm',
-        video_duration: '3s',
         assetIds: ['hero_base'],
         ...overrides,
     };
@@ -112,7 +109,7 @@ describe('buildCopiedChunk', () => {
         expect(copyScene.narrationAudioUrl).toBeUndefined();
     });
 
-    it('7. 场景内容保留 — narration/visual_desc/np_prompt/camera 等保留', () => {
+    it('7. 场景内容保留 — narration/visual_desc/np_prompt 等保留', () => {
         const chunks = [makeChunk()];
         const result = buildCopiedChunk(chunks, 'chunk_1');
         const copyScene = result[1].scenes[0];
@@ -121,9 +118,6 @@ describe('buildCopiedChunk', () => {
         expect(copyScene.narration).toBe(origScene.narration);
         expect(copyScene.visual_desc).toBe(origScene.visual_desc);
         expect(copyScene.np_prompt).toBe(origScene.np_prompt);
-        expect(copyScene.video_camera).toBe(origScene.video_camera);
-        expect(copyScene.video_lens).toBe(origScene.video_lens);
-        expect(copyScene.video_duration).toBe(origScene.video_duration);
         expect(copyScene.assetIds).toEqual(origScene.assetIds);
     });
 

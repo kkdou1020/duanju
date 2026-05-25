@@ -216,3 +216,70 @@ export const clearState = async (key: string) => {
     throw e;
   }
 };
+
+export interface StorageEstimateInfo {
+  usage: number; // bytes
+  quota: number; // bytes
+  percentage: number; // 0 to 100
+}
+
+export const getStorageEstimate = async (): Promise<StorageEstimateInfo> => {
+  if (navigator.storage && navigator.storage.estimate) {
+    const estimate = await navigator.storage.estimate();
+    const usage = estimate.usage || 0;
+    const quota = estimate.quota || 1; // avoid divide by zero
+    return {
+      usage,
+      quota,
+      percentage: Number(((usage / quota) * 100).toFixed(2))
+    };
+  }
+  return { usage: 0, quota: 1024 * 1024 * 1024 * 2, percentage: 0 };
+};
+
+export async function downloadAndSaveVideo(url: string): Promise<{ localUrl: string; assetId: string }> {
+  try {
+    const proxyUrl = `/api/media/download-proxy?url=${encodeURIComponent(url)}`;
+    const response = await fetch(proxyUrl);
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const blob = await response.blob();
+    const assetId = await saveAsset(blob);
+    const localUrl = URL.createObjectURL(blob);
+    return { localUrl, assetId };
+  } catch (e) {
+    console.error("Failed to download and save video:", e);
+    return { localUrl: url, assetId: '' };
+  }
+}
+
+export const cleanUnusedLocalBlobs = async (activeIds: Set<string>): Promise<{ cleanedCount: number }> => {
+  try {
+    const db = await getDB();
+    return new Promise<{ cleanedCount: number }>((resolve, reject) => {
+      try {
+        const transaction = db.transaction('Assets', 'readwrite');
+        const store = transaction.objectStore('Assets');
+        const request = store.getAllKeys();
+        
+        request.onsuccess = () => {
+          const keys = request.result as string[];
+          let cleanedCount = 0;
+          for (const key of keys) {
+            if (!activeIds.has(key)) {
+              store.delete(key);
+              cleanedCount++;
+            }
+          }
+          resolve({ cleanedCount });
+        };
+
+        request.onerror = () => reject(request.error);
+      } catch (e) {
+        reject(e);
+      }
+    });
+  } catch (e) {
+    console.error("Failed to clean unused local blobs:", e);
+    return { cleanedCount: 0 };
+  }
+};
