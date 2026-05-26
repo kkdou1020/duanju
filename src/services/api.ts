@@ -5,11 +5,12 @@
 
 const API_BASE = (import.meta as any).env?.DEV ? 'http://127.0.0.1:3002/api' : '/api';
 
-async function post<T = any>(path: string, body: any): Promise<T> {
+async function post<T = any>(path: string, body: any, signal?: AbortSignal): Promise<T> {
     const res = await fetch(`${API_BASE}${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        signal,
     });
     if (!res.ok) {
         const err = await res.json().catch(() => ({ error: res.statusText }));
@@ -415,13 +416,21 @@ export const generateSceneImage = async (
     globalStyle?: GlobalStyle,
     assets: Asset[] = [],
     optionId?: string,
-    allScenes?: Scene[]
+    allScenes?: Scene[],
+    signal?: AbortSignal
 ): Promise<any> => {
     const option = optionId && scene.prompt_options ? scene.prompt_options.find(o => o.option_id === optionId) : null;
     const prompt = option ? (option.np_prompt || option.video_prompt || '') : (scene.np_prompt || scene.visual_desc || '');
 
     // Resolve all tags using unified dual-track logic
     const usedAssets = await resolveUsedAssets(prompt, assets, allScenes || []);
+
+    // Pre-upload heavy local assets to Cloud CDN to prevent Base64 payload bloat
+    for (const asset of usedAssets) {
+        if (asset.refImageUrl) {
+            asset.refImageUrl = await uploadLocalMediaToCloud(asset.refImageUrl, `${asset.id}_image`);
+        }
+    }
 
     const styleToUse = getStyleWithLockedDna(globalStyle);
 
@@ -430,7 +439,7 @@ export const generateSceneImage = async (
         globalStyle: styleToUse,
         assets: usedAssets,
         optionId
-    });
+    }, signal);
 };
 
 const uploadCache = new Map<string, string>();
@@ -484,7 +493,8 @@ export const generateVideo = async (
     assets: Asset[] = [],
     globalStyle?: GlobalStyle,
     allScenes: Scene[] = [],
-    optionId?: string
+    optionId?: string,
+    signal?: AbortSignal
 ): Promise<{ taskId: string; operation: any }> => {
     const option = optionId && scene.prompt_options ? scene.prompt_options.find(o => o.option_id === optionId) : null;
     const prompt = option ? (option.video_prompt || option.np_prompt || '') : (scene.video_prompt || scene.np_prompt || scene.visual_desc || '');
@@ -578,12 +588,12 @@ export const generateVideo = async (
     }
 
     const styleToUse = getStyleWithLockedDna(globalStyle);
-    return post('/media/video', { imageBase64: finalImageBase64, scene, aspectRatio, assets: usedAssets, globalStyle: styleToUse, optionId });
-};
+    return post('/media/video', { imageBase64: finalImageBase64, scene, aspectRatio, assets: usedAssets, globalStyle: styleToUse, optionId }, signal);
+}
 
 /** Poll video generation status (single check) */
-export const getVideoStatus = async (operation: any): Promise<{ done: boolean; url?: string; error?: string }> => {
-    return post('/media/video-status', { operation });
+export const getVideoStatus = async (operation: any, signal?: AbortSignal): Promise<{ done: boolean; url?: string; error?: string }> => {
+    return post('/media/video-status', { operation }, signal);
 };
 
 /** Poll until video is done (frontend-side polling loop) */
@@ -591,23 +601,67 @@ export const pollVideoUntilDone = async (
     operation: any,
     intervalMs: number = 5000,
     maxRetries: number = 180,
-    onPoll?: (attempt: number) => void
+    onPoll?: (attempt: number) => void,
+    signal?: AbortSignal
 ): Promise<{ url: string }> => {
-    for (let i = 0; i < maxRetries; i++) {
-        await new Promise(resolve => setTimeout(resolve, intervalMs));
-        if (onPoll) onPoll(i + 1);
+    return new Promise((resolve, reject) => {
+        const encodedOp = encodeURIComponent(JSON.stringify(operation));
+        const url = `${API_BASE}/media/video-status-sse?operation=${encodedOp}`;
+        const eventSource = new EventSource(url);
+        
+        let pollCount = 0;
 
-        const status = await getVideoStatus(operation);
+        const cleanup = () => {
+            eventSource.close();
+            if (signal) {
+                signal.removeEventListener('abort', handleAbort);
+            }
+        };
 
-        if (status.error) {
-            throw new Error(status.error);
+        const handleAbort = () => {
+            cleanup();
+            reject(new DOMException("Aborted", "AbortError"));
+        };
+
+        if (signal) {
+            if (signal.aborted) {
+                reject(new DOMException("Aborted", "AbortError"));
+                return;
+            }
+            signal.addEventListener('abort', handleAbort);
         }
 
-        if (status.done && status.url) {
-            return { url: status.url };
-        }
-    }
-    throw new Error("Video generation timed out after polling.");
+        eventSource.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === 'poll') {
+                    pollCount++;
+                    if (onPoll) onPoll(pollCount);
+                    if (pollCount >= maxRetries) {
+                        cleanup();
+                        reject(new Error("Video generation timed out after polling."));
+                    }
+                } else if (data.type === 'done') {
+                    cleanup();
+                    if (data.url) {
+                        resolve({ url: data.url });
+                    } else if (data.error) {
+                        reject(new Error(data.error));
+                    } else {
+                        reject(new Error("Video generation completed but no output URL found."));
+                    }
+                }
+            } catch (err) {
+                cleanup();
+                reject(err);
+            }
+        };
+
+        eventSource.onerror = (err) => {
+            cleanup();
+            reject(new Error("SSE connection failed or was closed prematurely."));
+        };
+    });
 };
 
 /** Generate speech (TTS) */
@@ -645,7 +699,13 @@ export const extractVisualDna = async (
     useOriginalCharacters: boolean = false,
     images?: string[]
 ): Promise<any> => {
-    return post('/style/visual-dna', { workStyle, textureStyle, language, useOriginalCharacters, images });
+    let cloudImages: string[] | undefined;
+    if (images && images.length > 0) {
+        cloudImages = await Promise.all(
+            images.map((img, i) => uploadLocalMediaToCloud(img, `dna_ref_${Date.now()}_${i}`))
+        );
+    }
+    return post('/style/visual-dna', { workStyle, textureStyle, language, useOriginalCharacters, images: cloudImages });
 };
 
 /** Analyze visual style from reference images */
@@ -653,7 +713,10 @@ export const analyzeVisualStyleFromImages = async (
     images: string[],
     language: string
 ): Promise<any> => {
-    return post('/style/analyze-images', { images, language });
+    const cloudImages = await Promise.all(
+        images.map((img, i) => uploadLocalMediaToCloud(img, `style_analysis_${Date.now()}_${i}`))
+    );
+    return post('/style/analyze-images', { images: cloudImages, language });
 };
 
 /** Extract assets from beat sheet */

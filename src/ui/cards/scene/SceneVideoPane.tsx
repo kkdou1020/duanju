@@ -150,4 +150,31 @@ const SceneVideoPane: React.FC<SceneVideoPaneProps> = ({
     );
 };
 
-export default SceneVideoPane;
+const arraysEqual = (a?: any[], b?: any[]) => {
+    if (a === b) return true;
+    if (!a || !b) return false;
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) return false;
+    }
+    return true;
+};
+
+const SceneVideoPaneMemo = React.memo(SceneVideoPane, (prev, next) => {
+    return prev.labels === next.labels
+        && prev.hasImage === next.hasImage
+        && prev.isStartEndFrameMode === next.isStartEndFrameMode
+        && prev.isGeneratingPrompts === next.isGeneratingPrompts
+        && prev.isPromptCompleted === next.isPromptCompleted
+        && prev.scene.id === next.scene.id
+        && prev.scene.video_prompt === next.scene.video_prompt
+        && prev.scene.visual_desc === next.scene.visual_desc
+        && arraysEqual(prev.scene.videoAssetIds, next.scene.videoAssetIds)
+        && arraysEqual(prev.startEndAssetIds, next.startEndAssetIds)
+        && prev.assets === next.assets
+        && prev.sceneImages === next.sceneImages
+        && prev.videos === next.videos
+        && prev.audios === next.audios;
+});
+
+export default SceneVideoPaneMemo;

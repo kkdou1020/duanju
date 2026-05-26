@@ -462,6 +462,18 @@ export function useChunkManager(deps: ChunkManagerDeps) {
             const importedData = JSON.parse(jsonStr);
             const newChunk = parseImportData(importedData);
 
+            // Restore globalStyle if present
+            if (importedData.globalStyle) {
+                deps.setGlobalStyle(importedData.globalStyle);
+            }
+            // Restore fullNovelText and filename if present and currently empty
+            if (importedData.fullNovelText && !deps.fullNovelText) {
+                deps.setFullNovelText(importedData.fullNovelText);
+            }
+            if (importedData.filename && !deps.filename) {
+                deps.setFilename(importedData.filename);
+            }
+
             const restoredAssets: Asset[] = [];
             for (const asset of (importedData.assets || [])) {
                 let refImageUrl = asset.refImageUrl;
@@ -527,7 +539,52 @@ export function useChunkManager(deps: ChunkManagerDeps) {
                     if (audioUrl) narrationAudioUrl = audioUrl;
                 }
 
-                restoredScenes.push({ ...scene, imageUrl, imageAssetId, videoUrl, videoAssetId, startEndVideoUrl, startEndVideoAssetId, narrationAudioUrl });
+                let restoredOptions = scene.prompt_options;
+                if (scene.prompt_options && scene.prompt_options.length > 0) {
+                    restoredOptions = [];
+                    for (const opt of scene.prompt_options) {
+                        let optImageUrl = opt.imageUrl;
+                        let optImageAssetId = opt.imageAssetId;
+                        let optVideoUrl = opt.videoUrl;
+                        let optVideoAssetId = opt.videoAssetId;
+
+                        const optImgFile = zip.file(`images/${scene.id}_${opt.option_id}.png`);
+                        if (optImgFile) {
+                            const blob = await optImgFile.async("blob");
+                            optImageAssetId = await saveAsset(blob);
+                            const url = await loadAssetUrl(optImageAssetId);
+                            if (url) optImageUrl = url;
+                        }
+
+                        const optVidFile = zip.file(`videos/${scene.id}_${opt.option_id}.mp4`);
+                        if (optVidFile) {
+                            const blob = await optVidFile.async("blob");
+                            optVideoAssetId = await saveAsset(blob);
+                            const url = await loadAssetUrl(optVideoAssetId);
+                            if (url) optVideoUrl = url;
+                        }
+
+                        restoredOptions.push({
+                            ...opt,
+                            imageUrl: optImageUrl,
+                            imageAssetId: optImageAssetId,
+                            videoUrl: optVideoUrl,
+                            videoAssetId: optVideoAssetId,
+                        });
+                    }
+                }
+
+                restoredScenes.push({
+                    ...scene,
+                    imageUrl,
+                    imageAssetId,
+                    videoUrl,
+                    videoAssetId,
+                    startEndVideoUrl,
+                    startEndVideoAssetId,
+                    narrationAudioUrl,
+                    ...(restoredOptions ? { prompt_options: restoredOptions } : {}),
+                });
             }
             newChunk.scenes = restoredScenes;
 

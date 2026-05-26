@@ -86,9 +86,9 @@ const findAssetInfo = (
 
     // 2. Longest prefix-match fallback with overlap ratio gate (≥50%)
     const allCandidates = [
-        ...assets.map(a => ({ ...a, __cat: a.type })), 
-        ...sceneImages.map(a => ({ ...a, __cat: 'image' })), 
-        ...videos.map(a => ({ ...a, __cat: 'video' })), 
+        ...assets.map(a => ({ ...a, __cat: a.type })),
+        ...sceneImages.map(a => ({ ...a, __cat: 'image' })),
+        ...videos.map(a => ({ ...a, __cat: 'video' })),
         ...audios.map(a => ({ ...a, __cat: 'audio' }))
     ];
     let best: { displayName: string; thumb?: string; category?: string } | null = null;
@@ -110,7 +110,7 @@ const findAssetInfo = (
 // Color schemes per mode
 const CHIP_COLORS = {
     video: { bg: 'rgba(59,130,246,0.15)', border: 'rgba(59,130,246,0.3)', text: '#60a5fa' },  // blue
-    image: { bg: 'rgba(168,85,247,0.15)', border: 'rgba(168,85,247,0.3)', text: '#c084fc' },  // purple
+    image: { bg: 'rgba(168,85,247,0.15)', border: 'rgba(169, 85, 247, 0.93)', text: '#c084fc' },  // purple
 };
 
 // Convert plain text to HTML with mention chips
@@ -135,23 +135,23 @@ const textToHtml = (
             const tagName = p1 || p3;
             const tagId = (p2 || p4) as string | undefined;
             const info = findAssetInfo(tagName, assets, sceneImages, tagId, videos, audios);
-            
+
             const isInvalidMedia = disableVideos && (info.category === 'video' || info.category === 'audio');
-            
-            const colors = isInvalidMedia 
-                ? { bg: 'rgba(239,68,68,0.1)', border: 'rgba(248,113,113,0.5)', text: '#ef4444' } 
+
+            const colors = isInvalidMedia
+                ? { bg: 'rgba(239,68,68,0.1)', border: 'rgba(248,113,113,0.5)', text: '#ef4444' }
                 : CHIP_COLORS[mode];
-                
+
             const defaultEmoji = info.category === 'audio' ? '🎵' : info.category === 'video' ? '🎬' : '🧑';
             const imgHtml = info.thumb
                 ? `<img src="${info.thumb}" style="width:14px;height:14px;border-radius:2px;object-fit:cover;vertical-align:-2px;margin-right:3px;display:inline-block;" />`
                 : `<span style="vertical-align:-1px;margin-right:3px;display:inline-block;font-size:inherit;">${defaultEmoji}</span>`;
             // Store both name and optional id in data attributes
             const idAttr = tagId ? ` data-mention-id="${tagId}"` : '';
-            
+
             const extraStyles = isInvalidMedia ? 'text-decoration:line-through;' : '';
             const titleAttr = isInvalidMedia ? ` title="当前模型不支持此类型素材，请删除"` : '';
-            
+
             return `<span contenteditable="false" data-mention="${tagName}"${idAttr}${titleAttr} style="display:inline;background:${colors.bg};border:1px solid ${colors.border};border-radius:4px;padding:1px 5px;margin:0;font-size:inherit;color:${colors.text};cursor:default;vertical-align:baseline;line-height:normal;user-select:all;font-weight:500;-webkit-box-decoration-break:clone;box-decoration-break:clone;${extraStyles}">${imgHtml}${info.displayName}</span>\u200B`;
         }
     );
@@ -223,7 +223,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
     const dropdownRef = useRef<HTMLDivElement>(null);
     const lastRenderedValue = useRef<string>(value);
     const isInternalChange = useRef(false);
-    
+
     const videoUploadRef = useRef<HTMLInputElement>(null);
     const audioUploadRef = useRef<HTMLInputElement>(null);
     const isUploadingRef = useRef(false);
@@ -320,7 +320,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
                 if (suffixMatch) {
                     siSuffix = siSuffix.substring(0, siSuffix.length - suffixMatch[0].length);
                 }
-                
+
                 for (const pName of promptNameSet) {
                     if (isStoryboardTag(pName)) {
                         let pSuffix = pName.replace('分镜', ''); // "S01"
@@ -328,7 +328,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
                         if (pMatch) {
                             pSuffix = pSuffix.substring(0, pSuffix.length - pMatch[0].length);
                         }
-                        
+
                         // Exact match is required here to prevent B/C from being checked when only A is selected.
                         // We shouldn't match base scene with its options in the dropdown checklist.
                         if (si.name === pName) {
@@ -443,7 +443,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
         // Diff tags to detect removals and additions
         const currentTags = extractTags(newValue);
         const prevTags = prevTagsRef.current;
-        
+
         // Handle removals
         for (const tag of prevTags) {
             if (!currentTags.includes(tag)) {
@@ -470,7 +470,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
                 }
             }
         }
-        
+
         prevTagsRef.current = currentTags;
     }, [onChange, assets, sceneImages, onUnmention, onMention]);
 
@@ -612,11 +612,11 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
         if (item) {
             const candidate = candidates[hoveredIdx];
             const rect = item.getBoundingClientRect();
-            
+
             // If it's a video or audio, we prepare to show media
             if ((candidate.category === 'video' || candidate.category === 'audio') && (candidate.mediaUrl || candidate.mediaAssetId)) {
                 setPreviewImage({ url: candidate.category, x: rect.right, y: rect.top }); // url holds type here for media
-                
+
                 // Fetch blob if needed
                 if (candidate.mediaUrl) {
                     setMediaBlobUrl(candidate.mediaUrl);
@@ -722,339 +722,337 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
 
             {showDropdown && candidates.length > 0 && dropdownPos && ReactDOM.createPortal(
                 <>
-                <div
-                    ref={dropdownRef}
-                    style={{
-                        position: 'fixed',
-                        bottom: `${window.innerHeight - dropdownPos.top}px`,
-                        left: `${dropdownPos.left}px`,
-                        zIndex: 9999,
-                    }}
-                    className="flex w-[800px] max-w-[90vw] max-h-56 bg-white dark:bg-dark-800 border border-gray-200 dark:border-white/10 rounded-lg shadow-xl text-gray-900 dark:text-gray-100 overflow-hidden"
-                >
-                    {/* Left Column: Assets */}
-                    <div className="flex-1 flex flex-col border-r border-gray-200 dark:border-white/10 w-0">
-                        <div className="px-3 py-1.5 text-xs font-bold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-dark-900 border-b border-gray-200 dark:border-white/5 shrink-0 flex items-center justify-between">
-                            <span className="truncate">资产 (Assets)</span>
-                            {maxMentions !== undefined && (
-                                <span className="text-[9px] font-normal opacity-70 shrink-0 ml-2">
-                                    {new Set([...value.matchAll(TAG_REGEX)].map(m => (m[2] || m[4]) || (m[1] || m[3]))).size}/{maxMentions}
-                                </span>
-                            )}
-                        </div>
-                        <div className="flex-1 overflow-y-auto py-1">
-                            {candidates.map((c, i) => c.category === 'asset' && (
-                                <div
-                                    key={c.id}
-                                    data-candidate
-                                    className={`
-                                        flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors
-                                        ${i === highlightIdx ? 'bg-indigo-100 dark:bg-banana-500/20 text-indigo-700 dark:text-inherit' : 'hover:bg-gray-100 dark:hover:bg-white/5'}
-                                        ${c.disabled ? 'opacity-40 cursor-not-allowed' : ''}
-                                    `}
-                                    onMouseDown={(e) => {
-                                        e.preventDefault();
-                                        if (!c.disabled) selectCandidate(c);
-                                    }}
-                                    onMouseEnter={() => {
-                                        setHighlightIdx(i);
-                                        setHoveredIdx(i);
-                                    }}
-                                    onMouseLeave={() => setHoveredIdx(null)}
-                                >
-                                    <span className="text-[10px] shrink-0">🧑</span>
-                                    <span className="flex-1 truncate">{c.displayName}</span>
-                                    {c.inPrompt && (
-                                        <span className="text-[9px] text-green-600 dark:text-green-400/70 shrink-0">✅</span>
-                                    )}
-                                </div>
-                            ))}
-                            {candidates.filter(c => c.category === 'asset').length === 0 && (
-                                <div className="px-3 py-2 text-xs text-gray-400 text-center">暂无资产</div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Right Column 1: Scenes */}
-                    <div className="flex-1 flex flex-col border-r border-gray-200 dark:border-white/10 w-0">
-                        <div className="px-3 py-1.5 text-xs font-bold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-dark-900 border-b border-gray-200 dark:border-white/5 shrink-0 truncate">
-                            分镜 (Scenes)
-                        </div>
-                        <div className="flex-1 overflow-y-auto py-1">
-                            {candidates.map((c, i) => c.category === 'scene' && (
-                                <div
-                                    key={c.id}
-                                    data-candidate
-                                    className={`
-                                        flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors
-                                        ${i === highlightIdx ? 'bg-indigo-100 dark:bg-banana-500/20 text-indigo-700 dark:text-inherit' : 'hover:bg-gray-100 dark:hover:bg-white/5'}
-                                        ${c.disabled ? 'opacity-40 cursor-not-allowed' : ''}
-                                    `}
-                                    onMouseDown={(e) => {
-                                        e.preventDefault();
-                                        if (!c.disabled) selectCandidate(c);
-                                    }}
-                                    onMouseEnter={() => {
-                                        setHighlightIdx(i);
-                                        setHoveredIdx(i);
-                                    }}
-                                    onMouseLeave={() => setHoveredIdx(null)}
-                                >
-                                    <span className="text-[10px] shrink-0">🎬</span>
-                                    <span className="flex-1 truncate">{c.displayName}</span>
-                                    {c.inPrompt && (
-                                        <span className="text-[9px] text-green-600 dark:text-green-400/70 shrink-0">✅</span>
-                                    )}
-                                </div>
-                            ))}
-                            {candidates.filter(c => c.category === 'scene').length === 0 && (
-                                <div className="px-3 py-2 text-xs text-gray-400 text-center">暂无分镜</div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Right Column 2: Videos */}
-                    <div className="flex-1 flex flex-col border-r border-gray-200 dark:border-white/10 w-0">
-                        <div className="px-3 py-1.5 text-xs font-bold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-dark-900 border-b border-gray-200 dark:border-white/5 shrink-0 truncate">
-                            视频 (Videos)
-                        </div>
-                        <div className="flex-1 overflow-y-auto py-1">
-                            {candidates.map((c, i) => c.category === 'video' && (
-                                <div
-                                    key={c.id}
-                                    id={`mention-item-${c.id}`}
-                                    data-candidate
-                                    className={`
-                                        flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors
-                                        ${i === highlightIdx ? 'bg-indigo-100 dark:bg-banana-500/20 text-indigo-700 dark:text-inherit' : 'hover:bg-gray-100 dark:hover:bg-white/5'}
-                                        ${c.disabled ? 'opacity-40 cursor-not-allowed' : ''}
-                                    `}
-                                    onMouseDown={(e) => {
-                                        e.preventDefault();
-                                        if (!c.disabled) selectCandidate(c);
-                                    }}
-                                    onMouseEnter={() => {
-                                        setHighlightIdx(i);
-                                        setHoveredIdx(i);
-                                    }}
-                                    onMouseLeave={() => setHoveredIdx(null)}
-                                >
-                                    <span className="text-[10px] shrink-0">🎥</span>
-                                    <span className="flex-1 truncate">{c.displayName}</span>
-                                    {c.inPrompt && (
-                                        <span className="text-[9px] text-green-600 dark:text-green-400/70 shrink-0">✅</span>
-                                    )}
-                                    {c.canDelete && (
-                                        <button 
-                                            onMouseDown={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                isDeletingRef.current = true;
-                                                setTimeout(() => {
-                                                    if (window.confirm('确认删除此视频素材？')) {
-                                                        if (!onAssetDelete) {
-                                                            alert('系统错误：删除功能未就绪，请按 F5 刷新页面后再试。');
-                                                            setTimeout(() => { isDeletingRef.current = false; editorRef.current?.focus(); }, 300);
-                                                            return;
-                                                        }
-                                                        console.log("Deleting video asset:", c.id);
-                                                        onAssetDelete(c.id);
-                                                        
-                                                        if (c.inPrompt) {
-                                                            onUnmention(c.id);
-                                                            // Remove from text value
-                                                            const regex = new RegExp(`\\[@图像_${c.name}(?:#[^\\]]+)?\\]|@图像_${c.name}(?:#[^\\s\\]]+)?|@${c.name}(?:#[^\\s\\]]+)?`, 'g');
-                                                            onChange(value.replace(regex, ''));
-                                                            // Remove from DOM
-                                                            if (editorRef.current) {
-                                                                const chips = editorRef.current.querySelectorAll(`span[data-mention="${c.name}"]`);
-                                                                chips.forEach(chip => chip.remove());
-                                                            }
-                                                        }
-                                                    }
-                                                    setTimeout(() => { isDeletingRef.current = false; editorRef.current?.focus(); }, 300);
-                                                }, 10);
-                                            }}
-                                            className="ml-auto text-gray-400 hover:text-red-500 hover:bg-red-500/10 p-1 rounded transition-colors"
-                                            title="删除素材"
-                                        >
-                                            <X className="w-3.5 h-3.5" />
-                                        </button>
-                                    )}
-                                </div>
-                            ))}
-                            {candidates.filter(c => c.category === 'video').length === 0 && (
-                                <div className="px-3 py-2 text-xs text-gray-400 text-center">暂无视频</div>
-                            )}
-                        </div>
-                        {onAssetUpload && (
-                            <div className="p-1 border-t border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-dark-900 shrink-0">
-                                <button
-                                    onMouseDown={(e) => e.preventDefault()}
-                                    disabled={disableVideos}
-                                    onClick={() => {
-                                        if (disableVideos) return;
-                                        isUploadingRef.current = true;
-                                        videoUploadRef.current?.click();
-                                        const onWindowFocus = () => {
-                                            setTimeout(() => {
-                                                isUploadingRef.current = false;
-                                                // Retain focus manually if needed
-                                                if (showDropdown) editorRef.current?.focus();
-                                            }, 300);
-                                            window.removeEventListener('focus', onWindowFocus);
-                                        };
-                                        window.addEventListener('focus', onWindowFocus);
-                                    }}
-                                    className={`w-full py-1.5 text-xs bg-white dark:bg-dark-800 rounded flex items-center justify-center gap-1 transition-colors ${
-                                        disableVideos
-                                            ? 'text-gray-400 dark:text-gray-500 border border-gray-200 dark:border-white/10 cursor-not-allowed opacity-50'
-                                            : 'text-indigo-600 dark:text-banana-400 hover:bg-indigo-50 dark:hover:bg-banana-500/10 border border-indigo-200 dark:border-banana-500/30'
-                                    }`}
-                                >
-                                    <span className="text-sm">+</span> 上传本地视频
-                                </button>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Right Column 3: Audios */}
-                    <div className="flex-1 flex flex-col w-0">
-                        <div className="px-3 py-1.5 text-xs font-bold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-dark-900 border-b border-gray-200 dark:border-white/5 shrink-0 truncate">
-                            音频 (Audios)
-                        </div>
-                        <div className="flex-1 overflow-y-auto py-1">
-                            {candidates.map((c, i) => c.category === 'audio' && (
-                                <div
-                                    key={c.id}
-                                    data-candidate
-                                    className={`
-                                        flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors
-                                        ${i === highlightIdx ? 'bg-indigo-100 dark:bg-banana-500/20 text-indigo-700 dark:text-inherit' : 'hover:bg-gray-100 dark:hover:bg-white/5'}
-                                        ${c.disabled ? 'opacity-40 cursor-not-allowed' : ''}
-                                    `}
-                                    onMouseDown={(e) => {
-                                        e.preventDefault();
-                                        if (!c.disabled) selectCandidate(c);
-                                    }}
-                                    onMouseEnter={() => {
-                                        setHighlightIdx(i);
-                                        setHoveredIdx(i);
-                                    }}
-                                    onMouseLeave={() => setHoveredIdx(null)}
-                                >
-                                    <span className="text-[10px] shrink-0">🎵</span>
-                                    <span className="flex-1 truncate">{c.displayName}</span>
-                                    {c.inPrompt && (
-                                        <span className="text-[9px] text-green-600 dark:text-green-400/70 shrink-0">✅</span>
-                                    )}
-                                    {c.canDelete && (
-                                        <button 
-                                            onMouseDown={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                isDeletingRef.current = true;
-                                                setTimeout(() => {
-                                                    if (window.confirm('确认删除此音频素材？')) {
-                                                        if (!onAssetDelete) {
-                                                            alert('系统错误：删除功能未就绪，请按 F5 刷新页面后再试。');
-                                                            setTimeout(() => { isDeletingRef.current = false; editorRef.current?.focus(); }, 300);
-                                                            return;
-                                                        }
-                                                        console.log("Deleting audio asset:", c.id);
-                                                        onAssetDelete(c.id);
-                                                        
-                                                        if (c.inPrompt) {
-                                                            onUnmention(c.id);
-                                                            // Remove from text value
-                                                            const regex = new RegExp(`\\[@图像_${c.name}(?:#[^\\]]+)?\\]|@图像_${c.name}(?:#[^\\s\\]]+)?|@${c.name}(?:#[^\\s\\]]+)?`, 'g');
-                                                            onChange(value.replace(regex, ''));
-                                                            // Remove from DOM
-                                                            if (editorRef.current) {
-                                                                const chips = editorRef.current.querySelectorAll(`span[data-mention="${c.name}"]`);
-                                                                chips.forEach(chip => chip.remove());
-                                                            }
-                                                        }
-                                                    }
-                                                    setTimeout(() => { isDeletingRef.current = false; editorRef.current?.focus(); }, 300);
-                                                }, 10);
-                                            }}
-                                            className="ml-auto text-gray-400 hover:text-red-500 hover:bg-red-500/10 p-1 rounded transition-colors"
-                                            title="删除素材"
-                                        >
-                                            <X className="w-3.5 h-3.5" />
-                                        </button>
-                                    )}
-                                </div>
-                            ))}
-                            {candidates.filter(c => c.category === 'audio').length === 0 && (
-                                <div className="px-3 py-2 text-xs text-gray-400 text-center">暂无音频</div>
-                            )}
-                        </div>
-                        {onAssetUpload && (
-                            <div className="p-1 border-t border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-dark-900 shrink-0">
-                                <button
-                                    onMouseDown={(e) => e.preventDefault()}
-                                    disabled={disableVideos}
-                                    onClick={() => {
-                                        if (disableVideos) return;
-                                        isUploadingRef.current = true;
-                                        audioUploadRef.current?.click();
-                                        const onWindowFocus = () => {
-                                            setTimeout(() => {
-                                                isUploadingRef.current = false;
-                                                // Retain focus manually if needed
-                                                if (showDropdown) editorRef.current?.focus();
-                                            }, 300);
-                                            window.removeEventListener('focus', onWindowFocus);
-                                        };
-                                        window.addEventListener('focus', onWindowFocus);
-                                    }}
-                                    className={`w-full py-1.5 text-xs bg-white dark:bg-dark-800 rounded flex items-center justify-center gap-1 transition-colors ${
-                                        disableVideos
-                                            ? 'text-gray-400 dark:text-gray-500 border border-gray-200 dark:border-white/10 cursor-not-allowed opacity-50'
-                                            : 'text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10 border border-orange-200 dark:border-orange-500/30'
-                                    }`}
-                                >
-                                    <span className="text-sm">+</span> 上传本地音频 (支持MP4提取)
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                </div>
-                {previewImage && (
                     <div
+                        ref={dropdownRef}
                         style={{
                             position: 'fixed',
-                            top: Math.min(previewImage.y, window.innerHeight - 250),
-                            left: previewImage.x + 8,
-                            zIndex: 10000,
+                            bottom: `${window.innerHeight - dropdownPos.top}px`,
+                            left: `${dropdownPos.left}px`,
+                            zIndex: 9999,
                         }}
-                        className="p-1 bg-white dark:bg-dark-900 border border-gray-200 dark:border-white/10 rounded-lg shadow-2xl pointer-events-none animate-in fade-in zoom-in duration-100"
+                        className="flex w-[800px] max-w-[90vw] max-h-56 bg-white dark:bg-dark-800 border border-gray-200 dark:border-white/10 rounded-lg shadow-xl text-gray-900 dark:text-gray-100 overflow-hidden"
                     >
-                        {previewImage.url === 'video' ? (
-                            mediaBlobUrl ? (
-                                <video src={mediaBlobUrl} autoPlay loop muted playsInline className="max-w-[240px] max-h-[240px] rounded-md" style={{ objectFit: 'contain' }} />
-                            ) : (
-                                <div className="w-[240px] h-[135px] flex items-center justify-center bg-gray-100 dark:bg-dark-800 rounded-md">
-                                    <span className="text-xs text-gray-400">加载视频中...</span>
+                        {/* Left Column: Assets */}
+                        <div className="flex-1 flex flex-col border-r border-gray-200 dark:border-white/10 w-0">
+                            <div className="px-3 py-1.5 text-xs font-bold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-dark-900 border-b border-gray-200 dark:border-white/5 shrink-0 flex items-center justify-between">
+                                <span className="truncate">资产 (Assets)</span>
+                                {maxMentions !== undefined && (
+                                    <span className="text-[9px] font-normal opacity-70 shrink-0 ml-2">
+                                        {new Set([...value.matchAll(TAG_REGEX)].map(m => (m[2] || m[4]) || (m[1] || m[3]))).size}/{maxMentions}
+                                    </span>
+                                )}
+                            </div>
+                            <div className="flex-1 overflow-y-auto py-1">
+                                {candidates.map((c, i) => c.category === 'asset' && (
+                                    <div
+                                        key={c.id}
+                                        data-candidate
+                                        className={`
+                                        flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors
+                                        ${i === highlightIdx ? 'bg-indigo-100 dark:bg-banana-500/20 text-indigo-700 dark:text-inherit' : 'hover:bg-gray-100 dark:hover:bg-white/5'}
+                                        ${c.disabled ? 'opacity-40 cursor-not-allowed' : ''}
+                                    `}
+                                        onMouseDown={(e) => {
+                                            e.preventDefault();
+                                            if (!c.disabled) selectCandidate(c);
+                                        }}
+                                        onMouseEnter={() => {
+                                            setHighlightIdx(i);
+                                            setHoveredIdx(i);
+                                        }}
+                                        onMouseLeave={() => setHoveredIdx(null)}
+                                    >
+                                        <span className="text-[10px] shrink-0">🧑</span>
+                                        <span className="flex-1 truncate">{c.displayName}</span>
+                                        {c.inPrompt && (
+                                            <span className="text-[9px] text-green-600 dark:text-green-400/70 shrink-0">✅</span>
+                                        )}
+                                    </div>
+                                ))}
+                                {candidates.filter(c => c.category === 'asset').length === 0 && (
+                                    <div className="px-3 py-2 text-xs text-gray-400 text-center">暂无资产</div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Right Column 1: Scenes */}
+                        <div className="flex-1 flex flex-col border-r border-gray-200 dark:border-white/10 w-0">
+                            <div className="px-3 py-1.5 text-xs font-bold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-dark-900 border-b border-gray-200 dark:border-white/5 shrink-0 truncate">
+                                分镜 (Scenes)
+                            </div>
+                            <div className="flex-1 overflow-y-auto py-1">
+                                {candidates.map((c, i) => c.category === 'scene' && (
+                                    <div
+                                        key={c.id}
+                                        data-candidate
+                                        className={`
+                                        flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors
+                                        ${i === highlightIdx ? 'bg-indigo-100 dark:bg-banana-500/20 text-indigo-700 dark:text-inherit' : 'hover:bg-gray-100 dark:hover:bg-white/5'}
+                                        ${c.disabled ? 'opacity-40 cursor-not-allowed' : ''}
+                                    `}
+                                        onMouseDown={(e) => {
+                                            e.preventDefault();
+                                            if (!c.disabled) selectCandidate(c);
+                                        }}
+                                        onMouseEnter={() => {
+                                            setHighlightIdx(i);
+                                            setHoveredIdx(i);
+                                        }}
+                                        onMouseLeave={() => setHoveredIdx(null)}
+                                    >
+                                        <span className="text-[10px] shrink-0">🎬</span>
+                                        <span className="flex-1 truncate">{c.displayName}</span>
+                                        {c.inPrompt && (
+                                            <span className="text-[9px] text-green-600 dark:text-green-400/70 shrink-0">✅</span>
+                                        )}
+                                    </div>
+                                ))}
+                                {candidates.filter(c => c.category === 'scene').length === 0 && (
+                                    <div className="px-3 py-2 text-xs text-gray-400 text-center">暂无分镜</div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Right Column 2: Videos */}
+                        <div className="flex-1 flex flex-col border-r border-gray-200 dark:border-white/10 w-0">
+                            <div className="px-3 py-1.5 text-xs font-bold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-dark-900 border-b border-gray-200 dark:border-white/5 shrink-0 truncate">
+                                视频 (Videos)
+                            </div>
+                            <div className="flex-1 overflow-y-auto py-1">
+                                {candidates.map((c, i) => c.category === 'video' && (
+                                    <div
+                                        key={c.id}
+                                        id={`mention-item-${c.id}`}
+                                        data-candidate
+                                        className={`
+                                        flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors
+                                        ${i === highlightIdx ? 'bg-indigo-100 dark:bg-banana-500/20 text-indigo-700 dark:text-inherit' : 'hover:bg-gray-100 dark:hover:bg-white/5'}
+                                        ${c.disabled ? 'opacity-40 cursor-not-allowed' : ''}
+                                    `}
+                                        onMouseDown={(e) => {
+                                            e.preventDefault();
+                                            if (!c.disabled) selectCandidate(c);
+                                        }}
+                                        onMouseEnter={() => {
+                                            setHighlightIdx(i);
+                                            setHoveredIdx(i);
+                                        }}
+                                        onMouseLeave={() => setHoveredIdx(null)}
+                                    >
+                                        <span className="text-[10px] shrink-0">🎥</span>
+                                        <span className="flex-1 truncate">{c.displayName}</span>
+                                        {c.inPrompt && (
+                                            <span className="text-[9px] text-green-600 dark:text-green-400/70 shrink-0">✅</span>
+                                        )}
+                                        {c.canDelete && (
+                                            <button
+                                                onMouseDown={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    isDeletingRef.current = true;
+                                                    setTimeout(() => {
+                                                        if (window.confirm('确认删除此视频素材？')) {
+                                                            if (!onAssetDelete) {
+                                                                alert('系统错误：删除功能未就绪，请按 F5 刷新页面后再试。');
+                                                                setTimeout(() => { isDeletingRef.current = false; editorRef.current?.focus(); }, 300);
+                                                                return;
+                                                            }
+                                                            console.log("Deleting video asset:", c.id);
+                                                            onAssetDelete(c.id);
+
+                                                            if (c.inPrompt) {
+                                                                onUnmention(c.id);
+                                                                // Remove from text value
+                                                                const regex = new RegExp(`\\[@图像_${c.name}(?:#[^\\]]+)?\\]|@图像_${c.name}(?:#[^\\s\\]]+)?|@${c.name}(?:#[^\\s\\]]+)?`, 'g');
+                                                                onChange(value.replace(regex, ''));
+                                                                // Remove from DOM
+                                                                if (editorRef.current) {
+                                                                    const chips = editorRef.current.querySelectorAll(`span[data-mention="${c.name}"]`);
+                                                                    chips.forEach(chip => chip.remove());
+                                                                }
+                                                            }
+                                                        }
+                                                        setTimeout(() => { isDeletingRef.current = false; editorRef.current?.focus(); }, 300);
+                                                    }, 10);
+                                                }}
+                                                className="ml-auto text-gray-400 hover:text-red-500 hover:bg-red-500/10 p-1 rounded transition-colors"
+                                                title="删除素材"
+                                            >
+                                                <X className="w-3.5 h-3.5" />
+                                            </button>
+                                        )}
+                                    </div>
+                                ))}
+                                {candidates.filter(c => c.category === 'video').length === 0 && (
+                                    <div className="px-3 py-2 text-xs text-gray-400 text-center">暂无视频</div>
+                                )}
+                            </div>
+                            {onAssetUpload && (
+                                <div className="p-1 border-t border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-dark-900 shrink-0">
+                                    <button
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        disabled={disableVideos}
+                                        onClick={() => {
+                                            if (disableVideos) return;
+                                            isUploadingRef.current = true;
+                                            videoUploadRef.current?.click();
+                                            const onWindowFocus = () => {
+                                                setTimeout(() => {
+                                                    isUploadingRef.current = false;
+                                                    // Retain focus manually if needed
+                                                    if (showDropdown) editorRef.current?.focus();
+                                                }, 300);
+                                                window.removeEventListener('focus', onWindowFocus);
+                                            };
+                                            window.addEventListener('focus', onWindowFocus);
+                                        }}
+                                        className={`w-full py-1.5 text-xs bg-white dark:bg-dark-800 rounded flex items-center justify-center gap-1 transition-colors ${disableVideos
+                                                ? 'text-gray-400 dark:text-gray-500 border border-gray-200 dark:border-white/10 cursor-not-allowed opacity-50'
+                                                : 'text-indigo-600 dark:text-banana-400 hover:bg-indigo-50 dark:hover:bg-banana-500/10 border border-indigo-200 dark:border-banana-500/30'
+                                            }`}
+                                    >
+                                        <span className="text-sm">+</span> 上传本地视频
+                                    </button>
                                 </div>
-                            )
-                        ) : previewImage.url === 'audio' ? (
-                            mediaBlobUrl ? (
-                                <div className="bg-white dark:bg-dark-900 rounded p-2">
-                                    <audio src={mediaBlobUrl} autoPlay controls className="w-[240px] h-10 outline-none" />
+                            )}
+                        </div>
+
+                        {/* Right Column 3: Audios */}
+                        <div className="flex-1 flex flex-col w-0">
+                            <div className="px-3 py-1.5 text-xs font-bold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-dark-900 border-b border-gray-200 dark:border-white/5 shrink-0 truncate">
+                                音频 (Audios)
+                            </div>
+                            <div className="flex-1 overflow-y-auto py-1">
+                                {candidates.map((c, i) => c.category === 'audio' && (
+                                    <div
+                                        key={c.id}
+                                        data-candidate
+                                        className={`
+                                        flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors
+                                        ${i === highlightIdx ? 'bg-indigo-100 dark:bg-banana-500/20 text-indigo-700 dark:text-inherit' : 'hover:bg-gray-100 dark:hover:bg-white/5'}
+                                        ${c.disabled ? 'opacity-40 cursor-not-allowed' : ''}
+                                    `}
+                                        onMouseDown={(e) => {
+                                            e.preventDefault();
+                                            if (!c.disabled) selectCandidate(c);
+                                        }}
+                                        onMouseEnter={() => {
+                                            setHighlightIdx(i);
+                                            setHoveredIdx(i);
+                                        }}
+                                        onMouseLeave={() => setHoveredIdx(null)}
+                                    >
+                                        <span className="text-[10px] shrink-0">🎵</span>
+                                        <span className="flex-1 truncate">{c.displayName}</span>
+                                        {c.inPrompt && (
+                                            <span className="text-[9px] text-green-600 dark:text-green-400/70 shrink-0">✅</span>
+                                        )}
+                                        {c.canDelete && (
+                                            <button
+                                                onMouseDown={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    isDeletingRef.current = true;
+                                                    setTimeout(() => {
+                                                        if (window.confirm('确认删除此音频素材？')) {
+                                                            if (!onAssetDelete) {
+                                                                alert('系统错误：删除功能未就绪，请按 F5 刷新页面后再试。');
+                                                                setTimeout(() => { isDeletingRef.current = false; editorRef.current?.focus(); }, 300);
+                                                                return;
+                                                            }
+                                                            console.log("Deleting audio asset:", c.id);
+                                                            onAssetDelete(c.id);
+
+                                                            if (c.inPrompt) {
+                                                                onUnmention(c.id);
+                                                                // Remove from text value
+                                                                const regex = new RegExp(`\\[@图像_${c.name}(?:#[^\\]]+)?\\]|@图像_${c.name}(?:#[^\\s\\]]+)?|@${c.name}(?:#[^\\s\\]]+)?`, 'g');
+                                                                onChange(value.replace(regex, ''));
+                                                                // Remove from DOM
+                                                                if (editorRef.current) {
+                                                                    const chips = editorRef.current.querySelectorAll(`span[data-mention="${c.name}"]`);
+                                                                    chips.forEach(chip => chip.remove());
+                                                                }
+                                                            }
+                                                        }
+                                                        setTimeout(() => { isDeletingRef.current = false; editorRef.current?.focus(); }, 300);
+                                                    }, 10);
+                                                }}
+                                                className="ml-auto text-gray-400 hover:text-red-500 hover:bg-red-500/10 p-1 rounded transition-colors"
+                                                title="删除素材"
+                                            >
+                                                <X className="w-3.5 h-3.5" />
+                                            </button>
+                                        )}
+                                    </div>
+                                ))}
+                                {candidates.filter(c => c.category === 'audio').length === 0 && (
+                                    <div className="px-3 py-2 text-xs text-gray-400 text-center">暂无音频</div>
+                                )}
+                            </div>
+                            {onAssetUpload && (
+                                <div className="p-1 border-t border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-dark-900 shrink-0">
+                                    <button
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        disabled={disableVideos}
+                                        onClick={() => {
+                                            if (disableVideos) return;
+                                            isUploadingRef.current = true;
+                                            audioUploadRef.current?.click();
+                                            const onWindowFocus = () => {
+                                                setTimeout(() => {
+                                                    isUploadingRef.current = false;
+                                                    // Retain focus manually if needed
+                                                    if (showDropdown) editorRef.current?.focus();
+                                                }, 300);
+                                                window.removeEventListener('focus', onWindowFocus);
+                                            };
+                                            window.addEventListener('focus', onWindowFocus);
+                                        }}
+                                        className={`w-full py-1.5 text-xs bg-white dark:bg-dark-800 rounded flex items-center justify-center gap-1 transition-colors ${disableVideos
+                                                ? 'text-gray-400 dark:text-gray-500 border border-gray-200 dark:border-white/10 cursor-not-allowed opacity-50'
+                                                : 'text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10 border border-orange-200 dark:border-orange-500/30'
+                                            }`}
+                                    >
+                                        <span className="text-sm">+</span> 上传本地音频 (支持MP4提取)
+                                    </button>
                                 </div>
-                            ) : (
-                                <div className="w-[240px] h-10 flex items-center justify-center bg-gray-100 dark:bg-dark-800 rounded-md">
-                                    <span className="text-xs text-gray-400">加载音频中...</span>
-                                </div>
-                            )
-                        ) : (
-                            <img src={previewImage.url} className="max-w-[240px] max-h-[240px] rounded-md" style={{ objectFit: 'contain' }} />
-                        )}
+                            )}
+                        </div>
                     </div>
-                )}
+                    {previewImage && (
+                        <div
+                            style={{
+                                position: 'fixed',
+                                top: Math.min(previewImage.y, window.innerHeight - 250),
+                                left: previewImage.x + 8,
+                                zIndex: 10000,
+                            }}
+                            className="p-1 bg-white dark:bg-dark-900 border border-gray-200 dark:border-white/10 rounded-lg shadow-2xl pointer-events-none animate-in fade-in zoom-in duration-100"
+                        >
+                            {previewImage.url === 'video' ? (
+                                mediaBlobUrl ? (
+                                    <video src={mediaBlobUrl} autoPlay loop muted playsInline className="max-w-[240px] max-h-[240px] rounded-md" style={{ objectFit: 'contain' }} />
+                                ) : (
+                                    <div className="w-[240px] h-[135px] flex items-center justify-center bg-gray-100 dark:bg-dark-800 rounded-md">
+                                        <span className="text-xs text-gray-400">加载视频中...</span>
+                                    </div>
+                                )
+                            ) : previewImage.url === 'audio' ? (
+                                mediaBlobUrl ? (
+                                    <div className="bg-white dark:bg-dark-900 rounded p-2">
+                                        <audio src={mediaBlobUrl} autoPlay controls className="w-[240px] h-10 outline-none" />
+                                    </div>
+                                ) : (
+                                    <div className="w-[240px] h-10 flex items-center justify-center bg-gray-100 dark:bg-dark-800 rounded-md">
+                                        <span className="text-xs text-gray-400">加载音频中...</span>
+                                    </div>
+                                )
+                            ) : (
+                                <img src={previewImage.url} className="max-w-[240px] max-h-[240px] rounded-md" style={{ objectFit: 'contain' }} />
+                            )}
+                        </div>
+                    )}
                 </>,
                 document.body
             )}

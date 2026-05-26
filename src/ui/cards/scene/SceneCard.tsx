@@ -15,13 +15,13 @@ interface SceneCardProps {
     scene: Scene;
     characterDesc: string;
     labels: Translation;
-    onUpdate: (id: string, fieldOrUpdates: keyof Scene | Partial<Scene>, value?: any) => void;
+    onUpdate: (id: string, fieldOrUpdates: keyof Scene | Partial<Scene> | ((prev: Scene) => Partial<Scene>), value?: any) => void;
     onDelete?: (id: string) => void;
     onDuplicate?: (id: string) => void;
     isGeneratingExternal?: boolean;
     isGeneratingPrompts?: boolean;
     isPromptCompleted?: boolean;
-    onGenerateImageOverride?: (scene: Scene) => Promise<string>;
+    onGenerateImageOverride?: (scene: Scene, optionId?: string, signal?: AbortSignal) => Promise<string>;
     onImageGenerated?: (id: string, url: string, imageAssetId?: string, optionId?: string) => void;
     onVideoGenerated?: (id: string, url: string, assetId?: string, optionId?: string) => void;
     globalStyle: GlobalStyle;
@@ -111,6 +111,7 @@ const SceneCard: React.FC<SceneCardProps> = (props) => {
                     videoAssetsReady={state.videoAssetsReady}
                     onGenerateImage={(force) => state.handleGenerateImage(force || false, viewingOptionId || undefined)}
                     onGenerateVideo={() => state.handleGenerateVideo(viewingOptionId || undefined)}
+                    onAbort={(type) => state.handleAbortTask(type, viewingOptionId || undefined)}
                     onUploadClick={state.handleUploadClick}
                     onRefresh={() => state.handleRefresh(viewingOptionId || undefined)}
                     onDeleteImage={() => state.handleDeleteImage(viewingOptionId || undefined)}
@@ -121,6 +122,8 @@ const SceneCard: React.FC<SceneCardProps> = (props) => {
                     onFileChange={state.handleFileChange}
                     videoFileInputRef={state.videoFileInputRef}
                     onVideoFileChange={state.handleVideoFileChange}
+                    getTaskStartTime={state.getTaskStartTime}
+                    viewingOptionId={viewingOptionId}
                 />
 
                 {/* RIGHT COLUMN: CONTENT */}

@@ -25,6 +25,8 @@ interface ChunkPanelProps {
     isActive: boolean;
     onToggle: () => void;
     flashSceneId?: string;
+    fullNovelText?: string;
+    filename?: string;
 }
 
 const ChunkPanel: React.FC<ChunkPanelProps> = ({
@@ -32,7 +34,9 @@ const ChunkPanel: React.FC<ChunkPanelProps> = ({
     onUpdateChunk, onDeleteChunk, onCopyChunk, onSceneUpdate, onDuplicateScene,
     onExtract, onGenerateScript, onGenerateBeats, onGeneratePrompts, onGenerateImage,
     language, isActive, onToggle,
-    flashSceneId
+    flashSceneId,
+    fullNovelText = "",
+    filename = ""
 }) => {
     const {
         loadingStep, scriptError, exportProgress,
@@ -48,7 +52,9 @@ const ChunkPanel: React.FC<ChunkPanelProps> = ({
     } = useChunkActions({
         chunk, allChunks, styleState, language, isActive,
         onUpdateChunk, onSceneUpdate, onDuplicateScene,
-        onExtract, onGenerateScript, onGenerateBeats, onGeneratePrompts, onGenerateImage, onToggle
+        onExtract, onGenerateScript, onGenerateBeats, onGeneratePrompts, onGenerateImage, onToggle,
+        fullNovelText,
+        filename
     });
 
     return (

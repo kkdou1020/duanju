@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Scene, ImageGenStatus, GlobalStyle, Asset } from '@/shared/types';
 import { generateSceneImage, generateSpeech, pcmToWav, generateVideo, pollVideoUntilDone } from '@/services/ai';
 import { loadAssetUrl, saveAsset, downloadAndSaveVideo } from '@/services/storage';
@@ -11,8 +11,8 @@ export interface UseSceneMediaProps {
     areAssetsReady: boolean;
     language: string;
     chapterScenes?: Scene[];
-    onUpdate: (id: string, fieldOrUpdates: keyof Scene | Partial<Scene>, value?: any) => void;
-    onGenerateImageOverride?: (scene: Scene, optionId?: string) => Promise<string>;
+    onUpdate: (id: string, fieldOrUpdates: keyof Scene | Partial<Scene> | ((prev: Scene) => Partial<Scene>), value?: any) => void;
+    onGenerateImageOverride?: (scene: Scene, optionId?: string, signal?: AbortSignal) => Promise<string>;
     onImageGenerated?: (id: string, url: string, imageAssetId?: string, optionId?: string) => void;
     onVideoGenerated?: (id: string, url: string, assetId?: string, optionId?: string, operation?: any) => void;
     checkImageReady?: (optionId?: string) => boolean;
@@ -35,6 +35,41 @@ export function useSceneMedia(props: UseSceneMediaProps) {
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const isGeneratingRef = useRef<Set<string>>(new Set());
+
+    const activeAbortControllersRef = useRef<Map<string, AbortController>>(new Map());
+    const taskStartTimesRef = useRef<Record<string, number>>({});
+
+    const getTaskStartTime = (type: 'image' | 'video', optionId?: string) => {
+        const optionKey = optionId || 'default';
+        const taskKey = `${type}_${optionKey}`;
+        return taskStartTimesRef.current[taskKey];
+    };
+
+    useEffect(() => {
+        return () => {
+            activeAbortControllersRef.current.forEach(c => c.abort());
+            activeAbortControllersRef.current.clear();
+        };
+    }, []);
+
+    const handleAbortTask = (type: 'image' | 'video', optionId?: string) => {
+        const optionKey = optionId || 'default';
+        const taskKey = `${type}_${optionKey}`;
+        const controller = activeAbortControllersRef.current.get(taskKey);
+        if (controller) {
+            console.log(`[Abort] Aborting ${type} task for option ${optionKey}...`);
+            controller.abort();
+            activeAbortControllersRef.current.delete(taskKey);
+        }
+        
+        // Reset status Map
+        if (type === 'image') {
+            setGenStatusMap(prev => ({ ...prev, [optionKey]: ImageGenStatus.IDLE }));
+            isGeneratingRef.current.delete(optionKey);
+        } else {
+            setVideoStatusMap(prev => ({ ...prev, [optionKey]: ImageGenStatus.IDLE }));
+        }
+    };
 
     const getGenStatus = (optionId?: string | null) => genStatusMap[optionId || 'default'] || ImageGenStatus.IDLE;
     const getVideoStatus = (optionId?: string | null) => videoStatusMap[optionId || 'default'] || ImageGenStatus.IDLE;
@@ -115,15 +150,23 @@ export function useSceneMedia(props: UseSceneMediaProps) {
         if (!areAssetsReady) return;
         if (!force && hasImage) return;
 
+        const taskKey = `image_${key}`;
+        if (activeAbortControllersRef.current.has(taskKey)) {
+            activeAbortControllersRef.current.get(taskKey)?.abort();
+        }
+        const controller = new AbortController();
+        activeAbortControllersRef.current.set(taskKey, controller);
+        taskStartTimesRef.current[taskKey] = Date.now();
+
         isGeneratingRef.current.add(key);
         setGenStatusMap(prev => ({ ...prev, [key]: ImageGenStatus.GENERATING }));
         try {
             let url = "";
             let imageAssetId: string | undefined;
             if (onGenerateImageOverride) {
-                url = await onGenerateImageOverride(scene, optionId);
+                url = await onGenerateImageOverride(scene, optionId, controller.signal);
             } else {
-                const result = await generateSceneImage(scene, globalStyle, assets, optionId, chapterScenes);
+                const result = await generateSceneImage(scene, globalStyle, assets, optionId, chapterScenes, controller.signal);
                 url = result.imageUrl || result;
                 imageAssetId = result.imageAssetId;
             }
@@ -138,11 +181,23 @@ export function useSceneMedia(props: UseSceneMediaProps) {
             if (onImageGenerated) {
                 onImageGenerated(scene.id, url, imageAssetId, optionId);
             }
-        } catch (error) {
+        } catch (error: any) {
+            if (error.name === 'AbortError' || error.message?.includes('aborted')) {
+                console.log(`Image generation aborted for ${key}`);
+                return;
+            }
             console.error(error);
             setGenStatusMap(prev => ({ ...prev, [key]: ImageGenStatus.ERROR }));
+            window.dispatchEvent(new CustomEvent('show-toast', {
+                detail: {
+                    message: `分镜 ${scene.id}${optionId ? ` (方案 ${optionId})` : ''} 生成图片失败: ${error.message || error}`,
+                    type: 'warning'
+                }
+            }));
         } finally {
             isGeneratingRef.current.delete(key);
+            activeAbortControllersRef.current.delete(taskKey);
+            delete taskStartTimesRef.current[taskKey];
         }
     };
 
@@ -156,14 +211,20 @@ export function useSceneMedia(props: UseSceneMediaProps) {
         setGenStatusMap(prev => ({ ...prev, ...updatesMap }));
         
         try {
-            const newOptions = [...scene.prompt_options];
-            await Promise.all(newOptions.map(async (opt, idx) => {
+            await Promise.all(scene.prompt_options.map(async (opt) => {
                 if (checkImageReady && !checkImageReady(opt.option_id)) {
                     setGenStatusMap(prev => ({ ...prev, [opt.option_id]: ImageGenStatus.IDLE }));
                     return; // Skip if this specific option is not ready
                 }
+                const taskKey = `image_${opt.option_id}`;
+                if (activeAbortControllersRef.current.has(taskKey)) {
+                    activeAbortControllersRef.current.get(taskKey)?.abort();
+                }
+                const controller = new AbortController();
+                activeAbortControllersRef.current.set(taskKey, controller);
+                taskStartTimesRef.current[taskKey] = Date.now();
                 try {
-                    const result = await generateSceneImage(scene, globalStyle, assets, opt.option_id, chapterScenes);
+                    const result = await generateSceneImage(scene, globalStyle, assets, opt.option_id, chapterScenes, controller.signal);
                     let url = result.imageUrl || result;
                     let assetId = result.imageAssetId;
 
@@ -173,29 +234,39 @@ export function useSceneMedia(props: UseSceneMediaProps) {
                         assetId = saved.assetId;
                     }
 
-                    newOptions[idx] = { 
-                        ...newOptions[idx], 
-                        imageUrl: url,
-                        imageAssetId: assetId
-                    };
+                    onUpdate(scene.id, (prevScene) => {
+                        const nextOptions = (prevScene.prompt_options || []).map(o => 
+                            o.option_id === opt.option_id ? { ...o, imageUrl: url, imageAssetId: assetId } : o
+                        );
+                        const isCurrentActive = prevScene.video_prompt === opt.video_prompt || (!prevScene.video_prompt && prevScene.prompt_options?.[0]?.option_id === opt.option_id);
+                        if (isCurrentActive) {
+                            latestImageRef.current = url;
+                        }
+                        return {
+                            prompt_options: nextOptions,
+                            ...(isCurrentActive ? { imageUrl: url, imageAssetId: assetId } : {})
+                        };
+                    });
+
                     setGenStatusMap(prev => ({ ...prev, [opt.option_id]: ImageGenStatus.COMPLETED }));
-                } catch (e) {
+                } catch (e: any) {
+                    if (e.name === 'AbortError' || e.message?.includes('aborted')) {
+                        console.log(`Batch image generation aborted for ${opt.option_id}`);
+                        return;
+                    }
                     console.error("Batch image gen failed for option", opt.option_id, e);
                     setGenStatusMap(prev => ({ ...prev, [opt.option_id]: ImageGenStatus.ERROR }));
+                    window.dispatchEvent(new CustomEvent('show-toast', {
+                        detail: {
+                            message: `分镜 ${scene.id} 方案 ${opt.option_id} 生成图片失败: ${e.message || e}`,
+                            type: 'warning'
+                        }
+                    }));
+                } finally {
+                    activeAbortControllersRef.current.delete(taskKey);
+                    delete taskStartTimesRef.current[taskKey];
                 }
             }));
-            
-            const activeOpt = newOptions.find((o) => o.video_prompt === scene.video_prompt) || newOptions[0];
-            if (activeOpt.imageUrl) {
-               onUpdate(scene.id, {
-                   prompt_options: newOptions,
-                   imageUrl: activeOpt.imageUrl,
-                   imageAssetId: activeOpt.imageAssetId
-               });
-               latestImageRef.current = activeOpt.imageUrl;
-            } else {
-               onUpdate(scene.id, 'prompt_options', newOptions);
-            }
         } catch(e) {
             console.error("Batch image gen failed", e);
         }
@@ -212,38 +283,61 @@ export function useSceneMedia(props: UseSceneMediaProps) {
         setVideoStatusMap(prev => ({ ...prev, ...updatesMap }));
         
         try {
-            const newOptions = [...scene.prompt_options];
-            await Promise.all(newOptions.map(async (opt, idx) => {
+            await Promise.all(scene.prompt_options.map(async (opt) => {
                 if (checkVideoReady && !checkVideoReady(opt.option_id)) {
                     setVideoStatusMap(prev => ({ ...prev, [opt.option_id]: ImageGenStatus.IDLE }));
                     return; // Skip if this specific option is not ready
                 }
+                const taskKey = `video_${opt.option_id}`;
+                if (activeAbortControllersRef.current.has(taskKey)) {
+                    activeAbortControllersRef.current.get(taskKey)?.abort();
+                }
+                const controller = new AbortController();
+                activeAbortControllersRef.current.set(taskKey, controller);
+                taskStartTimesRef.current[taskKey] = Date.now();
                 try {
                     let imageToUse = opt.imageUrl || scene.imageUrl;
                     // Preload asset if possible (simplification: assumes URL is ready if already loaded)
                     const tempScene = { ...scene, video_prompt: opt.video_prompt, np_prompt: opt.np_prompt };
                     
-                    const { operation } = await generateVideo(imageToUse || '', tempScene, globalStyle.aspectRatio, assets, globalStyle, chapterScenes, opt.option_id);
-                    const { url } = await pollVideoUntilDone(operation);
+                    const { operation } = await generateVideo(imageToUse || '', tempScene, globalStyle.aspectRatio, assets, globalStyle, chapterScenes, opt.option_id, controller.signal);
+                    const { url } = await pollVideoUntilDone(operation, 5000, 180, undefined, controller.signal);
                     const { localUrl, assetId } = await downloadAndSaveVideo(url);
-                    newOptions[idx] = { ...newOptions[idx], videoUrl: localUrl, videoAssetId: assetId || undefined };
+
+                    onUpdate(scene.id, (prevScene) => {
+                        const nextOptions = (prevScene.prompt_options || []).map(o => 
+                            o.option_id === opt.option_id ? { ...o, videoUrl: localUrl, videoAssetId: assetId || undefined } : o
+                        );
+                        const isCurrentActive = prevScene.video_prompt === opt.video_prompt || (!prevScene.video_prompt && prevScene.prompt_options?.[0]?.option_id === opt.option_id);
+                        return {
+                            prompt_options: nextOptions,
+                            ...(isCurrentActive ? { 
+                                videoUrl: localUrl, 
+                                ...(assetId ? { videoAssetId: assetId } : {})
+                            } : {})
+                        };
+                    });
+
                     setVideoStatusMap(prev => ({ ...prev, [opt.option_id]: ImageGenStatus.COMPLETED }));
-                } catch (e) {
+                } catch (e: any) {
+                    if (e.name === 'AbortError' || e.message?.includes('aborted')) {
+                        console.log(`Batch video generation aborted for ${opt.option_id}`);
+                        return;
+                    }
                     console.error("Batch video gen failed for option", opt.option_id, e);
                     setVideoStatusMap(prev => ({ ...prev, [opt.option_id]: ImageGenStatus.ERROR }));
+                    window.dispatchEvent(new CustomEvent('show-toast', {
+                        detail: {
+                            message: `分镜 ${scene.id} 方案 ${opt.option_id} 生成视频失败: ${e.message || e}`,
+                            type: 'warning'
+                        }
+                    }));
+                } finally {
+                    activeAbortControllersRef.current.delete(taskKey);
+                    delete taskStartTimesRef.current[taskKey];
                 }
             }));
             
-            const activeOpt = newOptions.find((o) => o.video_prompt === scene.video_prompt) || newOptions[0];
-            if (activeOpt.videoUrl) {
-               onUpdate(scene.id, {
-                   prompt_options: newOptions,
-                   videoUrl: activeOpt.videoUrl,
-                   ...(activeOpt.videoAssetId ? { videoAssetId: activeOpt.videoAssetId } : {})
-               });
-            } else {
-               onUpdate(scene.id, 'prompt_options', newOptions);
-            }
             setViewMode('video');
         } catch(e) {
             console.error("Batch video gen failed", e);
@@ -273,13 +367,22 @@ export function useSceneMedia(props: UseSceneMediaProps) {
                 console.error("Failed to load image for video gen", e);
             }
         }
+
+        const taskKey = `video_${key}`;
+        if (activeAbortControllersRef.current.has(taskKey)) {
+            activeAbortControllersRef.current.get(taskKey)?.abort();
+        }
+        const controller = new AbortController();
+        activeAbortControllersRef.current.set(taskKey, controller);
+        taskStartTimesRef.current[taskKey] = Date.now();
+
         // Allow video gen without scene image (reference mode: @图像 tags provide refs)
         setVideoStatusMap(prev => ({ ...prev, [key]: ImageGenStatus.GENERATING }));
         try {
             // Step 1: Submit (returns immediately)
-            const { operation } = await generateVideo(imageToUse || '', scene, globalStyle.aspectRatio, assets, globalStyle, chapterScenes, optionId);
+            const { operation } = await generateVideo(imageToUse || '', scene, globalStyle.aspectRatio, assets, globalStyle, chapterScenes, optionId, controller.signal);
             // Step 2: Poll until done
-            const { url } = await pollVideoUntilDone(operation);
+            const { url } = await pollVideoUntilDone(operation, 5000, 180, undefined, controller.signal);
             
             // Step 3: Download and save to IndexedDB to prevent CDN expiration
             const { localUrl, assetId } = await downloadAndSaveVideo(url);
@@ -290,9 +393,22 @@ export function useSceneMedia(props: UseSceneMediaProps) {
             }
             // Auto-switch to video view
             setViewMode('video');
-        } catch (error) {
+        } catch (error: any) {
+            if (error.name === 'AbortError' || error.message?.includes('aborted')) {
+                console.log(`Video generation aborted for ${key}`);
+                return;
+            }
             console.error(error);
             setVideoStatusMap(prev => ({ ...prev, [key]: ImageGenStatus.ERROR }));
+            window.dispatchEvent(new CustomEvent('show-toast', {
+                detail: {
+                    message: `分镜 ${scene.id}${optionId ? ` (方案 ${optionId})` : ''} 生成视频失败: ${error.message || error}`,
+                    type: 'warning'
+                }
+            }));
+        } finally {
+            activeAbortControllersRef.current.delete(taskKey);
+            delete taskStartTimesRef.current[taskKey];
         }
     };
 
@@ -527,12 +643,14 @@ export function useSceneMedia(props: UseSceneMediaProps) {
         fileInputRef,
         videoFileInputRef,
         latestImageRef,
+        getTaskStartTime,
 
         // Handlers
         handleGenerateImage,
         handleGenerateVideo,
         handleGenerateBatchImages,
         handleGenerateBatchVideos,
+        handleAbortTask,
         handleNarrationTTS,
         handleDownloadAudio,
         handleUploadClick,

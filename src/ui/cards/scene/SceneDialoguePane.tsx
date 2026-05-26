@@ -105,4 +105,21 @@ const SceneDialoguePane: React.FC<SceneDialoguePaneProps> = ({
     );
 };
 
-export default SceneDialoguePane;
+const SceneDialoguePaneMemo = React.memo(SceneDialoguePane, (prev, next) => {
+    if (prev.labels !== next.labels) return false;
+    if (prev.scene.id !== next.scene.id) return false;
+    if (prev.scene.audio_sfx !== next.scene.audio_sfx) return false;
+    if (prev.scene.audio_bgm !== next.scene.audio_bgm) return false;
+
+    const prevDiag = prev.scene.audio_dialogue || [];
+    const nextDiag = next.scene.audio_dialogue || [];
+    if (prevDiag.length !== nextDiag.length) return false;
+    for (let i = 0; i < prevDiag.length; i++) {
+        if (prevDiag[i].speaker !== nextDiag[i].speaker || prevDiag[i].text !== nextDiag[i].text) {
+            return false;
+        }
+    }
+    return true;
+});
+
+export default SceneDialoguePaneMemo;

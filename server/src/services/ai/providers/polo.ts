@@ -88,7 +88,7 @@ export class PoloProvider implements IAIProvider {
         return null;
     }
 
-    private async postJson(path: string, body: any, apiKey: string) {
+    private async postJson(path: string, body: any, apiKey: string, signal?: AbortSignal) {
         const url = `${this.baseUrl.replace(/\/+$/, "")}${path}`;
         const res = await fetch(url, {
             method: "POST",
@@ -99,6 +99,7 @@ export class PoloProvider implements IAIProvider {
             },
             body: JSON.stringify(body),
             timeout: 15000, // 15 seconds timeout
+            signal: signal as any,
         });
         if (!res.ok) {
             const text = await res.text().catch(() => "");
@@ -198,7 +199,7 @@ export class PoloProvider implements IAIProvider {
         }
 
         const apiKey = this.isImageModel(model) ? this.imageApiKey : this.textApiKey;
-        const data = await this.postJson("/v1/chat/completions", body, apiKey);
+        const data = await this.postJson("/v1/chat/completions", body, apiKey, config?.signal);
         const message = data?.choices?.[0]?.message;
 
         const inline = this.extractInlineB64(message?.content);

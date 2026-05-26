@@ -105,7 +105,7 @@ export class T8StarProvider implements IAIProvider {
         return null;
     }
 
-    private async postJson(baseUrl: string, path: string, body: any, apiKey: string) {
+    private async postJson(baseUrl: string, path: string, body: any, apiKey: string, signal?: AbortSignal) {
         const fs = require('fs');
         const logFile = 'C:\\Users\\Administrator\\Desktop\\duanju\\duanju0302\\server-debug.log';
         const log = (msg: string) => {
@@ -123,6 +123,19 @@ export class T8StarProvider implements IAIProvider {
             log(`[T8Star API] ERROR: Hard timeout of 300s reached! Aborting connection.`);
             controller.abort();
         }, 300000); // 300s hard timeout
+
+        const abortHandler = () => {
+            log(`[T8Star API] External abort requested. Aborting connection.`);
+            controller.abort();
+        };
+
+        if (signal) {
+            if (signal.aborted) {
+                controller.abort();
+            } else {
+                signal.addEventListener('abort', abortHandler);
+            }
+        }
 
         try {
             const startTime = Date.now();
@@ -151,17 +164,23 @@ export class T8StarProvider implements IAIProvider {
             log(`[T8Star API] Downloaded body (${buffer.byteLength} bytes) in ${timeToBody}ms`);
             
             clearTimeout(timeout);
+            if (signal) {
+                signal.removeEventListener('abort', abortHandler);
+            }
 
             const jsonString = Buffer.from(buffer).toString('utf-8');
             return JSON.parse(jsonString);
         } catch (error: any) {
             clearTimeout(timeout);
+            if (signal) {
+                signal.removeEventListener('abort', abortHandler);
+            }
             log(`[T8Star API] Fetch failed: ${error?.message || error}`);
             throw error;
         }
     }
 
-    private async postChatCompletionsT8star(body: any, apiKey: string, stream: boolean) {
+    private async postChatCompletionsT8star(body: any, apiKey: string, stream: boolean, signal?: AbortSignal) {
         const url = `${this.textBaseUrl.replace(/\/+$/, "")}/v1/chat/completions`;
         const res = await fetch(url, {
             method: "POST",
@@ -171,6 +190,7 @@ export class T8StarProvider implements IAIProvider {
                 ...(apiKey ? { "Authorization": `Bearer ${apiKey}` } : {}),
             },
             body: JSON.stringify(body),
+            signal: signal as any,
         });
 
         if (!res.ok) {
@@ -356,7 +376,7 @@ export class T8StarProvider implements IAIProvider {
                 body.extra_body = { ...(body.extra_body || {}), google: googleExtra };
             }
 
-            const data = await this.postChatCompletionsT8star(body, this.textApiKey, stream);
+            const data = await this.postChatCompletionsT8star(body, this.textApiKey, stream, config?.signal);
 
             if (data?._stream) {
                 const text = data.fullText || "";
@@ -463,7 +483,7 @@ export class T8StarProvider implements IAIProvider {
                 imageBody.image = refImages;
             }
 
-            const imageData = await this.postJson(this.mediaBaseUrl, "/v1/images/generations", imageBody, apiKey);
+            const imageData = await this.postJson(this.mediaBaseUrl, "/v1/images/generations", imageBody, apiKey, config?.signal);
             
             let b64 = imageData?.b64_json || imageData?.data?.[0]?.b64_json || imageData?.image?.b64_json || imageData?.output?.b64_json;
             let url = imageData?.data?.[0]?.url || imageData?.url;
@@ -529,7 +549,7 @@ export class T8StarProvider implements IAIProvider {
             body.extra_body = { ...(body.extra_body || {}), google: googleExtra };
         }
 
-        const data = await this.postJson(this.mediaBaseUrl, "/v1/chat/completions", body, this.imageApiKey);
+        const data = await this.postJson(this.mediaBaseUrl, "/v1/chat/completions", body, this.imageApiKey, config?.signal);
         const message = data?.choices?.[0]?.message;
 
         const inline = this.extractInlineB64(message?.content);

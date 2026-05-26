@@ -9,9 +9,6 @@ export const textuallyInjectTags = (text: string, sortedAssets: Asset[]) => {
     if (!text) return text;
     let newText = text;
     
-    // [特权处理]: 先无条件捕获所有的“分镜Sxx”或“分镜E1_Sxx”，强制穿上视觉参照标签
-    newText = newText.replace(/(?<!\[@图像_)(分镜(?:E\d+_)?S\d+)/g, '[@图像_$1]');
-
     for (const asset of sortedAssets) {
         // 仅针对两字以上的中文名称，或者纯英文字母代号（如 Z、K）进行替换
         if (asset.name.length >= 2 || /^[a-zA-Z0-9]+$/.test(asset.name)) {

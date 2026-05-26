@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { AnalysisStatus, Scene, Asset, GlobalStyle, NovelChunk } from '@/shared/types';
 import { generateSceneImage } from '@/services/ai';
 import { loadAssetBase64, getStorageEstimate, cleanUnusedLocalBlobs } from '@/services/storage';
@@ -35,19 +35,27 @@ export function useAppState() {
     const [toast, setToast] = useState<{ message: string; type: 'info' | 'success' | 'warning' } | null>(null);
     const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-    const showToast = (message: string, type: 'info' | 'success' | 'warning' = 'info') => {
+    const showToast = useCallback((message: string, type: 'info' | 'success' | 'warning' = 'info') => {
         if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
         setToast({ message, type });
         toastTimeoutRef.current = setTimeout(() => {
             setToast(null);
         }, 5000);
-    };
+    }, []);
 
     useEffect(() => {
+        const handleShowToast = (e: Event) => {
+            const customEvent = e as CustomEvent<{ message: string; type?: 'info' | 'success' | 'warning' }>;
+            if (customEvent.detail) {
+                showToast(customEvent.detail.message, customEvent.detail.type || 'info');
+            }
+        };
+        window.addEventListener('show-toast', handleShowToast);
         return () => {
+            window.removeEventListener('show-toast', handleShowToast);
             if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
         };
-    }, []);
+    }, [showToast]);
 
     // Background Storage auto-GC check
     useEffect(() => {
@@ -184,7 +192,7 @@ export function useAppState() {
     }, [targetChunk, globalAssets]);
 
     // ── Handlers ────────────────────────────────────
-    const handleGenerateImageWrapper = async (scene: Scene, chunkAssets?: Asset[], optionId?: string, allScenes?: Scene[]) => {
+    const handleGenerateImageWrapper = async (scene: Scene, chunkAssets?: Asset[], optionId?: string, allScenes?: Scene[], signal?: AbortSignal) => {
         const assetsToUse = chunkAssets || displayedAssets;
         // Resolve blob: URLs to base64 before sending to backend (blob URLs are browser-only)
         const resolvedAssets = await Promise.all(assetsToUse.map(async (a) => {
@@ -199,7 +207,7 @@ export function useAppState() {
             }
             return a;
         }));
-        const result = await generateSceneImage(scene, globalStyle, resolvedAssets, optionId, allScenes);
+        const result = await generateSceneImage(scene, globalStyle, resolvedAssets, optionId, allScenes, signal);
         return result.imageUrl || result;
     };
 

@@ -13,17 +13,45 @@ export const retryWithBackoff = async <T>(
     fn: () => Promise<T>,
     maxRetries = 3,
     baseDelay = 2000,
-    onRetry?: (attempt: number, error: any) => void
+    onRetry?: (attempt: number, error: any) => void,
+    signal?: AbortSignal
 ): Promise<T> => {
     for (let i = 0; i < maxRetries; i++) {
+        if (signal?.aborted) {
+            const err = new Error("Aborted");
+            err.name = "AbortError";
+            throw err;
+        }
         try {
             return await fn();
         } catch (e: any) {
+            if (e.name === 'AbortError' || e.message?.includes('aborted') || signal?.aborted) {
+                const err = new Error("Aborted");
+                err.name = "AbortError";
+                throw err;
+            }
             if (i === maxRetries - 1) throw e;
             const delay = baseDelay * Math.pow(2, i);
             console.warn(`Retry ${i + 1}/${maxRetries} after ${delay}ms:`, e?.message || e);
             if (onRetry) onRetry(i + 1, e);
-            await wait(delay);
+            
+            await new Promise<void>((resolve, reject) => {
+                const t = setTimeout(() => {
+                    if (signal) signal.removeEventListener('abort', abortHandler);
+                    resolve();
+                }, delay);
+                
+                const abortHandler = () => {
+                    clearTimeout(t);
+                    const err = new Error("Aborted");
+                    err.name = "AbortError";
+                    reject(err);
+                };
+
+                if (signal) {
+                    signal.addEventListener('abort', abortHandler);
+                }
+            });
         }
     }
     throw new Error("retryWithBackoff exhausted");

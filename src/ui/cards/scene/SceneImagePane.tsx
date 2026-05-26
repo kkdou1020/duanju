@@ -79,10 +79,12 @@ const SceneImagePane: React.FC<SceneImagePaneProps> = ({
                     onAssetUpload={onAssetUpload}
                     onAssetDelete={onAssetDelete}
                     mode="image"
-                    className={`flex-1 w-full bg-white dark:bg-black/20 p-2 rounded border text-xs text-gray-700 dark:text-gray-400 resize-none outline-none min-h-[10rem] transition-all ${
+                    className={`flex-1 w-full p-2 rounded border text-xs resize-none outline-none min-h-[10rem] transition-all ${
                         isGeneratingPrompts 
                             ? 'border-purple-400 dark:border-purple-500/50 ring-2 ring-purple-400/20 dark:ring-purple-500/20 bg-purple-50/50 dark:bg-purple-900/10' 
-                            : 'border-gray-200 dark:border-white/5 focus:border-indigo-500/30 dark:focus:border-banana-500/30'
+                            : scene.np_prompt
+                                ? 'bg-purple-50 dark:bg-purple-900/10 text-purple-800 dark:text-purple-100 border-purple-200 dark:border-purple-500/20 focus:border-purple-400 dark:focus:border-purple-500/40'
+                                : 'bg-white dark:bg-black/20 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-white/5 focus:border-indigo-500/30 dark:focus:border-banana-500/30'
                     }`}
                 />
             </div>
@@ -166,4 +168,32 @@ const SceneImagePane: React.FC<SceneImagePaneProps> = ({
     );
 };
 
-export default SceneImagePane;
+const arraysEqual = (a?: any[], b?: any[]) => {
+    if (a === b) return true;
+    if (!a || !b) return false;
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) return false;
+    }
+    return true;
+};
+
+const SceneImagePaneMemo = React.memo(SceneImagePane, (prev, next) => {
+    return prev.labels === next.labels
+        && prev.isGeneratingPrompts === next.isGeneratingPrompts
+        && prev.isPromptCompleted === next.isPromptCompleted
+        && prev.scene.id === next.scene.id
+        && prev.scene.np_prompt === next.scene.np_prompt
+        && prev.scene.visual_desc === next.scene.visual_desc
+        && prev.scene.camera === next.scene.camera
+        && prev.scene.lens === next.scene.lens
+        && prev.scene.focal_length === next.scene.focal_length
+        && prev.scene.aperture === next.scene.aperture
+        && arraysEqual(prev.scene.assetIds, next.scene.assetIds)
+        && prev.assets === next.assets
+        && prev.sceneImages === next.sceneImages
+        && prev.videos === next.videos
+        && prev.audios === next.audios;
+});
+
+export default SceneImagePaneMemo;

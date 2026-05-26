@@ -177,7 +177,8 @@ export const generateAssetImage = async (
     style: GlobalStyle,
     existingAssets: Asset[] = [],
     overridePrompt?: string,
-    referenceImage?: string
+    referenceImage?: string,
+    signal?: AbortSignal
 ): Promise<{ imageUrl: string, prompt: string }> => {
     // Use override > existing asset.prompt > build new
     const prompt = overridePrompt || asset.prompt || buildAssetPrompt(asset, style);
@@ -224,8 +225,8 @@ export const generateAssetImage = async (
         const response = await retryWithBackoff<GenerateContentResponse>(() => ai.models.generateContent({
             model: MODELS.IMAGE_GEN,
             contents: { parts },
-            config: { imageConfig: { aspectRatio: ar, isAsset: true } }
-        }), 1, 2000);
+            config: { imageConfig: { aspectRatio: ar, isAsset: true }, signal }
+        }), 1, 2000, undefined, signal);
 
         if (!response.candidates || response.candidates.length === 0) {
             throw new Error("Safety Block: No candidates returned.");
@@ -258,7 +259,8 @@ export const generateSceneImage = async (
     scene: any,
     globalStyle?: GlobalStyle,
     assets: Asset[] = [],
-    optionId?: string
+    optionId?: string,
+    signal?: AbortSignal
 ): Promise<any> => {
     // If optionId is provided, find the specific option, otherwise fallback to main scene
     const option = optionId && scene.prompt_options ? scene.prompt_options.find((o: any) => o.option_id === optionId) : null;
@@ -307,7 +309,7 @@ export const generateSceneImage = async (
     const nameToAliasMap = new Map<string, string>();
 
     // 2.2 Next push the asset reference images
-    usedAssets.forEach((asset) => {
+    for (const asset of usedAssets) {
         if (asset.refImageUrl) {
             let alias = "";
             if (isStoryboardTag(asset.name)) {
@@ -321,7 +323,20 @@ export const generateSceneImage = async (
             }
             nameToAliasMap.set(asset.name, alias);
 
-            const cleanBase64 = asset.refImageUrl.replace(/^data:image\/(png|jpeg|jpg);base64,/, "");
+            let cleanBase64 = "";
+            if (asset.refImageUrl.startsWith('http')) {
+                try {
+                    const res = await fetch(asset.refImageUrl);
+                    const buffer = await res.buffer();
+                    cleanBase64 = buffer.toString('base64');
+                } catch (e) {
+                    console.error(`[Scene Gen] Failed to fetch asset image from URL: ${asset.refImageUrl}`, e);
+                    throw new Error(`Failed to download reference asset: ${asset.name}`);
+                }
+            } else {
+                cleanBase64 = asset.refImageUrl.replace(/^data:image\/(png|jpeg|jpg);base64,/, "");
+            }
+
             parts.push({
                 inlineData: {
                     mimeType: "image/png",
@@ -330,7 +345,7 @@ export const generateSceneImage = async (
             });
             instructions += ` Reference Image ${parts.length} is ${alias}.`;
         }
-    });
+    }
 
     // 3. Construct Final Prompt
     // Dynamically replace asset tags with their assigned aliases to avoid semantic leakage
@@ -367,8 +382,8 @@ export const generateSceneImage = async (
     const response = await retryWithBackoff<GenerateContentResponse>(() => ai.models.generateContent({
         model: MODELS.IMAGE_GEN,
         contents: { parts: parts },
-        config: { imageConfig: { aspectRatio: ar } }
-    }), 1, 2000);
+        config: { imageConfig: { aspectRatio: ar }, signal }
+    }), 1, 2000, undefined, signal);
 
     const elapsed = Date.now() - startTime;
     log(`[Scene Gen] generateContent finished in ${elapsed}ms.`);

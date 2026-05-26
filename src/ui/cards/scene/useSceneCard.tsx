@@ -8,11 +8,11 @@ export interface UseSceneCardProps {
     scene: Scene;
     characterDesc: string;
     labels: Translation;
-    onUpdate: (id: string, fieldOrUpdates: keyof Scene | Partial<Scene>, value?: any) => void;
+    onUpdate: (id: string, fieldOrUpdates: keyof Scene | Partial<Scene> | ((prev: Scene) => Partial<Scene>), value?: any) => void;
     onDelete?: (id: string) => void;
     onDuplicate?: (id: string) => void;
     isGeneratingExternal?: boolean;
-    onGenerateImageOverride?: (scene: Scene, optionId?: string) => Promise<string>;
+    onGenerateImageOverride?: (scene: Scene, optionId?: string, signal?: AbortSignal) => Promise<string>;
     onImageGenerated?: (id: string, url: string, imageAssetId?: string, optionId?: string) => void;
     onVideoGenerated?: (id: string, url: string, assetId?: string, optionId?: string) => void;
     globalStyle: GlobalStyle;
@@ -112,6 +112,7 @@ export function useSceneCard(props: UseSceneCardProps) {
         hasImage: mediaState.hasImage,
         hasVideo: mediaState.hasVideo,
         fileInputRef: mediaState.fileInputRef,
+        getTaskStartTime: mediaState.getTaskStartTime,
 
         // State from assets
         activeAssetSelector: assetState.activeAssetSelector,
@@ -130,6 +131,7 @@ export function useSceneCard(props: UseSceneCardProps) {
         handleGenerateVideo: mediaState.handleGenerateVideo,
         handleGenerateBatchImages: mediaState.handleGenerateBatchImages,
         handleGenerateBatchVideos: mediaState.handleGenerateBatchVideos,
+        handleAbortTask: mediaState.handleAbortTask,
         handleNarrationTTS: mediaState.handleNarrationTTS,
         handleDownloadAudio: mediaState.handleDownloadAudio,
         handleUploadClick: mediaState.handleUploadClick,

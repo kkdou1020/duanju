@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { NovelChunk, Asset, GlobalStyle, Scene } from '@/shared/types';
 import { generateVideo, pollVideoUntilDone } from '@/services/ai';
-import { loadAssetUrl, saveAsset, downloadAndSaveVideo } from '@/services/storage';
+import { saveAsset, loadAssetUrl, downloadAndSaveVideo, getAssetSize } from '@/services/storage';
 
 import { extractAssetTags, resolveTagToAsset, isStoryboardTag } from '@/shared/asset-tags';
 import { matchAssetsToPrompt } from '@/services/ai/media/video';
@@ -23,14 +23,18 @@ export interface UseChunkActionsProps {
     onGenerateScript: (chunk: NovelChunk) => Promise<Scene[]>;
     onGenerateBeats: (chunk: NovelChunk) => Promise<Scene[]>;
     onGeneratePrompts: (chunk: NovelChunk, targetSceneIds?: string[], onProgress?: (activeId: string | null, completedIds: string[]) => void) => Promise<Scene[]>;
-    onGenerateImage: (scene: Scene, chunkAssets?: Asset[], optionId?: string, allScenes?: Scene[]) => Promise<string>;
+    onGenerateImage: (scene: Scene, chunkAssets?: Asset[], optionId?: string, allScenes?: Scene[], signal?: AbortSignal) => Promise<string>;
     onToggle: () => void;
+    fullNovelText?: string;
+    filename?: string;
 }
 
 export function useChunkActions({
     chunk, allChunks, globalAssets = [], styleState, language, isActive,
     onUpdateChunk, onSceneUpdate, onDuplicateScene,
-    onExtract, onGenerateScript, onGenerateBeats, onGeneratePrompts, onGenerateImage, onToggle
+    onExtract, onGenerateScript, onGenerateBeats, onGeneratePrompts, onGenerateImage, onToggle,
+    fullNovelText = "",
+    filename = ""
 }: UseChunkActionsProps) {
     const [loadingStep, setLoadingStep] = useState<'none' | 'extracting' | 'storyboarding' | 'scripting' | 'filming'>('none');
     const [generatingSceneIds, setGeneratingSceneIds] = useState<string[]>([]);
@@ -459,7 +463,7 @@ export function useChunkActions({
         }
     };
 
-    const handleSceneUpdateWrapper = (sceneId: string, fieldOrUpdates: keyof Scene | Partial<Scene>, value?: any) => {
+    const handleSceneUpdateWrapper = (sceneId: string, fieldOrUpdates: keyof Scene | Partial<Scene> | ((prev: Scene) => Partial<Scene>), value?: any) => {
         if (typeof fieldOrUpdates === 'string') {
             onSceneUpdate(chunk.id, sceneId, { [fieldOrUpdates]: value });
         } else {
@@ -499,8 +503,8 @@ export function useChunkActions({
         });
     };
 
-    const handleGenerateImageInternal = async (scene: Scene, optionId?: string) => {
-        return await onGenerateImage(scene, chunk.assets, optionId, chunk.scenes);
+    const handleGenerateImageInternal = async (scene: Scene, optionId?: string, signal?: AbortSignal) => {
+        return await onGenerateImage(scene, chunk.assets, optionId, chunk.scenes, signal);
     };
 
     const handleVideoGenerated = (sceneId: string, url: string, assetId?: string, optionId?: string, operation?: any) => {
@@ -539,76 +543,183 @@ export function useChunkActions({
     const handleDownload = async () => {
         setExportProgress(0);
         try {
+            // 1. Estimate Total Package Size
+            let estimatedTotalBytes = 0;
+            const uniqueMediaKeys = new Set<string>();
+
+            const addSizeToEstimate = async (url?: string, id?: string, defaultSize = 2 * 1024 * 1024) => {
+                const cacheKey = url || id;
+                if (!cacheKey || uniqueMediaKeys.has(cacheKey)) return;
+                uniqueMediaKeys.add(cacheKey);
+
+                if (id) {
+                    const size = await getAssetSize(id);
+                    estimatedTotalBytes += size;
+                } else if (url) {
+                    if (url.startsWith('data:')) {
+                        const commaIdx = url.indexOf(',');
+                        if (commaIdx !== -1) {
+                            estimatedTotalBytes += Math.round((url.length - commaIdx - 1) * 0.75);
+                        }
+                    } else {
+                        estimatedTotalBytes += defaultSize;
+                    }
+                }
+            };
+
+            for (const scene of chunk.scenes) {
+                await addSizeToEstimate(scene.imageUrl, scene.imageAssetId, 2 * 1024 * 1024);
+                await addSizeToEstimate(scene.videoUrl, scene.videoAssetId, 10 * 1024 * 1024);
+                await addSizeToEstimate(scene.startEndVideoUrl, scene.startEndVideoAssetId, 12 * 1024 * 1024);
+
+                if (scene.prompt_options) {
+                    for (const opt of scene.prompt_options) {
+                        await addSizeToEstimate(opt.imageUrl, opt.imageAssetId, 2 * 1024 * 1024);
+                        await addSizeToEstimate(opt.videoUrl, opt.videoAssetId, 10 * 1024 * 1024);
+                    }
+                }
+                if (scene.narrationAudioUrl) {
+                    await addSizeToEstimate(scene.narrationAudioUrl, undefined, 500 * 1024);
+                }
+            }
+
+            for (const asset of chunk.assets) {
+                await addSizeToEstimate(asset.refImageUrl, asset.refImageAssetId, 2 * 1024 * 1024);
+            }
+
+            const estimatedMB = Number((estimatedTotalBytes / (1024 * 1024)).toFixed(1));
+
+            // 2. Risk Warning UI Alert (Threshold 150MB)
+            let exportMedia = true;
+            if (estimatedMB > 150) {
+                const warningMsg = language === 'Chinese'
+                    ? `【导出体积较大预警】\n\n本次要导出的章节包预计体积约为 ${estimatedMB} MB。\n在部分手机浏览器或低配电脑上，直接打包媒体文件可能会因内存不足而引起网页闪退崩溃。\n\n建议方案：\n- 点击【确定】仅下载「脚本与在线链接包」（极速、且100%安全，解压缩后文件内包含全部的文字和视频在线播放链接，后续可正常导入）。\n- 点击【取消】强行尝试下载「包含全部视频和图片的媒体压缩包」（注意存在闪退风险）。`
+                    : `[Export Size Warning]\n\nThe estimated size of this chapter package is ${estimatedMB} MB.\nPackaging large media packages in browser memory may cause web page crashes on mobile or low-end devices.\n\nRecommended:\n- Click [OK] to export "Text Script and Links only" (size < 1MB, 100% safe & fast, includes CDN links for online playback, fully importable).\n- Click [Cancel] to attempt downloading the full media package anyway (at risk of browser crash).`;
+
+                const exportTextOnly = window.confirm(warningMsg);
+                if (exportTextOnly) {
+                    exportMedia = false;
+                }
+            }
+
+            // 3. Create Zip and add metadata
             const zip = new JSZip();
 
             const assetText = chunk.assets.map(a => `ID: ${a.id}\nName: ${a.name}\nDesc: ${a.description}\nDNA: ${a.visualDna || ''}`).join('\n---\n');
             zip.file("assets.txt", assetText);
 
             const chunkData = buildExportData(chunk);
-            // Strip stale blob: URLs from exported data (they are session-specific and won't work on import)
+            (chunkData as any).globalStyle = styleState;
+            (chunkData as any).fullNovelText = fullNovelText;
+            (chunkData as any).filename = filename;
+
+            // Strip stale blob: URLs from exported data
             chunkData.assets = chunkData.assets.map((a: any) => ({
                 ...a,
                 refImageUrl: a.refImageUrl?.startsWith('blob:') ? undefined : a.refImageUrl,
             }));
-            chunkData.scenes = chunkData.scenes.map((s: any) => ({
-                ...s,
-                imageUrl: s.imageUrl?.startsWith('blob:') ? undefined : s.imageUrl,
-                videoUrl: s.videoUrl?.startsWith('blob:') ? undefined : s.videoUrl,
-                startEndVideoUrl: s.startEndVideoUrl?.startsWith('blob:') ? undefined : s.startEndVideoUrl,
-                narrationAudioUrl: s.narrationAudioUrl?.startsWith('blob:') ? undefined : s.narrationAudioUrl,
-            }));
+            chunkData.scenes = chunkData.scenes.map((s: any) => {
+                const prompt_options = s.prompt_options?.map((opt: any) => ({
+                    ...opt,
+                    imageUrl: opt.imageUrl?.startsWith('blob:') ? undefined : opt.imageUrl,
+                    videoUrl: opt.videoUrl?.startsWith('blob:') ? undefined : opt.videoUrl,
+                }));
+                return {
+                    ...s,
+                    imageUrl: s.imageUrl?.startsWith('blob:') ? undefined : s.imageUrl,
+                    videoUrl: s.videoUrl?.startsWith('blob:') ? undefined : s.videoUrl,
+                    startEndVideoUrl: s.startEndVideoUrl?.startsWith('blob:') ? undefined : s.startEndVideoUrl,
+                    narrationAudioUrl: s.narrationAudioUrl?.startsWith('blob:') ? undefined : s.narrationAudioUrl,
+                    ...(prompt_options ? { prompt_options } : {}),
+                };
+            });
             zip.file("data.json", JSON.stringify(chunkData, null, 2));
 
-            const imgFolder = zip.folder("images");
-            const vidFolder = zip.folder("videos");
-            const audioFolder = zip.folder("narration");
+            // 4. Optionally Package Media (if not data-only export)
+            if (exportMedia) {
+                const imgFolder = zip.folder("images");
+                const vidFolder = zip.folder("videos");
+                const audioFolder = zip.folder("narration");
 
-            const getBlob = async (url?: string, id?: string) => {
-                if (url) {
-                    const res = await fetch(url);
-                    return res.blob();
-                }
-                if (id) {
-                    const tempUrl = await loadAssetUrl(id);
-                    if (tempUrl) {
-                        const res = await fetch(tempUrl);
-                        const b = await res.blob();
-                        URL.revokeObjectURL(tempUrl);
-                        return b;
+                const blobCache = new Map<string, Blob>();
+                const getBlob = async (url?: string, id?: string, shouldCache = true) => {
+                    const cacheKey = url || id;
+                    if (cacheKey && blobCache.has(cacheKey)) {
+                        return blobCache.get(cacheKey)!;
+                    }
+                    let blob: Blob | null = null;
+                    if (url) {
+                        const res = await fetch(url);
+                        blob = await res.blob();
+                    } else if (id) {
+                        const tempUrl = await loadAssetUrl(id);
+                        if (tempUrl) {
+                            const res = await fetch(tempUrl);
+                            blob = await res.blob();
+                            URL.revokeObjectURL(tempUrl);
+                        }
+                    }
+                    if (blob && cacheKey && shouldCache) {
+                        blobCache.set(cacheKey, blob);
+                    }
+                    return blob;
+                };
+
+                for (const scene of chunk.scenes) {
+                    // Download and package active scheme media (Images cached, Videos not cached)
+                    const imgBlob = await getBlob(scene.imageUrl, scene.imageAssetId, true);
+                    if (imgBlob) imgFolder?.file(`${scene.id}.png`, imgBlob);
+
+                    const vidBlob = await getBlob(scene.videoUrl, scene.videoAssetId, false);
+                    if (vidBlob) vidFolder?.file(`${scene.id}.mp4`, vidBlob);
+
+                    const seVidBlob = await getBlob(scene.startEndVideoUrl, scene.startEndVideoAssetId, false);
+                    if (seVidBlob) vidFolder?.file(`${scene.id}_startend.mp4`, seVidBlob);
+
+                    // Download and package option schemes
+                    if (scene.prompt_options) {
+                        for (const opt of scene.prompt_options) {
+                            if (opt.imageUrl || opt.imageAssetId) {
+                                const optImgBlob = await getBlob(opt.imageUrl, opt.imageAssetId, true);
+                                if (optImgBlob) imgFolder?.file(`${scene.id}_${opt.option_id}.png`, optImgBlob);
+                            }
+                            if (opt.videoUrl || opt.videoAssetId) {
+                                const optVidBlob = await getBlob(opt.videoUrl, opt.videoAssetId, false);
+                                if (optVidBlob) vidFolder?.file(`${scene.id}_${opt.option_id}.mp4`, optVidBlob);
+                            }
+                        }
+                    }
+
+                    // Narration audio
+                    if (scene.narrationAudioUrl) {
+                        const response = await fetch(scene.narrationAudioUrl);
+                        const blob = await response.blob();
+                        audioFolder?.file(`${scene.id}_narration.wav`, blob);
                     }
                 }
-                return null;
-            };
 
-            for (const scene of chunk.scenes) {
-                const imgBlob = await getBlob(scene.imageUrl, scene.imageAssetId);
-                if (imgBlob) imgFolder?.file(`${scene.id}.png`, imgBlob);
-
-                const vidBlob = await getBlob(scene.videoUrl, scene.videoAssetId);
-                if (vidBlob) vidFolder?.file(`${scene.id}.mp4`, vidBlob);
-
-                const seVidBlob = await getBlob(scene.startEndVideoUrl, scene.startEndVideoAssetId);
-                if (seVidBlob) vidFolder?.file(`${scene.id}_startend.mp4`, seVidBlob);
-
-                if (scene.narrationAudioUrl) {
-                    const response = await fetch(scene.narrationAudioUrl);
-                    const blob = await response.blob();
-                    audioFolder?.file(`${scene.id}_narration.wav`, blob);
+                const assetFolder = zip.folder("asset_refs");
+                for (const asset of chunk.assets) {
+                    const assetBlob = await getBlob(asset.refImageUrl, asset.refImageAssetId, true);
+                    if (assetBlob) {
+                        assetFolder?.file(`${asset.id}.png`, assetBlob);
+                    }
                 }
+
+                // Explicitly clear blobCache to free memory references
+                blobCache.clear();
             }
 
-            const assetFolder = zip.folder("asset_refs");
-            for (const asset of chunk.assets) {
-                const assetBlob = await getBlob(asset.refImageUrl, asset.refImageAssetId);
-                if (assetBlob) {
-                    assetFolder?.file(`${asset.id}.png`, assetBlob);
-                }
-            }
-
+            // 5. Generate and Download ZIP file
             const content = await zip.generateAsync({ type: "blob" }, (metadata) => {
                 setExportProgress(metadata.percent);
             });
-            saveAs(content, `nano_banana_chapter_${chunk.index + 1}.zip`);
+
+            const zipName = exportMedia 
+                ? `nano_banana_chapter_${chunk.index + 1}.zip`
+                : `nano_banana_chapter_${chunk.index + 1}_data_only.zip`;
+
+            saveAs(content, zipName);
         } catch (e: any) {
             console.error("Export failed", e);
             alert((language === 'Chinese' ? "导出失败: " : "Export Failed: ") + e.message);

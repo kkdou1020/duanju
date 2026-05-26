@@ -2,6 +2,7 @@ import { Asset, GenerateContentResponse } from "../../../shared/types";
 import { PROMPTS } from "../../../domain/generation/prompt";
 import { retryWithBackoff, safeJsonParse, Type, ai } from "../helpers";
 import { MODELS } from "../model-manager";
+import fetch from 'node-fetch';
 
 // --- GENERATION FUNCTIONS ---
 
@@ -17,24 +18,41 @@ export const extractVisualDna = async (
         const parts: any[] = [];
         
         if (images && images.length > 0) {
-            images.forEach(img => {
-                const match = img.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
-                if (match) {
-                    parts.push({
-                        inlineData: {
-                            mimeType: match[1],
-                            data: match[2]
-                        }
-                    });
+            for (const img of images) {
+                if (img.startsWith('http')) {
+                    try {
+                        const res = await fetch(img);
+                        const buffer = await res.buffer();
+                        const b64 = buffer.toString('base64');
+                        const contentType = res.headers.get('content-type') || 'image/png';
+                        parts.push({
+                            inlineData: {
+                                mimeType: contentType,
+                                data: b64
+                            }
+                        });
+                    } catch (e) {
+                        console.error(`[Style DNA] Failed to fetch image from URL: ${img}`, e);
+                    }
                 } else {
-                    parts.push({
-                        inlineData: {
-                            mimeType: "image/png",
-                            data: img
-                        }
-                    });
+                    const match = img.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
+                    if (match) {
+                        parts.push({
+                            inlineData: {
+                                mimeType: match[1],
+                                data: match[2]
+                            }
+                        });
+                    } else {
+                        parts.push({
+                            inlineData: {
+                                mimeType: "image/png",
+                                data: img
+                            }
+                        });
+                    }
                 }
-            });
+            }
         }
         
         parts.push({ text: "Analyze the visual style based on the provided style and texture references, as well as any provided images." });
@@ -91,24 +109,41 @@ export const analyzeVisualStyleFromImages = async (
     if (!images || images.length === 0) return "";
 
     const parts: any[] = [];
-    images.forEach(img => {
-        const match = img.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
-        if (match) {
-            parts.push({
-                inlineData: {
-                    mimeType: match[1],
-                    data: match[2]
-                }
-            });
+    for (const img of images) {
+        if (img.startsWith('http')) {
+            try {
+                const res = await fetch(img);
+                const buffer = await res.buffer();
+                const b64 = buffer.toString('base64');
+                const contentType = res.headers.get('content-type') || 'image/png';
+                parts.push({
+                    inlineData: {
+                        mimeType: contentType,
+                        data: b64
+                    }
+                });
+            } catch (e) {
+                console.error(`[Style Image Analysis] Failed to fetch image from URL: ${img}`, e);
+            }
         } else {
-            parts.push({
-                inlineData: {
-                    mimeType: "image/png",
-                    data: img
-                }
-            });
+            const match = img.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
+            if (match) {
+                parts.push({
+                    inlineData: {
+                        mimeType: match[1],
+                        data: match[2]
+                    }
+                });
+            } else {
+                parts.push({
+                    inlineData: {
+                        mimeType: "image/png",
+                        data: img
+                    }
+                });
+            }
         }
-    });
+    }
 
     parts.push({ text: "Analyze the common visual style of these images." });
 

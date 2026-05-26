@@ -14,17 +14,37 @@ const router = Router();
 
 // POST /api/media/asset-image
 router.post('/asset-image', async (req: Request, res: Response) => {
+    const controller = new AbortController();
+    const handleClose = () => {
+        if (!res.writableEnded) {
+            console.log('[Media/asset-image] Connection closed prematurely by client, aborting request');
+            controller.abort();
+        }
+    };
+    res.on('close', handleClose);
+
     try {
         const { asset, globalStyle, existingAssets, overridePrompt, referenceImage } = req.body;
         if (!asset) {
             return res.status(400).json({ error: 'Missing required field: asset' });
         }
 
-        const result = await generateAssetImage(asset, globalStyle, existingAssets || [], overridePrompt, referenceImage);
+        const result = await generateAssetImage(asset, globalStyle, existingAssets || [], overridePrompt, referenceImage, controller.signal);
         res.json(result);
     } catch (e: any) {
-        console.error('[Media/asset-image]', e);
-        res.status(500).json({ error: e?.message || 'Internal error' });
+        if (e.name === 'AbortError' || controller.signal.aborted) {
+            console.log('[Media/asset-image] Request aborted successfully');
+            if (!res.headersSent) {
+                res.status(499).json({ error: 'Request cancelled' });
+            }
+        } else {
+            console.error('[Media/asset-image]', e);
+            if (!res.headersSent) {
+                res.status(500).json({ error: e?.message || 'Internal error' });
+            }
+        }
+    } finally {
+        res.off('close', handleClose);
     }
 });
 
@@ -79,17 +99,37 @@ router.get('/download-proxy', async (req: Request, res: Response) => {
 
 // POST /api/media/scene-image
 router.post('/scene-image', async (req: Request, res: Response) => {
+    const controller = new AbortController();
+    const handleClose = () => {
+        if (!res.writableEnded) {
+            console.log('[Media/scene-image] Connection closed prematurely by client, aborting request');
+            controller.abort();
+        }
+    };
+    res.on('close', handleClose);
+
     try {
         const { scene, globalStyle, assets, optionId } = req.body;
         if (!scene) {
             return res.status(400).json({ error: 'Missing required field: scene' });
         }
 
-        const result = await generateSceneImage(scene, globalStyle, assets || [], optionId);
+        const result = await generateSceneImage(scene, globalStyle, assets || [], optionId, controller.signal);
         res.json(result);
     } catch (e: any) {
-        console.error('[Media/scene-image]', e);
-        res.status(500).json({ error: e?.message || 'Internal error' });
+        if (e.name === 'AbortError' || controller.signal.aborted) {
+            console.log('[Media/scene-image] Request aborted successfully');
+            if (!res.headersSent) {
+                res.status(499).json({ error: 'Request cancelled' });
+            }
+        } else {
+            console.error('[Media/scene-image]', e);
+            if (!res.headersSent) {
+                res.status(500).json({ error: e?.message || 'Internal error' });
+            }
+        }
+    } finally {
+        res.off('close', handleClose);
     }
 });
 
@@ -134,6 +174,71 @@ router.post('/video-status', async (req: Request, res: Response) => {
         res.status(500).json({ error: e?.message || 'Internal error' });
     }
 });
+
+// GET /api/media/video-status-sse
+router.get('/video-status-sse', async (req: Request, res: Response) => {
+    const operationStr = req.query.operation as string;
+    if (!operationStr) {
+        return res.status(400).send('Missing query parameter: operation');
+    }
+
+    let operation: any;
+    try {
+        operation = JSON.parse(decodeURIComponent(operationStr));
+    } catch (e) {
+        return res.status(400).send('Invalid operation payload');
+    }
+
+    // Set up Server-Sent Events headers
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive'
+    });
+    res.flushHeaders();
+
+    let isClosed = false;
+    let timerId: NodeJS.Timeout | undefined;
+
+    const checkStatus = async () => {
+        if (isClosed) return;
+        try {
+            const result = await pollVideoStatus(operation);
+            if (isClosed) return;
+
+            if (result.done) {
+                res.write(`data: ${JSON.stringify({ type: 'done', url: result.url, error: result.error })}\n\n`);
+                res.end();
+                if (timerId) clearInterval(timerId);
+            } else {
+                res.write(`data: ${JSON.stringify({ type: 'poll' })}\n\n`);
+            }
+        } catch (err: any) {
+            if (isClosed) return;
+            console.error('[Media/video-status-sse] Error polling status:', err);
+            res.write(`data: ${JSON.stringify({ type: 'done', error: err?.message || 'Internal polling error' })}\n\n`);
+            res.end();
+            if (timerId) clearInterval(timerId);
+        }
+    };
+
+    // Run first check immediately
+    await checkStatus();
+
+    // Start polling interval
+    if (!isClosed) {
+        timerId = setInterval(checkStatus, 5000);
+    }
+
+    req.on('close', () => {
+        isClosed = true;
+        if (timerId) {
+            clearInterval(timerId);
+        }
+        console.log('[Media/video-status-sse] Connection closed by client, stopped background polling.');
+    });
+});
+
 
 // POST /api/media/speech
 router.post('/speech', async (req: Request, res: Response) => {

@@ -143,6 +143,33 @@ export const loadAssetUrl = async (assetId: string): Promise<string | null> => {
   }
 };
 
+export const getAssetSize = async (assetId: string): Promise<number> => {
+  try {
+    const db = await getDB();
+    return new Promise<number>((resolve, reject) => {
+      try {
+        const transaction = db.transaction('Assets', 'readonly');
+        const store = transaction.objectStore('Assets');
+        const request = store.get(assetId);
+        request.onsuccess = () => {
+          const blob = request.result;
+          if (blob instanceof Blob) {
+            resolve(blob.size);
+          } else {
+            resolve(0);
+          }
+        };
+        request.onerror = () => reject(request.error);
+      } catch (e) {
+        reject(e);
+      }
+    });
+  } catch (e) {
+    console.error("Failed to get asset size", e);
+    return 0;
+  }
+};
+
 export const loadAssetBase64 = async (assetId: string): Promise<string | null> => {
   try {
     const db = await getDB();

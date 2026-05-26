@@ -157,6 +157,8 @@ const App: React.FC = () => {
                             language={language}
                             isActive={expandedId === chunk.id}
                             flashSceneId={flashScene?.chunkId === chunk.id ? flashScene.sceneId : undefined}
+                            fullNovelText={fullNovelText}
+                            filename={filename}
                             onToggle={() => {
                                 setExpandedId(expandedId === chunk.id ? null : chunk.id);
                                 setActiveChunkId(activeChunkId === chunk.id ? null : chunk.id);
