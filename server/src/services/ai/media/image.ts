@@ -233,7 +233,7 @@ export const generateAssetImage = async (
         }
 
         const raw = extractImageFromResponse(response);
-        return await ensurePngDataUrl(raw);
+        return await ensurePngDataUrl(raw, 0);
     };
 
     try {
