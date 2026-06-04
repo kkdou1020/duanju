@@ -80,7 +80,6 @@ export const VideoPromptNode: React.FC<VideoPromptNodeProps> = ({ id, data }) =>
                     >
                         <option value="doubao-seedance-2-0-260128">doubao-seedance-2-0</option>
                         <option value="veo3.1-components">veo 3.1</option>
-                        <option value="polo">polo (Gemini Pro)</option>
                     </select>
                 </div>
 

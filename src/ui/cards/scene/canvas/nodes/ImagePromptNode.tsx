@@ -155,7 +155,6 @@ export const ImagePromptNode: React.FC<ImagePromptNodeProps> = ({ id, data }) =>
                         <option value="gpt-image-2">gpt-image-2</option>
                         <option value="nano-banana-pro">nano-banana-pro</option>
                         <option value="gpt-image-2-official">gpt-image-2 (官方版)</option>
-                        <option value="polo">polo (Gemini Pro)</option>
                     </select>
                 </div>
 

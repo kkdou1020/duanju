@@ -22,7 +22,7 @@ export const ModelSelector: React.FC = () => {
     modelManager.setConfig(newConfig);
   };
 
-  const options: ProviderType[] = ['t8star', 'polo'];
+  const options: ProviderType[] = ['t8star'];
 
   return (
     <div className="relative z-50">

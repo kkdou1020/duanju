@@ -101,7 +101,6 @@ const SceneMediaViewer: React.FC<SceneMediaViewerProps> = ({
                         <option value="gpt-image-2">gpt-image-2</option>
                         <option value="nano-banana-pro">nano-banana-pro</option>
                         <option value="gpt-image-2-official">gpt-image-2 (官方版)</option>
-                        <option value="polo">polo (Gemini Pro)</option>
                     </select>
                 </div>
 
@@ -180,7 +179,6 @@ const SceneMediaViewer: React.FC<SceneMediaViewerProps> = ({
                     >
                         <option value="doubao-seedance-2-0-260128">doubao-seedance-2-0</option>
                         <option value="veo3.1-components">veo 3.1</option>
-                        <option value="polo">polo (Gemini Pro)</option>
                     </select>
                 </div>
 
