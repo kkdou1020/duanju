@@ -17,7 +17,7 @@ import { X, ChevronLeft, Layers, Plus, Trash2, Aperture, Film, Image as ImageIco
 import { Scene, Asset, GlobalStyle, ImageGenStatus } from '@/shared/types';
 import { Translation } from '@/services/i18n/translations';
 import { loadAssetBase64, saveAsset, downloadAndSaveVideo, loadAssetUrl } from '@/services/storage';
-import { generateSceneImage, generateVideo, pollVideoUntilDone } from '@/services/ai';
+import { generateSceneImage, generateVideo, pollVideoUntilDone, generateSpeech, pcmToWav } from '@/services/ai';
 import { extractAssetTags, resolveTagToAsset, isStoryboardTag, ASSET_TAG_REGEX, ParsedTag } from '@/shared/asset-tags';
 
 // Import Custom Nodes
@@ -28,6 +28,7 @@ import { ImageOutputNode } from './nodes/ImageOutputNode';
 import { VideoPromptNode } from './nodes/VideoPromptNode';
 import { VideoOutputNode } from './nodes/VideoOutputNode';
 import { FirstLastFrameNode } from './nodes/FirstLastFrameNode';
+import { CustomNoteNode } from './nodes/CustomNoteNode';
 
 // Match custom node types
 const extractVideoFrame = (videoUrl: string, timeType: 'start' | 'end'): Promise<Blob> => {
@@ -126,6 +127,8 @@ const getMiniMapNodeColor = (node: Node) => {
             return '#06b6d4'; // 青色 (资产)
         case 'sceneRef':
             return '#10b981'; // 绿色 (分镜引用)
+        case 'customNote':
+            return '#f59e0b'; // 琥珀黄 (Amber)
         default:
             return '#4b5563'; // 深灰 (默认)
     }
@@ -138,7 +141,8 @@ const nodeTypes = {
     imageOutput: ImageOutputNode,
     videoPrompt: VideoPromptNode,
     videoOutput: VideoOutputNode,
-    firstLastFrame: FirstLastFrameNode
+    firstLastFrame: FirstLastFrameNode,
+    customNote: CustomNoteNode
 };
 
 interface SceneCanvasModalProps {
@@ -242,6 +246,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
 
     const currentGenStatus = genStatusMap[activeOption] || ImageGenStatus.IDLE;
     const currentVideoStatus = videoStatusMap[activeOption] || ImageGenStatus.IDLE;
+    const [ttsLoading, setTtsLoading] = useState(false);
 
     // React Flow States
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
@@ -281,6 +286,253 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
         }));
         pendingSaveRef.current = true;
     }, [setNodes]);
+
+    // Save Canvas Layout coordinates and nodes to parent component Scene
+    const handleSaveLayout = useCallback(() => {
+        const currentNodes = latestNodesRef.current;
+        const currentEdges = latestEdgesRef.current;
+
+        // Strip out dynamic functions from serializable nodes
+        const serializableNodes = currentNodes.map(n => {
+            const stripped = { ...n };
+            const strippedData = { ...n.data };
+            // Dynamically strip any function property
+            Object.keys(strippedData).forEach(key => {
+                if (typeof strippedData[key] === 'function') {
+                    delete strippedData[key];
+                }
+            });
+            // Also explicitly delete typical non-serializable fields
+            delete strippedData.connectedImages;
+            delete strippedData.assets;
+            delete strippedData.sceneImages; // Keep serializable nodes clean
+            stripped.data = strippedData;
+            return stripped;
+        });
+
+        onSceneUpdate(scene.id, (prev) => {
+            const canvas = prev.canvas ? { ...prev.canvas } : {};
+            canvas[activeOption] = {
+                nodes: serializableNodes,
+                edges: currentEdges
+            };
+            return { canvas };
+        });
+    }, [activeOption, scene.id]);
+
+    const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+    const debouncedSaveLayout = useCallback(() => {
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+        }
+        saveTimeoutRef.current = setTimeout(() => {
+            handleSaveLayout();
+        }, 300);
+    }, [handleSaveLayout]);
+
+    useEffect(() => {
+        return () => {
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+            }
+        };
+    }, []);
+
+    const handleUpdateNote = useCallback((noteId: string, field: string, value: any) => {
+        setNodes(nds => nds.map(n => {
+            if (n.id === noteId) {
+                return {
+                    ...n,
+                    data: {
+                        ...n.data,
+                        [field]: value
+                    }
+                };
+            }
+            return n;
+        }));
+        pendingSaveRef.current = true;
+        setTimeout(() => {
+            handleSaveLayout();
+        }, 100);
+    }, [setNodes, handleSaveLayout]);
+
+    const handleDeleteNote = useCallback((noteId: string) => {
+        setNodes(nds => nds.filter(n => n.id !== noteId));
+        setEdges(eds => eds.filter(e => e.source !== noteId && e.target !== noteId));
+        pendingSaveRef.current = true;
+        setTimeout(() => {
+            handleSaveLayout();
+        }, 100);
+    }, [setNodes, setEdges, handleSaveLayout]);
+
+    const onPaneDoubleClick = useCallback((event: React.MouseEvent) => {
+        if (!reactFlowInstance) return;
+        
+        const position = reactFlowInstance.screenToFlowPosition({
+            x: event.clientX,
+            y: event.clientY,
+        });
+
+        const newNoteId = `custom-note-${Date.now()}`;
+        const newNote: Node = {
+            id: newNoteId,
+            type: 'customNote',
+            position,
+            data: {
+                text: '双击编辑此便签...',
+                color: 'yellow',
+                onUpdate: (f: string, v: any) => handleUpdateNote(newNoteId, f, v),
+                onDelete: () => handleDeleteNote(newNoteId)
+            }
+        };
+
+        setNodes(nds => [...nds, newNote]);
+        pendingSaveRef.current = true;
+        setTimeout(() => {
+            handleSaveLayout();
+        }, 100);
+    }, [reactFlowInstance, setNodes, handleUpdateNote, handleDeleteNote, handleSaveLayout]);
+
+    const handleResetLayout = useCallback(() => {
+        setNodes(currentNodes => {
+            const imagePromptDrafts = currentNodes.filter(n => n.id.startsWith('image-prompt-draft-')).map(n => n.id);
+            const videoPromptDrafts = currentNodes.filter(n => n.id.startsWith('video-prompt-draft-')).map(n => n.id);
+            const customNotes = currentNodes.filter(n => n.type === 'customNote').map(n => n.id);
+            
+            let imageInputIdx = 0;
+            let videoInputIdx = 0;
+
+            const updatedNodes = currentNodes.map((node) => {
+                const updatedNode = { ...node };
+                
+                if (node.id === 'image-prompt') {
+                    updatedNode.position = { x: 330, y: 50 };
+                } else if (node.id === 'image-output') {
+                    updatedNode.position = { x: 740, y: 220 };
+                } else if (node.id === 'audio') {
+                    updatedNode.position = { x: 330, y: 460 };
+                } else if (node.id === 'video-prompt') {
+                    updatedNode.position = { x: 330, y: 800 };
+                } else if (node.id === 'video-output') {
+                    updatedNode.position = { x: 740, y: 970 };
+                } else if (node.type === 'sceneRef' || node.type === 'asset') {
+                    const isConnectedToImage = edges.some(e => e.source === node.id && (e.target === 'image-prompt' || e.target.startsWith('image-prompt-draft-')));
+                    const isConnectedToVideo = edges.some(e => e.source === node.id && (e.target === 'video-prompt' || e.target.startsWith('video-prompt-draft-')));
+                    
+                    if (isConnectedToVideo && !isConnectedToImage) {
+                        updatedNode.position = { x: 80, y: 950 + (videoInputIdx++) * 160 };
+                    } else {
+                        updatedNode.position = { x: 80, y: 200 + (imageInputIdx++) * 160 };
+                    }
+                } else if (node.type === 'firstLastFrame') {
+                    updatedNode.position = { x: 740, y: 720 };
+                } else if (node.id.startsWith('image-prompt-draft-')) {
+                    const idx = imagePromptDrafts.indexOf(node.id);
+                    updatedNode.position = { x: 1150, y: 50 + idx * 300 };
+                } else if (node.id.startsWith('image-output-draft-')) {
+                    const timestampMatch = node.id.match(/(\d+)$|extracted-\w+-\d+/);
+                    let idx = -1;
+                    if (timestampMatch) {
+                        const ts = timestampMatch[0];
+                        idx = imagePromptDrafts.findIndex(id => id.includes(ts));
+                    }
+                    if (idx === -1) {
+                        const outputs = currentNodes.filter(n => n.id.startsWith('image-output-draft-')).map(n => n.id);
+                        idx = outputs.indexOf(node.id);
+                    }
+                    updatedNode.position = { x: 1560, y: 220 + Math.max(0, idx) * 300 };
+                } else if (node.id.startsWith('video-prompt-draft-')) {
+                    const idx = videoPromptDrafts.indexOf(node.id);
+                    updatedNode.position = { x: 1150, y: 800 + idx * 300 };
+                } else if (node.id.startsWith('video-output-draft-')) {
+                    const timestampMatch = node.id.match(/\d+$/);
+                    let idx = -1;
+                    if (timestampMatch) {
+                        const ts = timestampMatch[0];
+                        idx = videoPromptDrafts.findIndex(id => id.includes(ts));
+                    }
+                    if (idx === -1) {
+                        const outputs = currentNodes.filter(n => n.id.startsWith('video-output-draft-')).map(n => n.id);
+                        idx = outputs.indexOf(node.id);
+                    }
+                    updatedNode.position = { x: 1560, y: 970 + Math.max(0, idx) * 300 };
+                } else if (node.type === 'customNote') {
+                    const idx = customNotes.indexOf(node.id);
+                    updatedNode.position = { x: 1970, y: 100 + idx * 250 };
+                }
+
+                return updatedNode;
+            });
+
+            latestNodesRef.current = updatedNodes;
+            return updatedNodes;
+        });
+
+        pendingSaveRef.current = true;
+        
+        window.dispatchEvent(new CustomEvent('show-toast', {
+            detail: { message: "画布排版已重置为标准树状布局！", type: 'success' }
+        }));
+    }, [edges, setNodes]);
+
+    // Handle Narration TTS Generation inside canvas
+    const handleNarrationTTS = useCallback(async () => {
+        if (!scene.narration) {
+            window.dispatchEvent(new CustomEvent('show-toast', {
+                detail: { message: "当前分镜没有旁白文本，无法合成旁白 TTS！", type: 'warning' }
+            }));
+            return;
+        }
+        setTtsLoading(true);
+        setNodes(nds => nds.map(n => {
+            if (n.id === 'audio') {
+                return { ...n, data: { ...n.data, ttsLoading: true } };
+            }
+            return n;
+        }));
+
+        try {
+            const voiceId = styleState.narrationVoice || "Kore";
+            const base64Data = await generateSpeech(scene.narration, voiceId);
+            const binaryString = atob(base64Data);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            const wavBlob = pcmToWav(bytes.buffer, 24000, 1);
+            const reader = new FileReader();
+            reader.readAsDataURL(wavBlob);
+            reader.onloadend = () => {
+                const url = reader.result as string;
+                onSceneUpdate(scene.id, { narrationAudioUrl: url });
+                setNodes(nds => nds.map(n => {
+                    if (n.id === 'audio') {
+                        return { ...n, data: { ...n.data, narrationAudioUrl: url, ttsLoading: false } };
+                    }
+                    return n;
+                }));
+                window.dispatchEvent(new CustomEvent('show-toast', {
+                    detail: { message: "旁白 TTS 合成成功！", type: 'success' }
+                }));
+            };
+        } catch (e: any) {
+            console.error("Narration TTS Failed", e);
+            window.dispatchEvent(new CustomEvent('show-toast', {
+                detail: { message: `旁白 TTS 合成失败: ${e.message || e}`, type: 'warning' }
+            }));
+            setNodes(nds => nds.map(n => {
+                if (n.id === 'audio') {
+                    return { ...n, data: { ...n.data, ttsLoading: false } };
+                }
+                return n;
+            }));
+        } finally {
+            setTtsLoading(false);
+        }
+    }, [scene.narration, scene.id, styleState.narrationVoice, onSceneUpdate, setNodes]);
 
     // Draft Image Upload
     const handleDraftImageUpload = useCallback(async (nodeId: string, file: File) => {
@@ -725,6 +977,8 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
             const tempScene = {
                 ...scene,
                 isStartEndFrameMode: promptNode.data.refImageMode === 'start_end_frame' || promptNode.data.refImageMode === 'first_frame',
+                audio_sfx: promptNode.data.audio_sfx || '',
+                audio_bgm: promptNode.data.audio_bgm || '',
             };
 
             // Call generateVideo API directly
@@ -1204,38 +1458,6 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
         return ids;
     }, [allScenes, assets]);
 
-    // Save Canvas Layout coordinates and nodes to parent component Scene
-    const handleSaveLayout = useCallback(() => {
-        // Strip out dynamic functions from serializable nodes
-        const serializableNodes = nodes.map(n => {
-            const stripped = { ...n };
-            const strippedData = { ...n.data };
-            delete strippedData.onUpdate;
-            delete strippedData.onGenerate;
-            delete strippedData.onApply;
-            delete strippedData.onUpload;
-            delete strippedData.onDelete;
-            delete strippedData.onDownload;
-            delete strippedData.onBlur; 
-            delete strippedData.onDisconnectImage;
-            delete strippedData.connectedImages;
-            delete strippedData.assets;
-            delete strippedData.sceneImages; // Keep serializable nodes clean
-            delete strippedData.onExtractFrame;
-            delete strippedData.onExtract;
-            stripped.data = strippedData;
-            return stripped;
-        });
-
-        onSceneUpdate(scene.id, (prev) => {
-            const canvas = prev.canvas ? { ...prev.canvas } : {};
-            canvas[activeOption] = {
-                nodes: serializableNodes,
-                edges: edges
-            };
-            return { canvas };
-        });
-    }, [nodes, edges, activeOption, scene.id]);
 
     // 文本同步解析：一次性将 Image 和 Video 两个提示词同步到画布连线与节点，彻底避免同 Tick 竞态覆盖
     // 文本同步解析：一次性将所有 Image 和 Video 提示词（包括主版本和草稿版本）同步到画布连线与节点，彻底避免同 Tick 竞态覆盖
@@ -1437,13 +1659,16 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
             if (node.id === 'image-prompt' && ['np_prompt', 'camera', 'lens', 'focal_length', 'aperture', 'imageModel', 'imageSize', 'imageQuality'].includes(field)) {
                 return { ...node, data: { ...node.data, [field]: value } };
             }
-            if (node.id === 'video-prompt' && ['video_prompt', 'videoModel', 'refImageMode'].includes(field)) {
+            if (node.id === 'video-prompt' && ['video_prompt', 'videoModel', 'refImageMode', 'audio_sfx', 'audio_bgm'].includes(field)) {
                 return { ...node, data: { ...node.data, [field]: value } };
             }
             return node;
         }));
 
         onSceneUpdate(scene.id, (prev) => {
+            if (field === 'audio_sfx' || field === 'audio_bgm') {
+                return { [field]: value };
+            }
             const options = prev.prompt_options ? [...prev.prompt_options] : [];
             let optIdx = options.findIndex(o => o.option_id === activeOption);
             
@@ -1703,7 +1928,10 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                         focal_length: promptNode.data.focal_length,
                         aperture: promptNode.data.aperture,
                         imageUrl: draftImageUrl,
-                        imageAssetId: draftImageAssetId
+                        imageAssetId: draftImageAssetId,
+                        imageModel: promptNode.data.imageModel,
+                        imageSize: promptNode.data.imageSize,
+                        imageQuality: promptNode.data.imageQuality
                     };
                     updates.prompt_options = newOptions;
                 }
@@ -1716,6 +1944,9 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                 updates.aperture = promptNode.data.aperture;
                 updates.imageUrl = draftImageUrl;
                 updates.imageAssetId = draftImageAssetId;
+                updates.imageModel = promptNode.data.imageModel;
+                updates.imageSize = promptNode.data.imageSize;
+                updates.imageQuality = promptNode.data.imageQuality;
             }
             return updates;
         });
@@ -1945,7 +2176,9 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                         ...newOptions[activeOptIdx],
                         video_prompt: draftPrompt,
                         videoUrl: draftVideoUrl,
-                        videoAssetId: draftVideoAssetId
+                        videoAssetId: draftVideoAssetId,
+                        videoModel: promptNode.data.videoModel,
+                        refImageMode: promptNode.data.refImageMode
                     };
                     updates.prompt_options = newOptions;
                 }
@@ -1954,6 +2187,8 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                 updates.video_prompt = draftPrompt;
                 updates.videoUrl = draftVideoUrl;
                 updates.videoAssetId = draftVideoAssetId;
+                updates.videoModel = promptNode.data.videoModel;
+                updates.refImageMode = promptNode.data.refImageMode;
             }
             return updates;
         });
@@ -2317,6 +2552,10 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
 
             // Filter out saved nodes that are no longer referenced in prompt tags or don't exist
             const filteredSavedNodes = uniqueNodes.filter((node: any) => {
+                if (node.id === 'audio') {
+                    needsMigration = true;
+                    return false;
+                }
                 // Core config nodes are always kept
                 if (['image-prompt', 'image-output', 'video-prompt', 'video-output'].includes(node.id)) {
                     return true;
@@ -2404,12 +2643,14 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                             if (latest?.data?.imageUrl) window.open(latest.data.imageUrl, '_blank');
                         }
                     };
-                } else if (node.id === 'video-prompt') {
+                                } else if (node.id === 'video-prompt') {
                     updatedNode.data = {
                         ...node.data,
                         assets,
                         sceneImages,
                         videoStatus: currentVideoStatus,
+                        audio_sfx: scene.audio_sfx || '',
+                        audio_bgm: scene.audio_bgm || '',
                         onUpdate: (f: string, v: any) => {
                             if (f === 'refImageMode') {
                                 onSceneUpdate(scene.id, { isStartEndFrameMode: v === 'start_end_frame' || v === 'first_frame' });
@@ -2534,6 +2775,12 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                         videoAssetId: resolvedVideoAssetId,
                         onExtract: (timeType: 'start' | 'end') => handleExtractFirstLastFrame(node.id, timeType)
                     };
+                } else if (node.type === 'customNote') {
+                    updatedNode.data = {
+                        ...node.data,
+                        onUpdate: (f: string, v: any) => handleUpdateNote(node.id, f, v),
+                        onDelete: () => handleDeleteNote(node.id)
+                    };
                 }
                 return updatedNode;
             });
@@ -2555,6 +2802,10 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                 }
                 return e;
             }).filter((e: any) => {
+                if (e.source === 'audio' || e.target === 'audio') {
+                    edgeMigrated = true;
+                    return false;
+                }
                 if (e.target === 'image-prompt') {
                     const sourceNode = boundNodes.find((n: any) => n.id === e.source);
                     if (sourceNode) {
@@ -2596,6 +2847,8 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                 }
                 return true;
             });
+
+            // Audio edge injection removed
 
             if (edgeMigrated) {
                 pendingSaveRef.current = true;
@@ -2714,9 +2967,9 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                     position: { x: 330, y: 50 },
                     data: {
                         np_prompt: option.np_prompt || '',
-                        imageModel: 'gpt-image-2',
-                        imageSize: '16:9',
-                        imageQuality: 'auto',
+                        imageModel: option.imageModel || 'gpt-image-2',
+                        imageSize: option.imageSize || '16:9',
+                        imageQuality: option.imageQuality || 'auto',
                         camera: option.camera || '',
                         lens: option.lens || '',
                         focal_length: option.focal_length || '',
@@ -2767,6 +3020,8 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                         videoModel: option.videoModel || 'doubao-seedance-2-0-260128',
                         refImageMode: option.refImageMode || (scene.isStartEndFrameMode ? 'start_end_frame' : 'auto'),
                         videoStatus: currentVideoStatus,
+                        audio_sfx: scene.audio_sfx || '',
+                        audio_bgm: scene.audio_bgm || '',
                         onUpdate: (f: string, v: any) => {
                             if (f === 'refImageMode') {
                                 onSceneUpdate(scene.id, { isStartEndFrameMode: v === 'start_end_frame' || v === 'first_frame' });
@@ -3167,6 +3422,19 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                         }
                     };
                 }
+                if (node.id === 'video-prompt') {
+                    return {
+                        ...node,
+                        data: {
+                            ...node.data,
+                            audio_sfx: scene.audio_sfx || '',
+                            audio_bgm: scene.audio_bgm || '',
+                            videoUrl: scene.isStartEndFrameMode ? scene.startEndVideoUrl : option.videoUrl,
+                            videoAssetId: scene.isStartEndFrameMode ? scene.startEndVideoAssetId : option.videoAssetId,
+                            videoStatus: currentVideoStatus
+                        }
+                    };
+                }
                 if (node.id === 'video-output') {
                     return {
                         ...node,
@@ -3218,6 +3486,11 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
         scene.isStartEndFrameMode,
         scene.startEndVideoUrl,
         scene.startEndVideoAssetId,
+        scene.narration,
+        scene.narrationAudioUrl,
+        scene.audio_sfx,
+        scene.audio_bgm,
+        styleState.narrationVoice,
         currentGenStatus,
         currentVideoStatus,
         assets,
@@ -3239,7 +3512,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
 
     // Save layout coordinates when nodes move
     const onNodeDragStop = () => {
-        handleSaveLayout();
+        debouncedSaveLayout();
     };
 
     // HTML5 Drag and Drop Handlers
@@ -3347,9 +3620,9 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                 if (!isPrimaryExists) {
                     newNode.data = {
                         np_prompt: option.np_prompt,
-                        imageModel: 'gpt-image-2',
-                        imageSize: '16:9',
-                        imageQuality: 'auto',
+                        imageModel: option.imageModel || 'gpt-image-2',
+                        imageSize: option.imageSize || '16:9',
+                        imageQuality: option.imageQuality || 'auto',
                         camera: option.camera || '',
                         lens: option.lens || '',
                         focal_length: option.focal_length || '',
@@ -3377,9 +3650,9 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                 } else {
                     newNode.data = {
                         np_prompt: '',
-                        imageModel: 'gpt-image-2',
-                        imageSize: '16:9',
-                        imageQuality: 'auto',
+                        imageModel: option.imageModel || 'gpt-image-2',
+                        imageSize: option.imageSize || '16:9',
+                        imageQuality: option.imageQuality || 'auto',
                         camera: '',
                         lens: '',
                         focal_length: '',
@@ -3593,6 +3866,52 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
 
     const activeOptionData = getOptionData(activeOption);
 
+    // Process edges to apply marching ants flow animation when target is generating
+    const processedEdges = edges.map(edge => {
+        const targetNode = nodes.find(n => n.id === edge.target);
+        let isGenerating = false;
+        
+        if (targetNode) {
+            if (targetNode.id === 'image-prompt') {
+                isGenerating = currentGenStatus === ImageGenStatus.GENERATING;
+            } else if (targetNode.id === 'video-prompt') {
+                isGenerating = currentVideoStatus === ImageGenStatus.GENERATING;
+            } else if (targetNode.id === 'image-output') {
+                isGenerating = currentGenStatus === ImageGenStatus.GENERATING;
+            } else if (targetNode.id === 'video-output') {
+                isGenerating = currentVideoStatus === ImageGenStatus.GENERATING;
+            } else if (targetNode.id === 'audio') {
+                isGenerating = !!targetNode.data?.ttsLoading;
+            } else if (targetNode.id.startsWith('image-prompt-draft-')) {
+                isGenerating = targetNode.data?.genStatus === ImageGenStatus.GENERATING;
+            } else if (targetNode.id.startsWith('video-prompt-draft-')) {
+                isGenerating = targetNode.data?.videoStatus === ImageGenStatus.GENERATING;
+            } else if (targetNode.id.startsWith('image-output-draft-')) {
+                const promptId = targetNode.id.replace('image-output-draft-', 'image-prompt-draft-');
+                const promptNode = nodes.find(n => n.id === promptId);
+                isGenerating = promptNode?.data?.genStatus === ImageGenStatus.GENERATING;
+            } else if (targetNode.id.startsWith('video-output-draft-')) {
+                const promptId = targetNode.id.replace('video-output-draft-', 'video-prompt-draft-');
+                const promptNode = nodes.find(n => n.id === promptId);
+                isGenerating = promptNode?.data?.videoStatus === ImageGenStatus.GENERATING;
+            }
+        }
+        
+        if (isGenerating) {
+            return {
+                ...edge,
+                animated: true,
+                className: 'marching-ants',
+                style: {
+                    ...edge.style,
+                    strokeDasharray: '5,5'
+                }
+            };
+        }
+        
+        return edge;
+    });
+
     if (!isOpen) return null;
 
     return (
@@ -3799,21 +4118,31 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                         </div>
                     </div>
 
-                    {/* Option Tab Switcher (A/B/C) */}
-                    <div className="flex bg-[#1c1c24] border border-white/5 rounded-full p-1 gap-1">
-                        {(['A', 'B', 'C'] as const).map((opt) => (
-                            <button
-                                key={opt}
-                                onClick={() => setActiveOption(opt)}
-                                className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
-                                    activeOption === opt 
-                                        ? 'bg-cyan-500 text-black shadow-lg shadow-cyan-500/20' 
-                                        : 'text-gray-400 hover:text-white'
-                                }`}
-                            >
-                                方案 {opt}
-                            </button>
-                        ))}
+                    {/* Option Tab Switcher (A/B/C) and Reset Layout */}
+                    <div className="flex items-center gap-3">
+                        <div className="flex bg-[#1c1c24] border border-white/5 rounded-full p-1 gap-1">
+                            {(['A', 'B', 'C'] as const).map((opt) => (
+                                <button
+                                    key={opt}
+                                    onClick={() => setActiveOption(opt)}
+                                    className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+                                        activeOption === opt 
+                                            ? 'bg-cyan-500 text-black shadow-lg shadow-cyan-500/20' 
+                                            : 'text-gray-400 hover:text-white'
+                                    }`}
+                                >
+                                    方案 {opt}
+                                </button>
+                            ))}
+                        </div>
+
+                        <button
+                            onClick={handleResetLayout}
+                            className="flex items-center gap-1.5 px-4 py-1.5 rounded-full border border-white/10 hover:border-cyan-500/30 bg-[#1c1c24] hover:bg-white/5 text-xs font-bold text-gray-300 hover:text-white transition-all cursor-pointer"
+                            title="清空位置缓存，重置为标准树状布局"
+                        >
+                            <span>重置布局</span>
+                        </button>
                     </div>
 
                     <button 
@@ -3832,13 +4161,14 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                 >
                     <ReactFlow
                         nodes={nodes}
-                        edges={edges}
+                        edges={processedEdges}
                         onNodesChange={onNodesChange}
                         onEdgesChange={onEdgesChange}
                         onConnect={handleConnect}
                         onEdgesDelete={handleEdgesDelete}
                         onNodesDelete={handleNodesDelete}
                         onNodeDragStop={onNodeDragStop}
+                        onPaneDoubleClick={onPaneDoubleClick}
                         onInit={setReactFlowInstance}
                         nodeTypes={nodeTypes}
                         proOptions={{ hideAttribution: true }}

@@ -57,6 +57,17 @@ export function useAppState() {
         };
     }, [showToast]);
 
+    useEffect(() => {
+        const handleUpdateGlobalStyle = (e: Event) => {
+            const customEvent = e as CustomEvent<Partial<GlobalStyle>>;
+            if (customEvent.detail) {
+                setGlobalStyle(prev => ({ ...prev, ...customEvent.detail }));
+            }
+        };
+        window.addEventListener('update-global-style', handleUpdateGlobalStyle);
+        return () => window.removeEventListener('update-global-style', handleUpdateGlobalStyle);
+    }, []);
+
     // Background Storage auto-GC check
     useEffect(() => {
         const runBackgroundGC = async () => {

@@ -60,8 +60,8 @@ class ModelManager {
         };
 
         const t8starConfig: AIProviderConfig = {
-            baseUrl: process.env.T8_BASE_URL || "https://ai.t8star.cn",
-            mediaBaseUrl: process.env.T8_MEDIA_BASE_URL || "https://ai.t8star.cn",
+            baseUrl: process.env.T8_BASE_URL || "https://ai.t8star.org",
+            mediaBaseUrl: process.env.T8_MEDIA_BASE_URL || "https://ai.t8star.org",
             apiKey: process.env.T8_TEXT_API_KEY || "",
             mediaApiKey: process.env.T8_IMAGE_API_KEY || "",
             videoApiKey: process.env.T8_VIDEO_API_KEY || "",
@@ -118,28 +118,68 @@ class ModelManager {
             if (this.config.imagemodel === "polo") {
                 finalArgs = { ...args, model: MODELS.IMAGE_POLO_OVERRIDE };
             } else if (this.config.imagemodel === "t8star") {
-                let requestedModel = this.config.t8starImageModel || "gpt-image-2";
+                const customModel = args.config?.imageConfig?.customModel;
+                const customSize = args.config?.imageConfig?.customSize;
+                const customQuality = args.config?.imageConfig?.customQuality;
+
+                let requestedModel = customModel || this.config.t8starImageModel || "gpt-image-2";
                 const isAsset = args.config?.imageConfig?.isAsset;
                 
                 const newConfig = { ...(args.config || {}) };
                 newConfig.imageConfig = { ...(newConfig.imageConfig || {}) };
 
+                const sizeMap: Record<string, Record<string, string>> = {
+                    '1:1': { '1K': '1024x1024', '2K': '2048x2048', '4K': '4096x4096' },
+                    '3:2': { '1K': '1200x800', '2K': '1536x1024', '4K': '3072x2048' },
+                    '2:3': { '1K': '800x1200', '2K': '1024x1536', '4K': '2048x3072' },
+                    '4:3': { '1K': '1152x864', '2K': '1408x1056', '4K': '2880x2160' },
+                    '3:4': { '1K': '864x1152', '2K': '1056x1408', '4K': '2160x2880' },
+                    '5:4': { '1K': '1280x1024', '2K': '1600x1280', '4K': '3200x2560' },
+                    '4:5': { '1K': '1024x1280', '2K': '1280x1600', '4K': '2560x3200' },
+                    '16:9': { '1K': '1280x720', '2K': '2048x1152', '4K': '3840x2160' },
+                    '9:16': { '1K': '720x1280', '2K': '1152x2048', '4K': '2160x3840' },
+                    '2:1': { '1K': '1280x640', '2K': '2048x1024', '4K': '4096x2048' },
+                    '1:2': { '1K': '640x1280', '2K': '1024x2048', '4K': '2048x4096' },
+                    '21:9': { '1K': '1680x720', '2K': '2464x1056', '4K': '3360x1440' },
+                    '9:21': { '1K': '720x1680', '2K': '1056x2464', '4K': '1440x3360' },
+                };
+
+                const resolveGptImageSize = (sizeVal: string | undefined): string => {
+                    if (!sizeVal || sizeVal === 'auto') {
+                        return this.config.t8starImageSize || 'auto';
+                    }
+                    if (sizeVal.includes('x')) {
+                        return sizeVal;
+                    }
+                    const ratio = sizeVal;
+                    const res = '2K';
+                    if (sizeMap[ratio]?.[res]) {
+                        return sizeMap[ratio][res];
+                    }
+                    return sizeVal;
+                };
+
                 if (requestedModel === "gpt-image-2-official") {
                     requestedModel = "gpt-image-2"; 
                     if (!isAsset) {
                         newConfig.imageConfig.useOfficialKey = true;
-                        newConfig.imageConfig.size = this.config.t8starImageSize || "auto";
-                        newConfig.imageConfig.quality = this.config.t8starImageQuality || "auto";
+                        newConfig.imageConfig.size = resolveGptImageSize(customSize);
+                        newConfig.imageConfig.quality = customQuality || this.config.t8starImageQuality || "auto";
                     }
                 } else if (requestedModel === "gpt-image-2") {
                     if (!isAsset) {
-                        newConfig.imageConfig.size = this.config.t8starImageSize || "auto";
-                        newConfig.imageConfig.quality = this.config.t8starImageQuality || "auto";
+                        newConfig.imageConfig.size = resolveGptImageSize(customSize);
+                        newConfig.imageConfig.quality = customQuality || this.config.t8starImageQuality || "auto";
                     }
                 } else if (requestedModel === "nano-banana-pro") {
                     if (!isAsset) {
-                        newConfig.imageConfig.overrideNanoSize = this.config.t8starNanoImageSize || "2K";
-                        newConfig.imageConfig.overrideNanoAspectRatio = this.config.t8starNanoAspectRatio || "16:9";
+                        const nanoSize = (customQuality && customQuality.includes("K")) ? customQuality : 
+                                         (customSize && customSize.includes("K")) ? customSize : 
+                                         (this.config.t8starNanoImageSize || "2K");
+                        const nanoRatio = (customSize && customSize.includes(":")) ? customSize : 
+                                          (this.config.t8starNanoAspectRatio || "16:9");
+                        newConfig.imageConfig.overrideNanoSize = nanoSize;
+                        newConfig.imageConfig.overrideNanoAspectRatio = nanoRatio;
                     }
                 }
                 finalArgs = { ...args, model: requestedModel, config: newConfig };

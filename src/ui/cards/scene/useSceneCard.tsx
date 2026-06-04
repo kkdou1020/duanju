@@ -93,7 +93,8 @@ export function useSceneCard(props: UseSceneCardProps) {
             const syncedFields = [
                 'np_prompt', 'video_prompt', 'imageUrl', 'imageAssetId', 
                 'videoUrl', 'videoAssetId', 'assetIds', 'videoAssetIds',
-                'camera', 'lens', 'focal_length', 'aperture'
+                'camera', 'lens', 'focal_length', 'aperture',
+                'imageModel', 'imageSize', 'imageQuality', 'videoModel', 'refImageMode'
             ];
 
             const hasSyncedField = Object.keys(updates).some(k => syncedFields.includes(k));

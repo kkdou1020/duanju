@@ -66,21 +66,7 @@ router.post('/upload', upload.single('file'), async (req: Request, res: Response
 });
 
 import nodeFetch from 'node-fetch';
-import { HttpsProxyAgent } from 'https-proxy-agent';
-
-let proxyAgent: any = null;
-let proxyAgentInitialized = false;
-
-const getProxyAgent = () => {
-    if (!proxyAgentInitialized) {
-        const proxyUrl = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy;
-        if (proxyUrl) {
-            proxyAgent = new HttpsProxyAgent(proxyUrl);
-        }
-        proxyAgentInitialized = true;
-    }
-    return proxyAgent;
-};
+import { getProxyAgent } from '../services/ai/helpers';
 
 const fetch = (url: any, options: any = {}) => {
     const agent = getProxyAgent();
@@ -89,7 +75,6 @@ const fetch = (url: any, options: any = {}) => {
     }
     return nodeFetch(url, options);
 };
-
 
 
 // GET /api/media/download-proxy

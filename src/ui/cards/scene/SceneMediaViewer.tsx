@@ -1,15 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Scene, ImageGenStatus, GlobalStyle, Asset } from '@/shared/types';
 import { Translation } from '@/services/i18n/translations';
 import { LazyMedia } from '@/ui/common/LazyMedia';
-import { Image as ImageIcon, Aperture, RefreshCw, Download, Video, Film, Upload, Trash2, AlertCircle } from 'lucide-react';
+import { Image as ImageIcon, Aperture, RefreshCw, Download, Video, Film, Upload, Trash2, AlertCircle, ChevronDown } from 'lucide-react';
 import { refreshVideoUrl } from '@/services/api';
 import { downloadAndSaveVideo } from '@/services/storage';
 
 interface SceneMediaViewerProps {
     scene: Scene;
     labels: Translation;
-    onUpdate: (id: string, field: keyof Scene, value: any) => void;
+    onUpdate: (id: string, fieldOrUpdates: keyof Scene | Partial<Scene>, value?: any) => void;
     genStatus: ImageGenStatus;
     videoStatus: ImageGenStatus;
     viewMode: 'image' | 'video';
@@ -53,6 +53,196 @@ const SceneMediaViewer: React.FC<SceneMediaViewerProps> = ({
     const imageStartTime = getTaskStartTime?.('image', viewingOptionId || undefined);
     const videoStartTime = getTaskStartTime?.('video', viewingOptionId || undefined);
 
+    const [showSettings, setShowSettings] = useState(false);
+
+    const getDropdownLabel = () => {
+        if (viewMode === 'image') {
+            const model = scene.imageModel || 'gpt-image-2';
+            return `生图: ${model}`;
+        } else {
+            if (scene.refImageMode === 'start_end_frame') {
+                return '视频: 首尾帧模式';
+            }
+            if (scene.refImageMode === 'first_frame') {
+                return '视频: 上传首帧';
+            }
+            const model = scene.videoModel || 'doubao-seedance-2-0-260128';
+            return `视频: ${model === 'doubao-seedance-2-0-260128' ? 'seedance 2.0' : model === 'veo3.1-components' ? 'veo 3.1' : 'Polo'}`;
+        }
+    };
+
+    const handleVideoModeChange = (mode: 'auto' | 'first_frame' | 'start_end_frame') => {
+        const isStartEnd = mode === 'start_end_frame' || mode === 'first_frame';
+        const startId = `scene_img_${scene.id}`;
+        onUpdate(scene.id, {
+            refImageMode: mode,
+            isStartEndFrameMode: isStartEnd,
+            startEndAssetIds: (isStartEnd && (!scene.startEndAssetIds || scene.startEndAssetIds.length === 0))
+                ? [startId]
+                : scene.startEndAssetIds
+        });
+    };
+
+    const renderImageSettings = () => {
+        const imageModel = scene.imageModel || 'gpt-image-2';
+        const imageSize = scene.imageSize || '16:9';
+        const imageQuality = scene.imageQuality || 'auto';
+
+        return (
+            <div className="flex flex-col gap-3 text-xs animate-in fade-in duration-200">
+                {/* Model Select */}
+                <div className="flex flex-col gap-1">
+                    <span className="text-gray-400 font-medium">生成模型</span>
+                    <select
+                        value={imageModel}
+                        onChange={(e) => onUpdate(scene.id, 'imageModel', e.target.value)}
+                        className="bg-white dark:bg-[#151515] border border-gray-200 dark:border-white/10 rounded px-2.5 py-1 text-gray-700 dark:text-gray-200 outline-none w-full cursor-pointer focus:border-indigo-500"
+                    >
+                        <option value="gpt-image-2">gpt-image-2</option>
+                        <option value="nano-banana-pro">nano-banana-pro</option>
+                        <option value="gpt-image-2-official">gpt-image-2 (官方版)</option>
+                        <option value="polo">polo (Gemini Pro)</option>
+                    </select>
+                </div>
+
+                {imageModel !== 'polo' && (
+                    <>
+                        {/* Aspect Ratio Select */}
+                        <div className="flex flex-col gap-1">
+                            <span className="text-gray-400 font-medium">尺寸比例</span>
+                            <select
+                                value={imageSize}
+                                onChange={(e) => onUpdate(scene.id, 'imageSize', e.target.value)}
+                                className="bg-white dark:bg-[#151515] border border-gray-200 dark:border-white/10 rounded px-2.5 py-1 text-gray-700 dark:text-gray-200 outline-none w-full cursor-pointer focus:border-indigo-500"
+                            >
+                                <option value="16:9">16:9</option>
+                                <option value="9:16">9:16</option>
+                                <option value="1:1">1:1</option>
+                                <option value="3:2">3:2</option>
+                                <option value="2:3">2:3</option>
+                                <option value="4:5">4:5</option>
+                                <option value="5:4">5:4</option>
+                                <option value="3:4">3:4</option>
+                                <option value="4:3">4:3</option>
+                            </select>
+                        </div>
+
+                        {/* Resolution / Quality Select */}
+                        <div className="flex flex-col gap-1">
+                            {imageModel === 'nano-banana-pro' ? (
+                                <>
+                                    <span className="text-gray-400 font-medium">图像分辨率</span>
+                                    <select
+                                        value={imageQuality === 'auto' ? '2K' : imageQuality}
+                                        onChange={(e) => onUpdate(scene.id, 'imageQuality', e.target.value)}
+                                        className="bg-white dark:bg-[#151515] border border-gray-200 dark:border-white/10 rounded px-2.5 py-1 text-gray-700 dark:text-gray-200 outline-none w-full cursor-pointer focus:border-indigo-500"
+                                    >
+                                        <option value="1K">1K</option>
+                                        <option value="2K">2K</option>
+                                        <option value="4K" disabled>4K (暂不可用)</option>
+                                    </select>
+                                </>
+                            ) : (
+                                <>
+                                    <span className="text-gray-400 font-medium">生成质量</span>
+                                    <select
+                                        value={imageQuality}
+                                        onChange={(e) => onUpdate(scene.id, 'imageQuality', e.target.value)}
+                                        className="bg-white dark:bg-[#151515] border border-gray-200 dark:border-white/10 rounded px-2.5 py-1 text-gray-700 dark:text-gray-200 outline-none w-full cursor-pointer focus:border-indigo-500"
+                                    >
+                                        <option value="auto">auto</option>
+                                        <option value="low">low</option>
+                                        <option value="medium">medium</option>
+                                        <option value="high">high</option>
+                                    </select>
+                                </>
+                            )}
+                        </div>
+                    </>
+                )}
+            </div>
+        );
+    };
+
+    const renderVideoSettings = () => {
+        const videoModel = scene.videoModel || 'doubao-seedance-2-0-260128';
+        const refImageMode = scene.refImageMode || 'auto';
+
+        return (
+            <div className="flex flex-col gap-3 text-xs animate-in fade-in duration-200">
+                {/* Video Engine Select */}
+                <div className="flex flex-col gap-1">
+                    <span className="text-gray-400 font-medium">生成模型 (Engine)</span>
+                    <select
+                        value={videoModel}
+                        onChange={(e) => onUpdate(scene.id, 'videoModel', e.target.value)}
+                        className="bg-white dark:bg-[#151515] border border-gray-200 dark:border-white/10 rounded px-2.5 py-1 text-gray-700 dark:text-gray-200 outline-none w-full cursor-pointer focus:border-blue-500"
+                    >
+                        <option value="doubao-seedance-2-0-260128">doubao-seedance-2-0</option>
+                        <option value="veo3.1-components">veo 3.1</option>
+                        <option value="polo">polo (Gemini Pro)</option>
+                    </select>
+                </div>
+
+                {/* Mode Select */}
+                <div className="flex flex-col gap-1">
+                    <span className="text-gray-400 font-medium">参考图模式</span>
+                    <select
+                        value={refImageMode}
+                        onChange={(e) => handleVideoModeChange(e.target.value as 'auto' | 'first_frame' | 'start_end_frame')}
+                        className="bg-white dark:bg-[#151515] border border-gray-200 dark:border-white/10 rounded px-2.5 py-1 text-gray-700 dark:text-gray-200 outline-none w-full cursor-pointer focus:border-blue-500"
+                    >
+                        <option value="auto">参考图 (auto)</option>
+                        <option value="first_frame">上传首帧</option>
+                        <option value="start_end_frame">首尾帧视频</option>
+                    </select>
+                </div>
+            </div>
+        );
+    };
+
+    const renderDropdownTag = () => {
+        const label = getDropdownLabel();
+        return (
+            <div className="absolute top-2 left-2 z-30">
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setShowSettings(!showSettings);
+                    }}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all backdrop-blur-sm shadow-md border ${
+                        showSettings
+                            ? 'bg-indigo-600 dark:bg-banana-500 text-white dark:text-black border-indigo-500 dark:border-banana-400'
+                            : 'bg-white/80 dark:bg-black/60 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-black/80 border-gray-300 dark:border-white/10'
+                    }`}
+                >
+                    <div className={`w-2 h-2 rounded-full ${viewMode === 'image' ? 'bg-purple-500' : 'bg-blue-500'}`} />
+                    <span>{label}</span>
+                    <ChevronDown className="w-3.5 h-3.5 opacity-60" />
+                </button>
+
+                {showSettings && (
+                    <>
+                        {/* Backdrop to dismiss popover */}
+                        <div 
+                            className="fixed inset-0 z-40 bg-transparent" 
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setShowSettings(false);
+                            }} 
+                        />
+                        <div 
+                            className="absolute top-9 left-0 mt-1 w-60 bg-white/95 dark:bg-[#121212]/95 border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl backdrop-blur-lg z-50 p-3.5 text-gray-800 dark:text-gray-100 flex flex-col gap-3 max-h-[360px] overflow-y-auto"
+                            onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside
+                        >
+                            {viewMode === 'image' ? renderImageSettings() : renderVideoSettings()}
+                        </div>
+                    </>
+                )}
+            </div>
+        );
+    };
+
     const handleVideoError = async () => {
         const operation = isStartEndMode ? scene.startEndVideoOperation : scene.operation;
         if (!operation) {
@@ -86,21 +276,8 @@ const SceneMediaViewer: React.FC<SceneMediaViewerProps> = ({
             <div className="w-full md:w-[320px] bg-gray-100 dark:bg-black/40 min-h-[250px] relative border-b md:border-b-0 md:border-r border-gray-200 dark:border-white/5 flex items-center justify-center group shrink-0">
                 <input type="file" ref={fileInputRef} onChange={onFileChange} accept="image/*" className="hidden" />
 
-                {/* Start/End Frame Mode Toggle */}
-                {scene.imageUrl && (
-                    <div className="absolute top-2 left-2 z-10">
-                        <button
-                            onClick={() => {
-                                onUpdate(scene.id, 'isStartEndFrameMode', false);
-                            }}
-                            className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all backdrop-blur-sm bg-indigo-600 dark:bg-banana-500 text-white dark:text-black shadow-lg shadow-indigo-500/20 dark:shadow-banana-500/20"
-                            title="关闭首尾帧模式"
-                        >
-                            <div className="w-2 h-2 rounded-full bg-white dark:bg-black" />
-                            首尾帧模式
-                        </button>
-                    </div>
-                )}
+                {/* Settings Dropdown Tag */}
+                {renderDropdownTag()}
 
                 {hasImage ? (
                     <div className="relative w-full h-full flex items-center justify-center bg-gray-200 dark:bg-black">
@@ -185,25 +362,8 @@ const SceneMediaViewer: React.FC<SceneMediaViewerProps> = ({
             <input type="file" ref={fileInputRef} onChange={onFileChange} accept="image/*" className="hidden" />
             <input type="file" ref={videoFileInputRef} onChange={onVideoFileChange} accept="video/*" className="hidden" />
 
-            {/* Start/End Frame Mode Toggle (show when image exists) */}
-            {scene.imageUrl && (
-                <div className="absolute top-2 left-2 z-10">
-                    <button
-                        onClick={() => {
-                            onUpdate(scene.id, 'isStartEndFrameMode', true);
-                            const startId = `scene_img_${scene.id}`;
-                            if (!scene.startEndAssetIds || scene.startEndAssetIds.length === 0) {
-                                onUpdate(scene.id, 'startEndAssetIds', [startId]);
-                            }
-                        }}
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all backdrop-blur-sm bg-white/80 dark:bg-black/60 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-black/80 border border-gray-300 dark:border-white/10"
-                        title="开启首尾帧模式 (强制使用 veo3.1-pro-4k)"
-                    >
-                        <div className="w-2 h-2 rounded-full bg-gray-400" />
-                        首尾帧模式
-                    </button>
-                </div>
-            )}
+            {/* Settings Dropdown Tag */}
+            {renderDropdownTag()}
 
             {/* Main Content Area */}
             <div className="flex-1 w-full flex items-center justify-center">
@@ -476,7 +636,12 @@ const SceneMediaViewerMemo = React.memo(SceneMediaViewer, (prev, next) => {
         && prev.scene.startEndVideoAssetId === next.scene.startEndVideoAssetId
         && prev.scene.isStartEndFrameMode === next.scene.isStartEndFrameMode
         && prev.scene.operation === next.scene.operation
-        && prev.scene.startEndVideoOperation === next.scene.startEndVideoOperation;
+        && prev.scene.startEndVideoOperation === next.scene.startEndVideoOperation
+        && prev.scene.imageModel === next.scene.imageModel
+        && prev.scene.imageSize === next.scene.imageSize
+        && prev.scene.imageQuality === next.scene.imageQuality
+        && prev.scene.videoModel === next.scene.videoModel
+        && prev.scene.refImageMode === next.scene.refImageMode;
 });
 
 export default SceneMediaViewerMemo;

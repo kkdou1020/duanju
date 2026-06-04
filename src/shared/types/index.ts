@@ -41,6 +41,11 @@ export interface Scene {
     lens?: string;
     focal_length?: string;
     aperture?: string;
+    imageModel?: string;
+    imageSize?: string;
+    imageQuality?: string;
+    videoModel?: string;
+    refImageMode?: string;
   }>;
   audio_dialogue?: DialogueLine[];
   audio_sfx?: string;
@@ -62,6 +67,11 @@ export interface Scene {
   video_prompt_backup?: string; // Backup of video prompt for Start/End Frame Mode undo
   operation?: any; // Cache of standard video operation
   startEndVideoOperation?: any; // Cache of start/end video operation
+  imageModel?: string;
+  imageSize?: string;
+  imageQuality?: string;
+  videoModel?: string;
+  refImageMode?: string;
   canvas?: Record<string, { nodes: any[]; edges: any[] }>; // key is option_id ("A", "B", "C"), value is nodes & edges
 }
 

@@ -3,7 +3,16 @@ import { retryWithBackoff, safeJsonParse, ai } from "../helpers";
 import { MODELS } from "../model-manager";
 import { extractAssetTags, resolveTagToAsset, stripAssetTags, isStoryboardTag } from "../../../shared/asset-tags";
 import sharp from 'sharp';
-import fetch from 'node-fetch';
+import nodeFetch from 'node-fetch';
+import { getProxyAgent } from "../helpers";
+
+const fetch = (url: any, options: any = {}) => {
+    const agent = getProxyAgent();
+    if (agent) {
+        options.agent = agent;
+    }
+    return nodeFetch(url, options);
+};
 
 // --- HELPER: Extract Image (Base64 or URL) from Response ---
 export const extractImageFromResponse = (response: GenerateContentResponse): string => {
@@ -271,6 +280,9 @@ export const generateSceneImage = async (
         throw new Error('No prompt available for scene image generation. Please generate prompts first.');
     }
     const ar = globalStyle?.aspectRatio || '16:9';
+    const customModel = option?.imageModel || scene.imageModel;
+    const customSize = option?.imageSize || scene.imageSize;
+    const customQuality = option?.imageQuality || scene.imageQuality;
 
     let basePrompt = prompt.substring(0, 1500);
     const stylePrefix = globalStyle ? computeStylePrefix(globalStyle) : "";
@@ -383,7 +395,7 @@ export const generateSceneImage = async (
     const response = await retryWithBackoff<GenerateContentResponse>(() => ai.models.generateContent({
         model: MODELS.IMAGE_GEN,
         contents: { parts: parts },
-        config: { imageConfig: { aspectRatio: ar }, signal }
+        config: { imageConfig: { aspectRatio: ar, customModel, customSize, customQuality }, signal }
     }), 1, 2000, undefined, signal);
 
     const elapsed = Date.now() - startTime;

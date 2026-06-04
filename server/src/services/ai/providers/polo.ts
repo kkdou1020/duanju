@@ -1,21 +1,7 @@
 import { GenerateContentResponse, VideosOperation } from "../../../shared/types";
 import { IAIProvider, GenerateContentArgs, GenerateVideosArgs, GetVideosOperationArgs, AIProviderConfig } from "./interfaces";
 import nodeFetch from 'node-fetch';
-import { HttpsProxyAgent } from 'https-proxy-agent';
-
-let proxyAgent: any = null;
-let proxyAgentInitialized = false;
-
-const getProxyAgent = () => {
-    if (!proxyAgentInitialized) {
-        const proxyUrl = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy;
-        if (proxyUrl) {
-            proxyAgent = new HttpsProxyAgent(proxyUrl);
-        }
-        proxyAgentInitialized = true;
-    }
-    return proxyAgent;
-};
+import { getProxyAgent } from "../helpers";
 
 const fetch = (url: any, options: any = {}) => {
     const agent = getProxyAgent();
@@ -39,9 +25,9 @@ export class PoloProvider implements IAIProvider {
         this.baseUrl = this.config.baseUrl || "https://work.poloapi.com";
 
         // API keys from config (injected from .env)
-        this.textApiKey = this.config.apiKey || process.env.POLO_TEXT_API_KEY || "";
-        this.imageApiKey = this.config.mediaApiKey || process.env.POLO_IMAGE_API_KEY || "";
-        this.videoApiKey = this.config.videoApiKey || process.env.POLO_VIDEO_API_KEY || this.config.mediaApiKey || "";
+        this.textApiKey = this.config.apiKey || "";
+        this.imageApiKey = this.config.mediaApiKey || "";
+        this.videoApiKey = this.config.videoApiKey || "";
     }
 
     private isImageModel(model?: string) {

@@ -2,7 +2,16 @@ import { Asset, GenerateContentResponse } from "../../../shared/types";
 import { PROMPTS } from "../../../domain/generation/prompt";
 import { retryWithBackoff, safeJsonParse, Type, ai } from "../helpers";
 import { MODELS } from "../model-manager";
-import fetch from 'node-fetch';
+import nodeFetch from 'node-fetch';
+import { getProxyAgent } from "../helpers";
+
+const fetch = (url: any, options: any = {}) => {
+    const agent = getProxyAgent();
+    if (agent) {
+        options.agent = agent;
+    }
+    return nodeFetch(url, options);
+};
 
 // --- GENERATION FUNCTIONS ---
 

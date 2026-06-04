@@ -144,7 +144,12 @@ const SceneCard: React.FC<SceneCardProps> = (props) => {
                                                     state.scene.camera === opt.camera &&
                                                     state.scene.lens === opt.lens &&
                                                     state.scene.focal_length === opt.focal_length &&
-                                                    state.scene.aperture === opt.aperture;
+                                                    state.scene.aperture === opt.aperture &&
+                                                    state.scene.imageModel === opt.imageModel &&
+                                                    state.scene.imageSize === opt.imageSize &&
+                                                    state.scene.imageQuality === opt.imageQuality &&
+                                                    state.scene.videoModel === opt.videoModel &&
+                                                    state.scene.refImageMode === opt.refImageMode;
 
                                                 if (!isAlreadyAdopted) {
                                                     state.onUpdate(state.scene.id, {
@@ -159,7 +164,12 @@ const SceneCard: React.FC<SceneCardProps> = (props) => {
                                                         camera: opt.camera,
                                                         lens: opt.lens,
                                                         focal_length: opt.focal_length,
-                                                        aperture: opt.aperture
+                                                        aperture: opt.aperture,
+                                                        imageModel: opt.imageModel,
+                                                        imageSize: opt.imageSize,
+                                                        imageQuality: opt.imageQuality,
+                                                        videoModel: opt.videoModel,
+                                                        refImageMode: opt.refImageMode
                                                     });
                                                 }
                                             }}

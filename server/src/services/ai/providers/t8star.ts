@@ -9,21 +9,7 @@ import {
     findFirstHttpUrlDeep
 } from "./t8star-utils";
 import nodeFetch from 'node-fetch';
-import { HttpsProxyAgent } from 'https-proxy-agent';
-
-let proxyAgent: any = null;
-let proxyAgentInitialized = false;
-
-const getProxyAgent = () => {
-    if (!proxyAgentInitialized) {
-        const proxyUrl = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy;
-        if (proxyUrl) {
-            proxyAgent = new HttpsProxyAgent(proxyUrl);
-        }
-        proxyAgentInitialized = true;
-    }
-    return proxyAgent;
-};
+import { getProxyAgent } from "../helpers";
 
 const fetch = (url: any, options: any = {}) => {
     const agent = getProxyAgent();
@@ -32,7 +18,6 @@ const fetch = (url: any, options: any = {}) => {
     }
     return nodeFetch(url, options);
 };
-
 
 
 export class T8StarProvider implements IAIProvider {
@@ -48,15 +33,15 @@ export class T8StarProvider implements IAIProvider {
     constructor(config?: AIProviderConfig) {
         this.config = config || {};
         // In backend mode, use real external URLs directly
-        this.textBaseUrl = this.config.baseUrl || "https://ai.t8star.cn";
-        this.mediaBaseUrl = this.config.mediaBaseUrl || "https://ai.t8star.cn";
+        this.textBaseUrl = this.config.baseUrl || "https://ai.t8star.org";
+        this.mediaBaseUrl = this.config.mediaBaseUrl || "https://ai.t8star.org";
 
         // API keys read from config (injected from .env)
-        this.textApiKey = this.config.apiKey || process.env.T8_TEXT_API_KEY || "";
-        this.imageApiKey = this.config.mediaApiKey || process.env.T8_IMAGE_API_KEY || "";
-        this.videoApiKey = this.config.videoApiKey || process.env.T8_VIDEO_API_KEY || this.config.mediaApiKey || "";
+        this.textApiKey = this.config.apiKey || "";
+        this.imageApiKey = this.config.mediaApiKey || "";
+        this.videoApiKey = this.config.videoApiKey || "";
         console.log("[T8Star] Initialized with videoApiKey prefix:", this.videoApiKey ? `${this.videoApiKey.substring(0, 8)}...` : "NONE");
-        this.audioApiKey = this.config.audioApiKey || process.env.T8_AUDIO_API_KEY || "";
+        this.audioApiKey = this.config.audioApiKey || "";
     }
 
     private isT8starModel(model?: string) {

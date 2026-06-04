@@ -10,6 +10,8 @@ interface VideoPromptNodeProps {
         video_prompt: string;
         videoModel: string;
         refImageMode: 'auto' | 'first_frame' | 'start_end_frame';
+        audio_sfx?: string;
+        audio_bgm?: string;
         onUpdate: (field: string, value: any) => void;
         onGenerate: () => void;
         onApply?: () => void;
@@ -29,6 +31,8 @@ export const VideoPromptNode: React.FC<VideoPromptNodeProps> = ({ id, data }) =>
         video_prompt,
         videoModel,
         refImageMode,
+        audio_sfx,
+        audio_bgm,
         onUpdate,
         onGenerate,
         onApply,
@@ -76,6 +80,7 @@ export const VideoPromptNode: React.FC<VideoPromptNodeProps> = ({ id, data }) =>
                     >
                         <option value="doubao-seedance-2-0-260128">doubao-seedance-2-0</option>
                         <option value="veo3.1-components">veo 3.1</option>
+                        <option value="polo">polo (Gemini Pro)</option>
                     </select>
                 </div>
 
@@ -161,6 +166,31 @@ export const VideoPromptNode: React.FC<VideoPromptNodeProps> = ({ id, data }) =>
                         mode="video"
                         placeholder="输入镜头运动调度，输入 @ 触发提示..."
                         className="flex-1 w-full p-2 bg-[#16161a] border border-white/10 rounded-xl text-xs outline-none focus:border-purple-500 min-h-[70px] max-h-[120px]"
+                    />
+                </div>
+            </div>
+
+            {/* Audio Fields */}
+            <div className="flex flex-col gap-3 border-t border-white/5 pt-3 nowheel nopan nodrag" onKeyDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+                <div className="flex flex-col gap-1">
+                    <span className="text-[10px] text-gray-400 font-bold tracking-wide">环境音效 (SFX)</span>
+                    <input
+                        type="text"
+                        value={audio_sfx || ''}
+                        onChange={(e) => onUpdate('audio_sfx', e.target.value)}
+                        placeholder="输入SFX，如 (雨声, 远处的雷鸣)"
+                        className="w-full text-xs bg-[#16161a] border border-white/10 rounded-lg px-2.5 py-1.5 text-gray-200 outline-none focus:border-purple-500"
+                    />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                    <span className="text-[10px] text-gray-400 font-bold tracking-wide">背景音乐 (BGM)</span>
+                    <input
+                        type="text"
+                        value={audio_bgm || ''}
+                        onChange={(e) => onUpdate('audio_bgm', e.target.value)}
+                        placeholder="输入BGM，如 (低沉大提琴, 悲伤钢琴)"
+                        className="w-full text-xs bg-[#16161a] border border-white/10 rounded-lg px-2.5 py-1.5 text-gray-200 outline-none focus:border-purple-500"
                     />
                 </div>
             </div>
