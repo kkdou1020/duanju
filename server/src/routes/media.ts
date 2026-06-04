@@ -66,6 +66,7 @@ router.post('/upload', upload.single('file'), async (req: Request, res: Response
 });
 
 import fetch from 'node-fetch';
+import { getProxyAgent } from '../services/ai/helpers';
 
 // GET /api/media/download-proxy
 // Proxies video/image downloads from external CDNs to bypass browser CORS restrictions
@@ -76,7 +77,8 @@ router.get('/download-proxy', async (req: Request, res: Response) => {
     }
 
     try {
-        const response = await fetch(mediaUrl);
+        const agent = getProxyAgent();
+        const response = await fetch(mediaUrl, agent ? { agent } : undefined);
         if (!response.ok) {
             console.error(`[Media/download-proxy] Remote fetch failed with status: ${response.status}`);
             return res.status(response.status).send(`Failed to fetch media: ${response.statusText}`);

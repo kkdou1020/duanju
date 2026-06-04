@@ -1,5 +1,5 @@
 import { Asset, GlobalStyle, GenerateContentResponse } from "../../../shared/types";
-import { retryWithBackoff, safeJsonParse, ai } from "../helpers";
+import { retryWithBackoff, safeJsonParse, ai, getProxyAgent } from "../helpers";
 import { MODELS } from "../model-manager";
 import { extractAssetTags, resolveTagToAsset, stripAssetTags, isStoryboardTag } from "../../../shared/asset-tags";
 import sharp from 'sharp';
@@ -49,7 +49,8 @@ export async function ensurePngDataUrl(url: string, maxDimension: number = 1024)
             if (!match) return url;
             buffer = Buffer.from(match[1], 'base64');
         } else if (url.startsWith("http")) {
-            const res = await fetch(url);
+            const agent = getProxyAgent();
+            const res = await fetch(url, agent ? { agent } : undefined);
             const arrayBuf = await res.arrayBuffer();
             buffer = Buffer.from(arrayBuf);
         } else {
@@ -326,7 +327,8 @@ export const generateSceneImage = async (
             let cleanBase64 = "";
             if (asset.refImageUrl.startsWith('http')) {
                 try {
-                    const res = await fetch(asset.refImageUrl);
+                    const agent = getProxyAgent();
+                    const res = await fetch(asset.refImageUrl, agent ? { agent } : undefined);
                     const buffer = await res.buffer();
                     cleanBase64 = buffer.toString('base64');
                 } catch (e) {

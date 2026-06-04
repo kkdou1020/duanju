@@ -73,7 +73,7 @@ const injectAuthHeader = (proxyReq, req) => {
 app.use(
   '/api/t8star',
   createProxyMiddleware({
-    target: 'https://ai.t8star.cn',
+    target: 'https://ai.t8star.org',
     changeOrigin: true,
     secure: false,
     timeout: 300000, // 5 minutes

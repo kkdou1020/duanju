@@ -56,13 +56,15 @@ class ModelManager {
             baseUrl: process.env.POLO_BASE_URL || "https://work.poloapi.com",
             apiKey: process.env.POLO_TEXT_API_KEY || "",
             mediaApiKey: process.env.POLO_IMAGE_API_KEY || "",
+            videoApiKey: process.env.POLO_VIDEO_API_KEY || "",
         };
 
         const t8starConfig: AIProviderConfig = {
-            baseUrl: process.env.T8_BASE_URL || "https://ai.t8star.cn",
-            mediaBaseUrl: process.env.T8_MEDIA_BASE_URL || "https://ai.t8star.cn",
+            baseUrl: process.env.T8_BASE_URL || "https://ai.t8star.org",
+            mediaBaseUrl: process.env.T8_MEDIA_BASE_URL || "https://ai.t8star.org",
             apiKey: process.env.T8_TEXT_API_KEY || "",
             mediaApiKey: process.env.T8_IMAGE_API_KEY || "",
+            videoApiKey: process.env.T8_VIDEO_API_KEY || "",
             audioApiKey: process.env.T8_AUDIO_API_KEY || "",
         };
 

@@ -1,6 +1,7 @@
 import { GenerateContentResponse, VideosOperation } from "../../../shared/types";
 import { IAIProvider, GenerateContentArgs, GenerateVideosArgs, GetVideosOperationArgs, AIProviderConfig } from "./interfaces";
 import fetch from 'node-fetch';
+import { getProxyAgent } from "../helpers";
 
 export class PoloProvider implements IAIProvider {
     private config: AIProviderConfig;
@@ -16,7 +17,7 @@ export class PoloProvider implements IAIProvider {
         // API keys from config (injected from .env)
         this.textApiKey = this.config.apiKey || process.env.POLO_TEXT_API_KEY || "";
         this.imageApiKey = this.config.mediaApiKey || process.env.POLO_IMAGE_API_KEY || "";
-        this.videoApiKey = this.config.mediaApiKey || process.env.POLO_VIDEO_API_KEY || "";
+        this.videoApiKey = this.config.videoApiKey || process.env.POLO_VIDEO_API_KEY || "";
     }
 
     private isImageModel(model?: string) {
@@ -90,6 +91,7 @@ export class PoloProvider implements IAIProvider {
 
     private async postJson(path: string, body: any, apiKey: string, signal?: AbortSignal) {
         const url = `${this.baseUrl.replace(/\/+$/, "")}${path}`;
+        const agent = getProxyAgent();
         const res = await fetch(url, {
             method: "POST",
             headers: {
@@ -100,6 +102,7 @@ export class PoloProvider implements IAIProvider {
             body: JSON.stringify(body),
             timeout: 15000, // 15 seconds timeout
             signal: signal as any,
+            ...(agent ? { agent } : {}),
         });
         if (!res.ok) {
             const text = await res.text().catch(() => "");
@@ -110,9 +113,11 @@ export class PoloProvider implements IAIProvider {
 
     private async getJson(path: string) {
         const url = `${this.baseUrl.replace(/\/+$/, "")}${path}`;
+        const agent = getProxyAgent();
         const res = await fetch(url, {
             method: "GET",
             headers: { Accept: "application/json", "Authorization": `Bearer ${this.videoApiKey}` },
+            ...(agent ? { agent } : {}),
         });
         if (!res.ok) {
             const text = await res.text().catch(() => "");
@@ -123,10 +128,12 @@ export class PoloProvider implements IAIProvider {
 
     private async postForm(path: string, form: FormData) {
         const url = `${this.baseUrl.replace(/\/+$/, "")}${path}`;
+        const agent = getProxyAgent();
         const res = await fetch(url, {
             method: "POST",
             headers: { Accept: "application/json", "Authorization": `Bearer ${this.videoApiKey}` },
             body: form as any,
+            ...(agent ? { agent } : {}),
         });
         if (!res.ok) {
             const text = await res.text().catch(() => "");

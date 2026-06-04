@@ -39,5 +39,6 @@ export interface AIProviderConfig {
     apiKey?: string;
     mediaBaseUrl?: string;
     mediaApiKey?: string;
+    videoApiKey?: string;
     audioApiKey?: string;
 }
