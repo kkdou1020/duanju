@@ -107,7 +107,17 @@ export const submitVideoGeneration = async (
     allScenes: Scene[] = [], // Legacy parameter, kept for signature compatibility
     optionId?: string
 ): Promise<{ taskId: string; operation: any }> => {
-    const modelConfig = getModelManager().getConfig();
+    const option = optionId && scene.prompt_options ? scene.prompt_options.find((o: any) => o.option_id === optionId) : null;
+    const modelConfigOverride: Partial<any> = {};
+    const configSource = option || scene;
+    if (configSource) {
+        if (configSource.videomodel) modelConfigOverride.videomodel = configSource.videomodel;
+        if (configSource.t8starVideoModel) modelConfigOverride.t8starVideoModel = configSource.t8starVideoModel;
+    }
+
+    const modelConfig = Object.keys(modelConfigOverride).length > 0 
+        ? { ...getModelManager().getConfig(), ...modelConfigOverride } 
+        : getModelManager().getConfig();
     let model = modelConfig.t8starVideoModel || "veo3.1-components";
 
     // 智能路由：仅当选用普通 Veo 3.1 系列时，根据模式自动切换
@@ -248,7 +258,8 @@ export const submitVideoGeneration = async (
                     audios: audiosToSend,
                     seedanceContent: isSeedance ? seedanceContent : undefined,
                     aspectRatio: aspectRatio,
-                    seconds: seconds
+                    seconds: seconds,
+                    modelConfig: Object.keys(modelConfigOverride).length > 0 ? modelConfigOverride : undefined
                 }
             });
         }, 3, 2000);

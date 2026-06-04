@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Scene, Asset } from '@/shared/types';
 import { Translation } from '@/services/i18n/translations';
-import { Image as ImageIcon, Loader2, CheckCircle, Camera } from 'lucide-react';
+import { Image as ImageIcon, Loader2, CheckCircle, Camera, Sparkles, ChevronDown, Maximize } from 'lucide-react';
 import MentionTextarea, { SceneImageCandidate } from '@/ui/components/MentionTextarea';
 import { CameraSelectorModal } from './CameraSelectorModal';
 
@@ -189,6 +189,12 @@ const SceneImagePaneMemo = React.memo(SceneImagePane, (prev, next) => {
         && prev.scene.lens === next.scene.lens
         && prev.scene.focal_length === next.scene.focal_length
         && prev.scene.aperture === next.scene.aperture
+        && prev.scene.imagemodel === next.scene.imagemodel
+        && prev.scene.t8starImageModel === next.scene.t8starImageModel
+        && prev.scene.t8starImageSize === next.scene.t8starImageSize
+        && prev.scene.t8starImageQuality === next.scene.t8starImageQuality
+        && prev.scene.t8starNanoImageSize === next.scene.t8starNanoImageSize
+        && prev.scene.t8starNanoAspectRatio === next.scene.t8starNanoAspectRatio
         && arraysEqual(prev.scene.assetIds, next.scene.assetIds)
         && prev.assets === next.assets
         && prev.sceneImages === next.sceneImages

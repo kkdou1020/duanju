@@ -41,6 +41,15 @@ export interface Scene {
     lens?: string;
     focal_length?: string;
     aperture?: string;
+    textmodel?: string;
+    imagemodel?: string;
+    videomodel?: string;
+    t8starImageModel?: string;
+    t8starImageSize?: string;
+    t8starImageQuality?: string;
+    t8starNanoImageSize?: string;
+    t8starNanoAspectRatio?: string;
+    t8starVideoModel?: string;
   }>;
   audio_dialogue?: DialogueLine[];
   audio_sfx?: string;
@@ -62,6 +71,16 @@ export interface Scene {
   video_prompt_backup?: string; // Backup of video prompt for Start/End Frame Mode undo
   operation?: any; // Cache of standard video operation
   startEndVideoOperation?: any; // Cache of start/end video operation
+
+  textmodel?: string;
+  imagemodel?: string;
+  videomodel?: string;
+  t8starImageModel?: string;
+  t8starImageSize?: string;
+  t8starImageQuality?: string;
+  t8starNanoImageSize?: string;
+  t8starNanoAspectRatio?: string;
+  t8starVideoModel?: string;
 }
 
 

@@ -19,6 +19,15 @@ export interface PromptOption {
   lens?: string;
   focal_length?: string;
   aperture?: string;
+  textmodel?: string;
+  imagemodel?: string;
+  videomodel?: string;
+  t8starImageModel?: string;
+  t8starImageSize?: string;
+  t8starImageQuality?: string;
+  t8starNanoImageSize?: string;
+  t8starNanoAspectRatio?: string;
+  t8starVideoModel?: string;
 }
 
 export interface DialogueLine {
@@ -58,6 +67,15 @@ export interface Scene {
     error?: string;
     operation?: any;                 // Cache of standard video operation
     startEndVideoOperation?: any;    // Cache of start/end video operation
+    textmodel?: string;
+    imagemodel?: string;
+    videomodel?: string;
+    t8starImageModel?: string;
+    t8starImageSize?: string;
+    t8starImageQuality?: string;
+    t8starNanoImageSize?: string;
+    t8starNanoAspectRatio?: string;
+    t8starVideoModel?: string;
 }
 
 

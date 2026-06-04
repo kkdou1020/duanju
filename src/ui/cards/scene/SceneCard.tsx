@@ -67,7 +67,10 @@ const SceneCard: React.FC<SceneCardProps> = (props) => {
             const syncedFields = [
                 'np_prompt', 'video_prompt', 'imageUrl', 'imageAssetId', 
                 'videoUrl', 'videoAssetId', 'assetIds', 'videoAssetIds',
-                'camera', 'lens', 'focal_length', 'aperture'
+                'camera', 'lens', 'focal_length', 'aperture',
+                'textmodel', 'imagemodel', 'videomodel', 
+                't8starImageModel', 't8starImageSize', 't8starImageQuality', 
+                't8starNanoImageSize', 't8starNanoAspectRatio', 't8starVideoModel'
             ];
 
             const hasSyncedField = Object.keys(updates).some(k => syncedFields.includes(k));
@@ -190,7 +193,16 @@ const SceneCard: React.FC<SceneCardProps> = (props) => {
                                                     state.scene.camera === opt.camera &&
                                                     state.scene.lens === opt.lens &&
                                                     state.scene.focal_length === opt.focal_length &&
-                                                    state.scene.aperture === opt.aperture;
+                                                    state.scene.aperture === opt.aperture &&
+                                                    state.scene.textmodel === opt.textmodel &&
+                                                    state.scene.imagemodel === opt.imagemodel &&
+                                                    state.scene.videomodel === opt.videomodel &&
+                                                    state.scene.t8starImageModel === opt.t8starImageModel &&
+                                                    state.scene.t8starImageSize === opt.t8starImageSize &&
+                                                    state.scene.t8starImageQuality === opt.t8starImageQuality &&
+                                                    state.scene.t8starNanoImageSize === opt.t8starNanoImageSize &&
+                                                    state.scene.t8starNanoAspectRatio === opt.t8starNanoAspectRatio &&
+                                                    state.scene.t8starVideoModel === opt.t8starVideoModel;
 
                                                 if (!isAlreadyAdopted) {
                                                     state.onUpdate(state.scene.id, {
@@ -205,7 +217,16 @@ const SceneCard: React.FC<SceneCardProps> = (props) => {
                                                         camera: opt.camera,
                                                         lens: opt.lens,
                                                         focal_length: opt.focal_length,
-                                                        aperture: opt.aperture
+                                                        aperture: opt.aperture,
+                                                        textmodel: opt.textmodel,
+                                                        imagemodel: opt.imagemodel,
+                                                        videomodel: opt.videomodel,
+                                                        t8starImageModel: opt.t8starImageModel,
+                                                        t8starImageSize: opt.t8starImageSize,
+                                                        t8starImageQuality: opt.t8starImageQuality,
+                                                        t8starNanoImageSize: opt.t8starNanoImageSize,
+                                                        t8starNanoAspectRatio: opt.t8starNanoAspectRatio,
+                                                        t8starVideoModel: opt.t8starVideoModel
                                                     });
                                                 }
                                             }}
