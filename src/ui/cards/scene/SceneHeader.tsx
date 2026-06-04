@@ -1,7 +1,7 @@
 import React from 'react';
 import { Scene } from '@/shared/types';
 import { Translation } from '@/services/i18n/translations';
-import { Copy, Download, Mic, Trash2 } from 'lucide-react';
+import { Copy, Download, Mic, Trash2, Layers } from 'lucide-react';
 
 interface SceneHeaderProps {
     scene: Scene;
@@ -14,6 +14,7 @@ interface SceneHeaderProps {
     audioRef: React.RefObject<HTMLAudioElement | null>;
     onNarrationTTS: () => void;
     onDownloadAudio: () => void;
+    onOpenCanvas?: () => void;
 }
 
 const SceneHeader: React.FC<SceneHeaderProps> = ({
@@ -27,6 +28,7 @@ const SceneHeader: React.FC<SceneHeaderProps> = ({
     audioRef,
     onNarrationTTS,
     onDownloadAudio,
+    onOpenCanvas,
 }) => {
     return (
         <div className="p-4 border-b border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-white/5 flex flex-col gap-2">
@@ -43,7 +45,7 @@ const SceneHeader: React.FC<SceneHeaderProps> = ({
                     />
 
                     {/* Narration Generation Button */}
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                         <button
                             onClick={onNarrationTTS}
                             disabled={ttsLoading || !scene.narration}

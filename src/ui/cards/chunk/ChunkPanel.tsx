@@ -1,9 +1,12 @@
-import React, { useEffect } from 'react';
-import { NovelChunk, Asset, GlobalStyle, Scene } from '@/shared/types';
+import React, { useEffect, useState } from 'react';
+import { NovelChunk, Asset, GlobalStyle, Scene, ImageGenStatus } from '@/shared/types';
 import { Translation } from '@/services/i18n/translations';
-import { ChevronDown, ChevronRight, Wand2, FileText, Video, Download, CheckCircle, Loader2, Film, AlertTriangle, AlertCircle, Trash2, Copy, X, Save } from 'lucide-react';
+import { ChevronDown, ChevronRight, Wand2, FileText, Video, Download, CheckCircle, Loader2, Film, AlertTriangle, AlertCircle, Trash2, Copy, X, Save, Layers } from 'lucide-react';
 import SceneCard from '@/ui/cards/scene/SceneCard';
+import { SceneCanvasModal } from '@/ui/cards/scene/canvas/SceneCanvasModal';
 import { useChunkActions } from './useChunkActions';
+import { useSceneMedia } from '@/ui/cards/scene/useSceneMedia';
+import { saveAsset } from '@/services/storage';
 
 interface ChunkPanelProps {
     chunk: NovelChunk;
@@ -27,6 +30,7 @@ interface ChunkPanelProps {
     flashSceneId?: string;
     fullNovelText?: string;
     filename?: string;
+    onAddAsset?: (asset: Asset) => void;
 }
 
 const ChunkPanel: React.FC<ChunkPanelProps> = ({
@@ -36,7 +40,8 @@ const ChunkPanel: React.FC<ChunkPanelProps> = ({
     language, isActive, onToggle,
     flashSceneId,
     fullNovelText = "",
-    filename = ""
+    filename = "",
+    onAddAsset
 }) => {
     const {
         loadingStep, scriptError, exportProgress,
@@ -56,6 +61,67 @@ const ChunkPanel: React.FC<ChunkPanelProps> = ({
         fullNovelText,
         filename
     });
+
+    const [activeCanvasSceneId, setActiveCanvasSceneId] = useState<string | null>(null);
+    const [activeCanvasOptionId, setActiveCanvasOptionId] = useState<string | undefined>(undefined);
+    const activeCanvasScene = chunk.scenes.find(s => s.id === activeCanvasSceneId);
+
+    const handleAddScene = () => {
+        let nextSceneId = '';
+        onUpdateChunk(chunk.id, (prev) => {
+            const currentScenes = prev.scenes || [];
+            let nextIndex = 1;
+            if (currentScenes.length > 0) {
+                const indices = currentScenes.map(s => {
+                    const match = s.id.match(/\d+/);
+                    return match ? parseInt(match[0], 10) : 0;
+                });
+                nextIndex = Math.max(...indices) + 1;
+            }
+            nextSceneId = `scene_${nextIndex}`;
+            
+            const newScene: Scene = {
+                id: nextSceneId,
+                narration: '',
+                visual_desc: '',
+                np_prompt: '',
+                video_prompt: '',
+                assetIds: [],
+                videoAssetIds: [],
+                camera: 'None',
+                lens: 'None',
+                focal_length: 'None',
+                aperture: 'None',
+                prompt_options: [
+                    {
+                        option_id: 'A',
+                        lens_reference: { shot_name: '', description: '', searchKeyword: '', video_url: '', timestamp: '' },
+                        np_prompt: '',
+                        video_prompt: '',
+                    },
+                    {
+                        option_id: 'B',
+                        lens_reference: { shot_name: '', description: '', searchKeyword: '', video_url: '', timestamp: '' },
+                        np_prompt: '',
+                        video_prompt: '',
+                    },
+                    {
+                        option_id: 'C',
+                        lens_reference: { shot_name: '', description: '', searchKeyword: '', video_url: '', timestamp: '' },
+                        np_prompt: '',
+                        video_prompt: '',
+                    }
+                ]
+            };
+            return {
+                scenes: [...currentScenes, newScene]
+            };
+        });
+
+        if (nextSceneId) {
+            setActiveCanvasSceneId(nextSceneId);
+        }
+    };
 
     return (
         <>
@@ -247,6 +313,31 @@ const ChunkPanel: React.FC<ChunkPanelProps> = ({
                             );
                         })()}
                     </div>
+
+                    <div className="group relative">
+                        <button
+                            onClick={(e) => { 
+                                e.stopPropagation(); 
+                                if (chunk.scenes.length > 0) {
+                                    setActiveCanvasSceneId(chunk.scenes[0].id);
+                                }
+                            }}
+                            disabled={chunk.scenes.length === 0}
+                            className={`px-3 py-1.5 rounded text-xs font-bold flex items-center gap-2 shadow-sm transition-all whitespace-nowrap ${
+                                chunk.scenes.length > 0
+                                    ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-lg shadow-amber-500/20 hover:scale-105 active:scale-95'
+                                    : 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                            }`}
+                        >
+                            <Layers className="w-4 h-4" />
+                            全景工坊
+                        </button>
+                        {chunk.scenes.length === 0 && (
+                            <div className="absolute bottom-full right-0 mb-2 w-48 bg-black/90 text-white text-[10px] p-2 rounded pointer-events-none hidden group-hover:block z-50 text-center">
+                                {language === 'English' ? 'Generate Storyboard first' : '请先生成分镜'}
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {/* Content Body */}
@@ -284,6 +375,10 @@ const ChunkPanel: React.FC<ChunkPanelProps> = ({
                                         chapterScenes={chunk.scenes}
                                         chunk={chunk}
                                         onUpdateChunk={onUpdateChunk}
+                                        onOpenCanvas={(sceneId, optionId) => {
+                                            setActiveCanvasSceneId(sceneId);
+                                            setActiveCanvasOptionId(optionId);
+                                        }}
                                     />
                                 ))}
                             </div>
@@ -333,7 +428,314 @@ const ChunkPanel: React.FC<ChunkPanelProps> = ({
                     </div>
                 </div>
             )}
+
+            {activeCanvasScene && (
+                <CanvasModalWrapper
+                    isOpen={!!activeCanvasSceneId}
+                    onClose={() => {
+                        setActiveCanvasSceneId(null);
+                        setActiveCanvasOptionId(undefined);
+                    }}
+                    scene={activeCanvasScene}
+                    initialOptionId={activeCanvasOptionId}
+                    allScenes={chunk.scenes}
+                    assets={globalAssets}
+                    styleState={styleState}
+                    labels={labels}
+                    onSceneUpdate={(sceneId, updates) => onSceneUpdate(chunk.id, sceneId, updates)}
+                    language={language}
+                    chunk={chunk}
+                    onUpdateChunk={onUpdateChunk}
+                    getSceneAssetsReady={getSceneAssetsReady}
+                    getVideoAssetsReady={getVideoAssetsReady}
+                    onSelectScene={(sceneId) => setActiveCanvasSceneId(sceneId)}
+                    onAddScene={handleAddScene}
+                    onGenerateImageOverride={handleGenerateImageInternal}
+                    onImageGenerated={handleImageGenerated}
+                    onVideoGenerated={handleVideoGenerated}
+                    onAddAsset={onAddAsset}
+                />
+            )}
         </>
+    );
+};
+
+interface CanvasModalWrapperProps {
+    isOpen: boolean;
+    onClose: () => void;
+    scene: Scene;
+    initialOptionId?: string;
+    allScenes: Scene[];
+    assets: Asset[];
+    styleState: GlobalStyle;
+    labels: Translation;
+    onSceneUpdate: (sceneId: string, updates: Partial<Scene> | ((prev: Scene) => Partial<Scene>)) => void;
+    language: string;
+    chunk: NovelChunk;
+    onUpdateChunk: (id: string, updates: Partial<NovelChunk> | ((c: NovelChunk) => Partial<NovelChunk>)) => void;
+    getSceneAssetsReady: (scene: Scene, optionId?: string) => boolean;
+    getVideoAssetsReady: (scene: Scene, optionId?: string) => boolean;
+    onSelectScene: (sceneId: string) => void;
+    onAddScene: () => void;
+    onGenerateImageOverride: (scene: Scene, optionId?: string, signal?: AbortSignal) => Promise<string>;
+    onImageGenerated: (id: string, url: string, imageAssetId?: string, optionId?: string) => void;
+    onVideoGenerated: (id: string, url: string, assetId?: string, optionId?: string, operation?: any) => void;
+    onAddAsset?: (asset: Asset) => void;
+}
+
+const CanvasModalWrapper: React.FC<CanvasModalWrapperProps> = ({
+    isOpen,
+    onClose,
+    scene,
+    initialOptionId,
+    allScenes,
+    assets,
+    styleState,
+    labels,
+    onSceneUpdate,
+    language,
+    chunk,
+    onUpdateChunk,
+    getSceneAssetsReady,
+    getVideoAssetsReady,
+    onSelectScene,
+    onAddScene,
+    onGenerateImageOverride,
+    onImageGenerated,
+    onVideoGenerated,
+    onAddAsset
+}) => {
+    const combinedAssets = (() => {
+        const map = new Map<string, Asset>();
+        assets.forEach(a => { if (a && a.id) map.set(a.id, a); });
+        (chunk.assets || []).forEach(a => { if (a && a.id) map.set(a.id, a); });
+        return Array.from(map.values());
+    })();
+
+    const mediaState = useSceneMedia({
+        scene,
+        characterDesc: '',
+        globalStyle: styleState,
+        assets: combinedAssets,
+        areAssetsReady: getSceneAssetsReady(scene),
+        language,
+        chapterScenes: allScenes,
+        onUpdate: (sceneId, fieldOrUpdates, value) => {
+            if (typeof fieldOrUpdates === 'string') {
+                onSceneUpdate(sceneId, { [fieldOrUpdates]: value });
+            } else {
+                onSceneUpdate(sceneId, fieldOrUpdates);
+            }
+        },
+        onGenerateImageOverride,
+        onImageGenerated,
+        onVideoGenerated,
+        checkImageReady: (optId) => getSceneAssetsReady(scene, optId),
+        checkVideoReady: (optId) => getVideoAssetsReady(scene, optId)
+    });
+
+    useEffect(() => {
+        if (isOpen) {
+            mediaState.syncMediaStatus();
+        }
+    }, [isOpen, scene.id, scene.imageUrl, scene.videoUrl, scene.isStartEndFrameMode, scene.startEndVideoUrl]);
+
+    const onUploadImage = async (file: File, optionId?: string) => {
+        try {
+            const assetId = await saveAsset(file);
+            const localUrl = URL.createObjectURL(file);
+            
+            const targetOptionId = optionId || 'A';
+            
+            onSceneUpdate(scene.id, (prev) => {
+                const updates: Partial<Scene> = {};
+                
+                if (targetOptionId === 'A') {
+                    updates.imageUrl = localUrl;
+                    updates.imageAssetId = assetId;
+                    if (prev.isStartEndFrameMode) {
+                        const currentSceneImgId = `scene_img_${prev.id}`;
+                        updates.startEndAssetIds = [currentSceneImgId];
+                    }
+                }
+                
+                if (prev.prompt_options) {
+                    const newOptions = [...prev.prompt_options];
+                    let activeOptIdx = newOptions.findIndex((o) => o.option_id === targetOptionId);
+                    if (activeOptIdx === -1) {
+                        newOptions.push({
+                            option_id: targetOptionId,
+                            np_prompt: targetOptionId === 'A' ? (prev.np_prompt || '') : '',
+                            video_prompt: targetOptionId === 'A' ? (prev.video_prompt || '') : '',
+                            camera: targetOptionId === 'A' ? (prev.camera || '') : '',
+                            lens: targetOptionId === 'A' ? (prev.lens || '') : '',
+                            focal_length: targetOptionId === 'A' ? (prev.focal_length || '') : '',
+                            aperture: targetOptionId === 'A' ? (prev.aperture || '') : '',
+                        });
+                        activeOptIdx = newOptions.length - 1;
+                    }
+                    newOptions[activeOptIdx] = { 
+                        ...newOptions[activeOptIdx], 
+                        imageUrl: localUrl,
+                        imageAssetId: assetId
+                    };
+                    updates.prompt_options = newOptions;
+                }
+                return updates;
+            });
+        } catch (e) {
+            console.error("Failed to upload image from canvas:", e);
+            alert("上传图片失败，请重试。");
+        }
+    };
+
+    const onUploadVideo = async (file: File, optionId?: string) => {
+        if (file.size > 20 * 1024 * 1024) {
+            alert('视频 file 大小不能超过20MB，请压缩后上传');
+            return;
+        }
+
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            const response = await fetch('/api/media/upload', {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (!response.ok) {
+                const errText = await response.text();
+                throw new Error(errText);
+            }
+            
+            const data = await response.json();
+            const url = data.url;
+            
+            if (!url) throw new Error("服务器没有返回有效的 URL");
+
+            const targetOptionId = optionId || 'A';
+
+            onSceneUpdate(scene.id, (prev) => {
+                const updates: Partial<Scene> = {};
+                if (targetOptionId === 'A') {
+                    if (prev.isStartEndFrameMode) {
+                        updates.startEndVideoUrl = url;
+                    } else {
+                        updates.videoUrl = url;
+                    }
+                }
+
+                if (prev.prompt_options) {
+                    const newOptions = [...prev.prompt_options];
+                    let activeOptIdx = newOptions.findIndex((o) => o.option_id === targetOptionId);
+                    if (activeOptIdx === -1) {
+                        newOptions.push({
+                            option_id: targetOptionId,
+                            np_prompt: targetOptionId === 'A' ? (prev.np_prompt || '') : '',
+                            video_prompt: targetOptionId === 'A' ? (prev.video_prompt || '') : '',
+                            camera: targetOptionId === 'A' ? (prev.camera || '') : '',
+                            lens: targetOptionId === 'A' ? (prev.lens || '') : '',
+                            focal_length: targetOptionId === 'A' ? (prev.focal_length || '') : '',
+                            aperture: targetOptionId === 'A' ? (prev.aperture || '') : '',
+                        });
+                        activeOptIdx = newOptions.length - 1;
+                    }
+                    newOptions[activeOptIdx] = { ...newOptions[activeOptIdx], videoUrl: url };
+                    updates.prompt_options = newOptions;
+                }
+                return updates;
+            });
+        } catch (e: any) {
+            console.error("Failed to upload video from canvas:", e);
+            alert("上传视频失败: " + e.message);
+        }
+    };
+
+    const onDeleteImage = (optionId?: string) => {
+        const targetOptionId = optionId || 'A';
+        onSceneUpdate(scene.id, (prev) => {
+            const updates: Partial<Scene> = {};
+            if (targetOptionId === 'A') {
+                updates.imageUrl = undefined;
+                updates.imageAssetId = undefined;
+            }
+
+            if (prev.prompt_options) {
+                const newOptions = [...prev.prompt_options];
+                let activeOptIdx = newOptions.findIndex((o) => o.option_id === targetOptionId);
+                if (activeOptIdx !== -1) {
+                    newOptions[activeOptIdx] = { ...newOptions[activeOptIdx], imageUrl: undefined, imageAssetId: undefined };
+                    updates.prompt_options = newOptions;
+                }
+            }
+            return updates;
+        });
+    };
+
+    const onDeleteVideo = (optionId?: string) => {
+        const targetOptionId = optionId || 'A';
+        onSceneUpdate(scene.id, (prev) => {
+            const updates: Partial<Scene> = {};
+            if (targetOptionId === 'A') {
+                if (prev.isStartEndFrameMode) {
+                    updates.startEndVideoUrl = undefined;
+                    updates.startEndVideoAssetId = undefined;
+                } else {
+                    updates.videoUrl = undefined;
+                    updates.videoAssetId = undefined;
+                }
+            }
+
+            if (prev.prompt_options) {
+                const newOptions = [...prev.prompt_options];
+                let activeOptIdx = newOptions.findIndex((o) => o.option_id === targetOptionId);
+                if (activeOptIdx !== -1) {
+                    newOptions[activeOptIdx] = { ...newOptions[activeOptIdx], videoUrl: undefined, videoAssetId: undefined };
+                    updates.prompt_options = newOptions;
+                }
+            }
+            return updates;
+        });
+    };
+
+    const genStatusMap = {
+        A: mediaState.getGenStatus('A'),
+        B: mediaState.getGenStatus('B'),
+        C: mediaState.getGenStatus('C'),
+        default: mediaState.getGenStatus('default'),
+    };
+
+    const videoStatusMap = {
+        A: mediaState.getVideoStatus('A'),
+        B: mediaState.getVideoStatus('B'),
+        C: mediaState.getVideoStatus('C'),
+        default: mediaState.getVideoStatus('default'),
+    };
+
+    return (
+        <SceneCanvasModal
+            isOpen={isOpen}
+            onClose={onClose}
+            scene={scene}
+            initialOptionId={initialOptionId}
+            allScenes={allScenes}
+            assets={combinedAssets}
+            styleState={styleState}
+            labels={labels}
+            onSceneUpdate={(sceneId, updates) => onSceneUpdate(sceneId, updates)}
+            onGenerateImage={(scene, optionId) => mediaState.handleGenerateImage(true, optionId).then(() => '')}
+            onGenerateVideo={(scene, optionId) => mediaState.handleGenerateVideo(optionId)}
+            onUploadImage={onUploadImage}
+            onUploadVideo={onUploadVideo}
+            onDeleteImage={onDeleteImage}
+            onDeleteVideo={onDeleteVideo}
+            onSelectScene={onSelectScene}
+            onAddScene={onAddScene}
+            genStatusMap={genStatusMap}
+            videoStatusMap={videoStatusMap}
+            onAddAsset={onAddAsset}
+        />
     );
 };
 

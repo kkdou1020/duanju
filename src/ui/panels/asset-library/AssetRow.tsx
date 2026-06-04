@@ -41,7 +41,7 @@ const AssetRow: React.FC<AssetRowProps> = ({
         <div className={`
             relative flex items-start gap-3 p-3 rounded-lg border border-gray-200 dark:border-white/5 
             hover:border-indigo-300 dark:hover:border-banana-500/30 transition-colors group bg-gray-50 dark:bg-black/20
-            ${depth > 0 ? 'mt-1 border-l-2 border-l-indigo-300 dark:border-l-banana-500/20' : 'mt-4'}
+            ${depth > 0 ? 'border-l-2 border-l-indigo-300 dark:border-l-banana-500/20' : ''}
             ${showAnglePicker ? 'z-50 ring-1 ring-indigo-500/50 dark:ring-banana-500/50' : 'z-10'}
         `} style={{ marginLeft: depth > 0 ? `${depth * 12}px` : 0 }}>
 

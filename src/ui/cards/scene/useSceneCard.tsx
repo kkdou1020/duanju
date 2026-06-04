@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Scene, ImageGenStatus, GlobalStyle, Asset, NovelChunk } from '@/shared/types';
 import { Translation } from '@/services/i18n/translations';
 import { useSceneAssets } from './useSceneAssets';
@@ -51,20 +51,108 @@ export function useSceneCard(props: UseSceneCardProps) {
         onUpdateChunk
     } = props;
 
-    // ── Sub-hooks ──
-    const assetState = useSceneAssets({
-        scene, assets, globalStyle, language, chapterScenes, chunk, onUpdate, onUpdateChunk
-    });
+    // ── Option Sync State ──
+    const adoptedOption = scene.prompt_options?.find(opt => opt.video_prompt === scene.video_prompt) 
+                          || scene.prompt_options?.[0];
+    const [viewingOptionId, setViewingOptionId] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!viewingOptionId && adoptedOption) {
+            setViewingOptionId(adoptedOption.option_id);
+        }
+    }, [adoptedOption, viewingOptionId]);
+
+    const viewingOption = scene.prompt_options?.find(o => o.option_id === (viewingOptionId || adoptedOption?.option_id));
+    const isAdopted = viewingOption?.video_prompt === scene.video_prompt;
+
+    const handleSynchronizedUpdate = (id: string, fieldOrUpdates: keyof Scene | Partial<Scene> | ((prev: Scene) => Partial<Scene>), value?: any) => {
+        const currentOptId = viewingOption?.option_id;
+
+        // Resolve callback or values to Partial<Scene> updates object
+        let updates: Partial<Scene>;
+        if (typeof fieldOrUpdates === 'function') {
+            updates = fieldOrUpdates(scene);
+        } else if (typeof fieldOrUpdates === 'string') {
+            updates = { [fieldOrUpdates]: value };
+        } else {
+            updates = fieldOrUpdates;
+        }
+
+        // Auto parse asset tags from np_prompt or video_prompt and keep assetIds/videoAssetIds in sync
+        const ASSET_TAG_REGEX = /\[@图像_([^#\]]+)(?:#([a-zA-Z0-9_\-]+))?\]/g;
+        if ('np_prompt' in updates) {
+            const matches = [...(updates.np_prompt || '').matchAll(ASSET_TAG_REGEX)];
+            updates.assetIds = matches.map(m => m[2]).filter(Boolean);
+        }
+        if ('video_prompt' in updates) {
+            const matches = [...(updates.video_prompt || '').matchAll(ASSET_TAG_REGEX)];
+            updates.videoAssetIds = matches.map(m => m[2]).filter(Boolean);
+        }
+
+        if (scene.prompt_options && currentOptId) {
+            const syncedFields = [
+                'np_prompt', 'video_prompt', 'imageUrl', 'imageAssetId', 
+                'videoUrl', 'videoAssetId', 'assetIds', 'videoAssetIds',
+                'camera', 'lens', 'focal_length', 'aperture'
+            ];
+
+            const hasSyncedField = Object.keys(updates).some(k => syncedFields.includes(k));
+            if (hasSyncedField) {
+                onUpdate(id, (prev) => {
+                    const newOptions = prev.prompt_options ? [...prev.prompt_options] : [];
+                    const optionIndex = newOptions.findIndex(o => o.option_id === currentOptId);
+                    
+                    const resolvedUpdates = typeof fieldOrUpdates === 'function' ? fieldOrUpdates(prev) : { ...updates };
+                    
+                    // Keep assetIds and videoAssetIds synced within the functional update callback
+                    if ('np_prompt' in resolvedUpdates) {
+                        const matches = [...(resolvedUpdates.np_prompt || '').matchAll(ASSET_TAG_REGEX)];
+                        resolvedUpdates.assetIds = matches.map(m => m[2]).filter(Boolean);
+                    }
+                    if ('video_prompt' in resolvedUpdates) {
+                        const matches = [...(resolvedUpdates.video_prompt || '').matchAll(ASSET_TAG_REGEX)];
+                        resolvedUpdates.videoAssetIds = matches.map(m => m[2]).filter(Boolean);
+                    }
+
+                    if (optionIndex !== -1) {
+                        newOptions[optionIndex] = { 
+                            ...newOptions[optionIndex]
+                        };
+                        Object.entries(resolvedUpdates).forEach(([k, v]) => {
+                            if (syncedFields.includes(k)) {
+                                (newOptions[optionIndex] as any)[k] = v;
+                            }
+                        });
+                    }
+                    return {
+                        ...resolvedUpdates,
+                        prompt_options: newOptions
+                    };
+                });
+                return;
+            }
+        }
+        onUpdate(id, fieldOrUpdates);
+    };
 
     const combinedAssets = useMemo(() => {
-        return [...assets, ...(chunk.assets || [])];
+        const map = new Map<string, Asset>();
+        assets.forEach(a => { if (a && a.id) map.set(a.id, a); });
+        (chunk.assets || []).forEach(a => { if (a && a.id) map.set(a.id, a); });
+        return Array.from(map.values());
     }, [assets, chunk.assets]);
+
+    // ── Sub-hooks ──
+    const assetState = useSceneAssets({
+        scene, assets: combinedAssets, globalStyle, language, chapterScenes, chunk, onUpdate: handleSynchronizedUpdate, onUpdateChunk
+    });
 
     const mediaState = useSceneMedia({
         scene, characterDesc, globalStyle, assets: combinedAssets,
-        areAssetsReady, language, chapterScenes, onUpdate,
+        areAssetsReady, language, chapterScenes, onUpdate: handleSynchronizedUpdate,
         onGenerateImageOverride, onImageGenerated, onVideoGenerated,
-        checkImageReady, checkVideoReady
+        checkImageReady, checkVideoReady,
+        viewingOptionId
     });
 
     // ── Sync prop image/video url with local status ──
@@ -74,11 +162,12 @@ export function useSceneCard(props: UseSceneCardProps) {
         if (scene.imageUrl) {
             if (scene.isStartEndFrameMode) {
                 const currentSceneImgId = `scene_img_${scene.id}`;
-                const alreadySynced = Array.isArray(scene.startEndAssetIds) &&
-                    scene.startEndAssetIds.length === 1 &&
-                    scene.startEndAssetIds[0] === currentSceneImgId;
+                const firstId = Array.isArray(scene.startEndAssetIds) && scene.startEndAssetIds.length > 0
+                    ? scene.startEndAssetIds[0]
+                    : null;
+                const alreadySynced = firstId === currentSceneImgId || (firstId && firstId.startsWith(currentSceneImgId + '_'));
                 if (!alreadySynced) {
-                    onUpdate(scene.id, 'startEndAssetIds', [currentSceneImgId]);
+                    handleSynchronizedUpdate(scene.id, 'startEndAssetIds', [currentSceneImgId]);
                 }
             } else {
                 assetState.initializeVideoAssetIds();
@@ -100,6 +189,14 @@ export function useSceneCard(props: UseSceneCardProps) {
     }, [scene.videoUrl, mediaState.viewMode]);
 
     return {
+        // Option state and functions
+        viewingOptionId,
+        setViewingOptionId,
+        viewingOption,
+        handleSynchronizedUpdate,
+        isAdopted,
+        adoptedOption,
+
         // State from media
         getGenStatus: mediaState.getGenStatus,
         getVideoStatus: mediaState.getVideoStatus,
@@ -122,8 +219,8 @@ export function useSceneCard(props: UseSceneCardProps) {
         sceneAudios: assetState.sceneAudios,
 
         // Props pass-through
-        scene, labels, onUpdate, onDelete, onDuplicate,
-        globalStyle, assets, onAddAsset, language, chapterScenes,
+        scene, labels, onUpdate: handleSynchronizedUpdate, onDelete, onDuplicate,
+        globalStyle, assets: combinedAssets, onAddAsset, language, chapterScenes,
         flash, isGeneratingExternal, areAssetsReady, videoAssetsReady,
 
         // Handlers from media

@@ -2,6 +2,7 @@ import React from 'react';
 import { clearState } from '@/services/storage';
 import InputPanel from '@/ui/panels/InputPanel';
 import ChunkPanel from '@/ui/cards/chunk/ChunkPanel';
+import ModelSelector from '@/ui/panels/ModelSelector';
 import { AssetSelector } from '@/ui/panels/asset-library/AssetSelector';
 import { Film, Globe, Book, Trash2, Upload, Sun, Moon, Info } from 'lucide-react';
 import { STATE_KEY } from '@/shared/constants/defaults';
@@ -65,6 +66,8 @@ const App: React.FC = () => {
                         >
                             <Trash2 className="w-4 h-4" />
                         </button>
+
+                        <ModelSelector />
 
                         <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/20 px-3 py-1.5 rounded-full border border-gray-200 dark:border-white/5 hover:border-indigo-300 dark:hover:border-banana-500/30 transition-colors">
                             <label className="cursor-pointer flex items-center gap-2 text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-banana-400 transition-colors" title={language === 'Chinese' ? "导入章节片段 (ZIP)" : "Import Chunk (ZIP)"}>
@@ -151,6 +154,7 @@ const App: React.FC = () => {
                             onGenerateBeats={handleGenerateBeats}
                             onGeneratePrompts={handleGeneratePrompts}
                             onGenerateImage={handleGenerateImageWrapper}
+                            onAddAsset={handleAddAsset}
                             language={language}
                             isActive={expandedId === chunk.id}
                             flashSceneId={flashScene?.chunkId === chunk.id ? flashScene.sceneId : undefined}

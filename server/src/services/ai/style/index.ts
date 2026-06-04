@@ -1,6 +1,6 @@
 import { Asset, GenerateContentResponse } from "../../../shared/types";
 import { PROMPTS } from "../../../domain/generation/prompt";
-import { retryWithBackoff, safeJsonParse, Type, ai, getProxyAgent } from "../helpers";
+import { retryWithBackoff, safeJsonParse, Type, ai } from "../helpers";
 import { MODELS } from "../model-manager";
 import fetch from 'node-fetch';
 
@@ -21,8 +21,7 @@ export const extractVisualDna = async (
             for (const img of images) {
                 if (img.startsWith('http')) {
                     try {
-                        const agent = getProxyAgent();
-                        const res = await fetch(img, agent ? { agent } : undefined);
+                        const res = await fetch(img);
                         const buffer = await res.buffer();
                         const b64 = buffer.toString('base64');
                         const contentType = res.headers.get('content-type') || 'image/png';
@@ -113,8 +112,7 @@ export const analyzeVisualStyleFromImages = async (
     for (const img of images) {
         if (img.startsWith('http')) {
             try {
-                const agent = getProxyAgent();
-                const res = await fetch(img, agent ? { agent } : undefined);
+                const res = await fetch(img);
                 const buffer = await res.buffer();
                 const b64 = buffer.toString('base64');
                 const contentType = res.headers.get('content-type') || 'image/png';

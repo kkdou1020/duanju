@@ -17,8 +17,8 @@ process.on('uncaughtException', (error: Error) => {
 });
 
 // Load environment variables
-dotenv.config({ path: path.join(__dirname, '../../.env') });
-dotenv.config({ path: path.join(__dirname, '../.env') });
+dotenv.config({ path: path.join(__dirname, '../../.env'), override: true });
+dotenv.config({ path: path.join(__dirname, '../.env'), override: true });
 
 // Import business logic routes
 import pipelineRouter from './routes/pipeline';
@@ -105,7 +105,7 @@ const injectAuthHeader = (proxyReq: any, req: any) => {
 app.use(
     '/api/t8star',
     createProxyMiddleware({
-        target: 'https://ai.t8star.org',
+        target: 'https://ai.t8star.cn',
         changeOrigin: true,
         secure: false,
         timeout: 300000,

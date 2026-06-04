@@ -1,6 +1,6 @@
 import { Asset, GlobalStyle, GenerateContentResponse } from "../../../shared/types";
-import { retryWithBackoff, safeJsonParse, ai, getProxyAgent } from "../helpers";
-import { MODELS, getModelManager } from "../model-manager";
+import { retryWithBackoff, safeJsonParse, ai } from "../helpers";
+import { MODELS } from "../model-manager";
 import { extractAssetTags, resolveTagToAsset, stripAssetTags, isStoryboardTag } from "../../../shared/asset-tags";
 import sharp from 'sharp';
 import fetch from 'node-fetch';
@@ -49,8 +49,7 @@ export async function ensurePngDataUrl(url: string, maxDimension: number = 1024)
             if (!match) return url;
             buffer = Buffer.from(match[1], 'base64');
         } else if (url.startsWith("http")) {
-            const agent = getProxyAgent();
-            const res = await fetch(url, agent ? { agent } : undefined);
+            const res = await fetch(url);
             const arrayBuf = await res.arrayBuffer();
             buffer = Buffer.from(arrayBuf);
         } else {
@@ -261,35 +260,17 @@ export const generateSceneImage = async (
     globalStyle?: GlobalStyle,
     assets: Asset[] = [],
     optionId?: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    customPrompt?: string
 ): Promise<any> => {
     // If optionId is provided, find the specific option, otherwise fallback to main scene
     const option = optionId && scene.prompt_options ? scene.prompt_options.find((o: any) => o.option_id === optionId) : null;
-    const prompt = option ? (option.np_prompt || option.video_prompt) : (scene.np_prompt || scene.visual_desc || '');
+    const prompt = customPrompt || (option ? (option.np_prompt || option.video_prompt) : (scene.np_prompt || scene.visual_desc || ''));
 
     if (!prompt || !prompt.trim()) {
         throw new Error('No prompt available for scene image generation. Please generate prompts first.');
     }
-
-    // Extract option/scene-specific model overrides
-    const modelConfigOverride: any = {};
-    const configSource = option || scene;
-    if (configSource) {
-        if (configSource.imagemodel) modelConfigOverride.imagemodel = configSource.imagemodel;
-        if (configSource.t8starImageModel) modelConfigOverride.t8starImageModel = configSource.t8starImageModel;
-        if (configSource.t8starImageSize) modelConfigOverride.t8starImageSize = configSource.t8starImageSize;
-        if (configSource.t8starImageQuality) modelConfigOverride.t8starImageQuality = configSource.t8starImageQuality;
-        if (configSource.t8starNanoImageSize) modelConfigOverride.t8starNanoImageSize = configSource.t8starNanoImageSize;
-        if (configSource.t8starNanoAspectRatio) modelConfigOverride.t8starNanoAspectRatio = configSource.t8starNanoAspectRatio;
-    }
-
-    const activeConfig = Object.keys(modelConfigOverride).length > 0 
-        ? { ...getModelManager().getConfig(), ...modelConfigOverride } 
-        : getModelManager().getConfig();
-
-    const ar = activeConfig.imagemodel === 't8star' && activeConfig.t8starImageModel === 'nano-banana-pro'
-        ? (activeConfig.t8starNanoAspectRatio || globalStyle?.aspectRatio || '16:9')
-        : (globalStyle?.aspectRatio || '16:9');
+    const ar = globalStyle?.aspectRatio || '16:9';
 
     let basePrompt = prompt.substring(0, 1500);
     const stylePrefix = globalStyle ? computeStylePrefix(globalStyle) : "";
@@ -346,8 +327,7 @@ export const generateSceneImage = async (
             let cleanBase64 = "";
             if (asset.refImageUrl.startsWith('http')) {
                 try {
-                    const agent = getProxyAgent();
-                    const res = await fetch(asset.refImageUrl, agent ? { agent } : undefined);
+                    const res = await fetch(asset.refImageUrl);
                     const buffer = await res.buffer();
                     cleanBase64 = buffer.toString('base64');
                 } catch (e) {
@@ -403,11 +383,7 @@ export const generateSceneImage = async (
     const response = await retryWithBackoff<GenerateContentResponse>(() => ai.models.generateContent({
         model: MODELS.IMAGE_GEN,
         contents: { parts: parts },
-        config: { 
-            imageConfig: { aspectRatio: ar }, 
-            modelConfig: Object.keys(modelConfigOverride).length > 0 ? modelConfigOverride : undefined,
-            signal 
-        }
+        config: { imageConfig: { aspectRatio: ar }, signal }
     }), 1, 2000, undefined, signal);
 
     const elapsed = Date.now() - startTime;

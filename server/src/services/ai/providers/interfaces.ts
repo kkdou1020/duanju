@@ -31,7 +31,7 @@ export interface IAIProvider {
     generateVideos(args: GenerateVideosArgs): Promise<VideosOperation>;
     getVideosOperation(args: GetVideosOperationArgs): Promise<VideosOperation>;
     speech?(body: any): Promise<ArrayBuffer>;
-    uploadFile?(fileBuffer: Buffer, mimeType: string, filename: string): Promise<string>;
+    uploadFile?(fileBuffer: Buffer, mimeType: string, filename: string, apiKey?: string): Promise<string>;
 }
 
 export interface AIProviderConfig {

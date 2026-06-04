@@ -438,7 +438,7 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({
                         const hasChildren = childrenCount > 0;
                         const isExpanded = expandedIds.has(item.asset.id);
                         return (
-                            <div className="px-4 pb-1">
+                            <div className={`px-4 pb-1 ${item.depth > 0 ? 'pt-1' : 'pt-4'}`}>
                                 <AssetRow
                                     asset={item.asset}
                                     depth={item.depth}

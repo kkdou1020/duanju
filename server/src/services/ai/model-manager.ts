@@ -37,7 +37,7 @@ const DEFAULT_CONFIG: ModelConfig = {
     t8starImageQuality: "auto",
     t8starNanoImageSize: "2K",
     t8starNanoAspectRatio: "16:9",
-    t8starVideoModel: "veo",
+    t8starVideoModel: "veo3.1-components",
 };
 
 const VALID_PROVIDERS: ProviderType[] = ["polo", "t8star", "google"];
@@ -60,8 +60,8 @@ class ModelManager {
         };
 
         const t8starConfig: AIProviderConfig = {
-            baseUrl: process.env.T8_BASE_URL || "https://ai.t8star.org",
-            mediaBaseUrl: process.env.T8_MEDIA_BASE_URL || "https://ai.t8star.org",
+            baseUrl: process.env.T8_BASE_URL || "https://ai.t8star.cn",
+            mediaBaseUrl: process.env.T8_MEDIA_BASE_URL || "https://ai.t8star.cn",
             apiKey: process.env.T8_TEXT_API_KEY || "",
             mediaApiKey: process.env.T8_IMAGE_API_KEY || "",
             videoApiKey: process.env.T8_VIDEO_API_KEY || "",
@@ -103,9 +103,8 @@ class ModelManager {
         return { ...this.config };
     }
 
-    private getProvider(type: ModelType, activeConfig?: ModelConfig): IAIProvider {
-        const config = activeConfig || this.config;
-        const providerName = config[`${type}model` as keyof ModelConfig];
+    private getProvider(type: ModelType): IAIProvider {
+        const providerName = this.config[`${type}model` as keyof ModelConfig];
         if (providerName === "google") return this.google;
         return providerName === "polo" ? this.polo : this.t8star;
     }
@@ -114,14 +113,12 @@ class ModelManager {
         const isImageRequest = args.config?.imageConfig ||
             (args.model && (args.model.includes("nano") || args.model.includes("flash-image") || args.model.includes("image")));
 
-        const activeConfig = args.config?.modelConfig ? { ...this.config, ...args.config.modelConfig } : this.config;
-
         let finalArgs = args;
         if (isImageRequest) {
-            if (activeConfig.imagemodel === "polo") {
+            if (this.config.imagemodel === "polo") {
                 finalArgs = { ...args, model: MODELS.IMAGE_POLO_OVERRIDE };
-            } else if (activeConfig.imagemodel === "t8star") {
-                let requestedModel = activeConfig.t8starImageModel || "gpt-image-2";
+            } else if (this.config.imagemodel === "t8star") {
+                let requestedModel = this.config.t8starImageModel || "gpt-image-2";
                 const isAsset = args.config?.imageConfig?.isAsset;
                 
                 const newConfig = { ...(args.config || {}) };
@@ -131,36 +128,31 @@ class ModelManager {
                     requestedModel = "gpt-image-2"; 
                     if (!isAsset) {
                         newConfig.imageConfig.useOfficialKey = true;
-                        newConfig.imageConfig.size = activeConfig.t8starImageSize || "auto";
-                        newConfig.imageConfig.quality = activeConfig.t8starImageQuality || "auto";
+                        newConfig.imageConfig.size = this.config.t8starImageSize || "auto";
+                        newConfig.imageConfig.quality = this.config.t8starImageQuality || "auto";
                     }
                 } else if (requestedModel === "gpt-image-2") {
                     if (!isAsset) {
-                        newConfig.imageConfig.size = activeConfig.t8starImageSize || "auto";
-                        newConfig.imageConfig.quality = activeConfig.t8starImageQuality || "auto";
+                        newConfig.imageConfig.size = this.config.t8starImageSize || "auto";
+                        newConfig.imageConfig.quality = this.config.t8starImageQuality || "auto";
                     }
                 } else if (requestedModel === "nano-banana-pro") {
                     if (!isAsset) {
-                        newConfig.imageConfig.overrideNanoSize = activeConfig.t8starNanoImageSize || "2K";
-                        newConfig.imageConfig.overrideNanoAspectRatio = activeConfig.t8starNanoAspectRatio || "16:9";
+                        newConfig.imageConfig.overrideNanoSize = this.config.t8starNanoImageSize || "2K";
+                        newConfig.imageConfig.overrideNanoAspectRatio = this.config.t8starNanoAspectRatio || "16:9";
                     }
                 }
                 finalArgs = { ...args, model: requestedModel, config: newConfig };
             }
         }
 
-        const provider = isImageRequest ? this.getProvider("image", activeConfig) : this.getProvider("text", activeConfig);
+        const provider = isImageRequest ? this.getProvider("image") : this.getProvider("text");
         return provider.generateContent(finalArgs);
     }
 
     public async generateVideos(args: any) {
-        const activeConfig = args.config?.modelConfig ? { ...this.config, ...args.config.modelConfig } : this.config;
-        const provider = this.getProvider("video", activeConfig);
-        let finalArgs = args;
-        if (activeConfig.videomodel === "t8star" && activeConfig.t8starVideoModel) {
-            finalArgs = { ...args, model: activeConfig.t8starVideoModel };
-        }
-        return provider.generateVideos(finalArgs);
+        const provider = this.getProvider("video");
+        return provider.generateVideos(args);
     }
 
     public async getVideosOperation(args: any) {

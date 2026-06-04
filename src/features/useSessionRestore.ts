@@ -59,13 +59,76 @@ export async function hydrateScene(scene: Scene): Promise<Scene> {
         );
     }
 
+    // Hydrate canvas layouts if present
+    let canvas = scene.canvas;
+    if (canvas) {
+        const hydratedCanvas = { ...canvas };
+        for (const optionKey of Object.keys(canvas)) {
+            const layout = canvas[optionKey];
+            if (layout && layout.nodes) {
+                const hydratedNodes = await Promise.all(
+                    layout.nodes.map(async (node: any) => {
+                        const updatedNode = { ...node };
+                        if (node.data) {
+                            const updatedData = { ...node.data };
+                            
+                            // 1. Hydrate imageUrl if asset ID exists
+                            if (updatedData.imageUrl || updatedData.imageAssetId) {
+                                const resolved = await resolveUrl(updatedData.imageUrl, updatedData.imageAssetId);
+                                if (resolved) updatedData.imageUrl = resolved;
+                            }
+                            
+                            // 2. Hydrate videoUrl if asset ID exists
+                            if (updatedData.videoUrl || updatedData.videoAssetId) {
+                                const resolved = await resolveUrl(updatedData.videoUrl, updatedData.videoAssetId);
+                                if (resolved) updatedData.videoUrl = resolved;
+                            }
+                            
+                            // 3. Hydrate asset nodes
+                            if (node.type === 'asset' && updatedData.asset) {
+                                updatedData.asset = await hydrateAsset(updatedData.asset);
+                            }
+
+                            // 4. Hydrate first/last frame node URLs
+                            if (node.type === 'firstLastFrame') {
+                                if (updatedData.startImageUrl || updatedData.startImageAssetId) {
+                                    const resolved = await resolveUrl(updatedData.startImageUrl, updatedData.startImageAssetId);
+                                    if (resolved) updatedData.startImageUrl = resolved;
+                                }
+                                if (updatedData.endImageUrl || updatedData.endImageAssetId) {
+                                    const resolved = await resolveUrl(updatedData.endImageUrl, updatedData.endImageAssetId);
+                                    if (resolved) updatedData.endImageUrl = resolved;
+                                }
+                            }
+                            
+                            // 5. Hydrate sceneRef nodes recursively
+                            if (node.type === 'sceneRef' && updatedData.scene) {
+                                const hydratedRefScene = await hydrateScene(updatedData.scene);
+                                updatedData.scene = hydratedRefScene;
+                            }
+                            
+                            updatedNode.data = updatedData;
+                        }
+                        return updatedNode;
+                    })
+                );
+                hydratedCanvas[optionKey] = {
+                    ...layout,
+                    nodes: hydratedNodes
+                };
+            }
+        }
+        canvas = hydratedCanvas;
+    }
+
     return { 
         ...scene, 
         imageUrl, 
         videoUrl, 
         startEndVideoUrl, 
         narrationAudioUrl,
-        prompt_options
+        prompt_options,
+        canvas
     };
 }
 

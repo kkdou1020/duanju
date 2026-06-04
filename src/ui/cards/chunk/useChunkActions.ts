@@ -45,7 +45,12 @@ export function useChunkActions({
     const [showTextModal, setShowTextModal] = useState(false);
     const [editingText, setEditingText] = useState('');
 
-    const combinedAssets = [...globalAssets, ...(chunk.assets || [])];
+    const combinedAssets = (() => {
+        const map = new Map<string, Asset>();
+        globalAssets.forEach(a => { if (a && a.id) map.set(a.id, a); });
+        (chunk.assets || []).forEach(a => { if (a && a.id) map.set(a.id, a); });
+        return Array.from(map.values());
+    })();
 
     // Chunk-level check for header warning only (not blocking)
     const anyAssetPending = chunk.assets.length > 0 && chunk.assets.some(a => !a.refImageUrl && !a.refImageAssetId && !a.refVideoUrl && !a.refAudioUrl);

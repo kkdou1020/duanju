@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Scene, Asset } from '@/shared/types';
 import { Translation } from '@/services/i18n/translations';
-import { Video, Clock, Camera, Zap, Plus, X, Image as ImageIcon, Loader2, CheckCircle, Sparkles, ChevronDown, Play } from 'lucide-react';
+import { Video, Clock, Camera, Zap, Plus, X, Image as ImageIcon, Loader2, CheckCircle } from 'lucide-react';
 import MentionTextarea, { SceneImageCandidate } from '@/ui/components/MentionTextarea';
+import { modelManager, useModelConfig } from '@/services/ai/model-manager';
 
 interface SceneVideoPaneProps {
     scene: Scene;
@@ -51,7 +52,6 @@ const SceneVideoPane: React.FC<SceneVideoPaneProps> = ({
     isGeneratingPrompts,
     isPromptCompleted,
 }) => {
-
     // Resolve end frame asset name
     const endFrameId = startEndAssetIds?.[1];
     const endFrameAsset = endFrameId ? assets.find(a => a.id === endFrameId) : null;
@@ -60,8 +60,9 @@ const SceneVideoPane: React.FC<SceneVideoPaneProps> = ({
     const endFrameName = endFrameAsset?.name || endFrameSceneImg?.name || endFrameId;
 
     // Filter UI options based on selected model (Seedance vs Veo)
-    const activeVideoModel = scene.t8starVideoModel || "veo";
-    const isSeedance = activeVideoModel.includes("seedance") || activeVideoModel.includes("doubao");
+    const config = useModelConfig();
+    const modelName = config.t8starVideoModel || "veo";
+    const isSeedance = modelName.includes("seedance") || modelName.includes("doubao");
 
     return (
         <div className="p-3 flex flex-col gap-2 bg-gray-50 dark:bg-black/10 flex-1 min-h-0">
@@ -144,7 +145,8 @@ const SceneVideoPane: React.FC<SceneVideoPaneProps> = ({
                             : 'bg-white dark:bg-black/20 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-white/5 focus:border-blue-400 dark:focus:border-blue-500/30'
                     }`}
                 placeholder={labels.visualDesc}
-            />        </div >
+            />
+        </div >
     );
 };
 
@@ -167,8 +169,6 @@ const SceneVideoPaneMemo = React.memo(SceneVideoPane, (prev, next) => {
         && prev.scene.id === next.scene.id
         && prev.scene.video_prompt === next.scene.video_prompt
         && prev.scene.visual_desc === next.scene.visual_desc
-        && prev.scene.videomodel === next.scene.videomodel
-        && prev.scene.t8starVideoModel === next.scene.t8starVideoModel
         && arraysEqual(prev.scene.videoAssetIds, next.scene.videoAssetIds)
         && arraysEqual(prev.startEndAssetIds, next.startEndAssetIds)
         && prev.assets === next.assets

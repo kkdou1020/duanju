@@ -35,7 +35,7 @@ const DEFAULT_CONFIG: ModelConfig = {
   t8starImageQuality: "auto",
   t8starNanoImageSize: "2K",
   t8starNanoAspectRatio: "16:9",
-  t8starVideoModel: "veo",
+  t8starVideoModel: "veo3.1-components",
 };
 
 const VALID_PROVIDERS: ProviderType[] = ["polo", "t8star"];
@@ -76,7 +76,7 @@ class ModelManager {
         validated.t8starImageQuality = parsed.t8starImageQuality || "auto";
         validated.t8starNanoImageSize = parsed.t8starNanoImageSize || "2K";
         validated.t8starNanoAspectRatio = parsed.t8starNanoAspectRatio || "16:9";
-        validated.t8starVideoModel = parsed.t8starVideoModel || "veo";
+        validated.t8starVideoModel = parsed.t8starVideoModel || "veo3.1-components";
       return validated;
     } catch {
       return DEFAULT_CONFIG;

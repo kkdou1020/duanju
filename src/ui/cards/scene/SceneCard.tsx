@@ -37,63 +37,13 @@ interface SceneCardProps {
     chapterScenes?: Scene[];
     chunk: NovelChunk;
     onUpdateChunk: (id: string, updates: Partial<NovelChunk> | ((c: NovelChunk) => Partial<NovelChunk>)) => void;
+    onOpenCanvas?: (sceneId: string) => void;
 }
 
 const SceneCard: React.FC<SceneCardProps> = (props) => {
     const state = useSceneCard(props as UseSceneCardProps);
+    const { viewingOptionId, setViewingOptionId, viewingOption, handleSynchronizedUpdate } = state;
 
-    const adoptedOption = state.scene.prompt_options?.find(opt => opt.video_prompt === state.scene.video_prompt) 
-                          || state.scene.prompt_options?.[0];
-    const [viewingOptionId, setViewingOptionId] = useState<string | null>(null);
-
-    useEffect(() => {
-        if (!viewingOptionId && adoptedOption) {
-            setViewingOptionId(adoptedOption.option_id);
-        }
-    }, [adoptedOption, viewingOptionId]);
-
-    const viewingOption = state.scene.prompt_options?.find(o => o.option_id === (viewingOptionId || adoptedOption?.option_id));
-    const isAdopted = viewingOption?.video_prompt === state.scene.video_prompt;
-
-    const handleSynchronizedUpdate = (id: string, fieldOrUpdates: keyof Scene | Partial<Scene>, value?: any) => {
-        const currentOptId = viewingOption?.option_id;
-
-        // Normalize to a Partial<Scene> updates object
-        const updates: Partial<Scene> = typeof fieldOrUpdates === 'string'
-            ? { [fieldOrUpdates]: value }
-            : fieldOrUpdates;
-
-        if (state.scene.prompt_options && currentOptId) {
-            const syncedFields = [
-                'np_prompt', 'video_prompt', 'imageUrl', 'imageAssetId', 
-                'videoUrl', 'videoAssetId', 'assetIds', 'videoAssetIds',
-                'camera', 'lens', 'focal_length', 'aperture',
-                'textmodel', 'imagemodel', 'videomodel', 
-                't8starImageModel', 't8starImageSize', 't8starImageQuality', 
-                't8starNanoImageSize', 't8starNanoAspectRatio', 't8starVideoModel'
-            ];
-
-            const hasSyncedField = Object.keys(updates).some(k => syncedFields.includes(k));
-            if (hasSyncedField) {
-                const newOptions = [...state.scene.prompt_options];
-                const optionIndex = newOptions.findIndex(o => o.option_id === currentOptId);
-                if (optionIndex !== -1) {
-                    newOptions[optionIndex] = { ...newOptions[optionIndex] };
-                    Object.entries(updates).forEach(([k, v]) => {
-                        if (syncedFields.includes(k)) {
-                            (newOptions[optionIndex] as any)[k] = v;
-                        }
-                    });
-                    state.onUpdate(id, {
-                        ...updates,
-                        prompt_options: newOptions
-                    });
-                    return;
-                }
-            }
-        }
-        state.onUpdate(id, updates);
-    };
 
     return (
         <div className={`rounded-xl border overflow-hidden bg-white dark:bg-dark-900 shadow-sm dark:shadow-lg transition-all duration-300 ${state.flash ? 'ring-2 ring-indigo-500 dark:ring-banana-500 animate-pulse' : 'border-gray-200 dark:border-white/5'}`}>
@@ -143,6 +93,7 @@ const SceneCard: React.FC<SceneCardProps> = (props) => {
                         audioRef={state.audioRef}
                         onNarrationTTS={state.handleNarrationTTS}
                         onDownloadAudio={state.handleDownloadAudio}
+                        onOpenCanvas={() => props.onOpenCanvas?.(state.scene.id, viewingOptionId || undefined)}
                     />
 
                     {/* Prompt Options Selection */}
@@ -193,16 +144,7 @@ const SceneCard: React.FC<SceneCardProps> = (props) => {
                                                     state.scene.camera === opt.camera &&
                                                     state.scene.lens === opt.lens &&
                                                     state.scene.focal_length === opt.focal_length &&
-                                                    state.scene.aperture === opt.aperture &&
-                                                    state.scene.textmodel === opt.textmodel &&
-                                                    state.scene.imagemodel === opt.imagemodel &&
-                                                    state.scene.videomodel === opt.videomodel &&
-                                                    state.scene.t8starImageModel === opt.t8starImageModel &&
-                                                    state.scene.t8starImageSize === opt.t8starImageSize &&
-                                                    state.scene.t8starImageQuality === opt.t8starImageQuality &&
-                                                    state.scene.t8starNanoImageSize === opt.t8starNanoImageSize &&
-                                                    state.scene.t8starNanoAspectRatio === opt.t8starNanoAspectRatio &&
-                                                    state.scene.t8starVideoModel === opt.t8starVideoModel;
+                                                    state.scene.aperture === opt.aperture;
 
                                                 if (!isAlreadyAdopted) {
                                                     state.onUpdate(state.scene.id, {
@@ -217,16 +159,7 @@ const SceneCard: React.FC<SceneCardProps> = (props) => {
                                                         camera: opt.camera,
                                                         lens: opt.lens,
                                                         focal_length: opt.focal_length,
-                                                        aperture: opt.aperture,
-                                                        textmodel: opt.textmodel,
-                                                        imagemodel: opt.imagemodel,
-                                                        videomodel: opt.videomodel,
-                                                        t8starImageModel: opt.t8starImageModel,
-                                                        t8starImageSize: opt.t8starImageSize,
-                                                        t8starImageQuality: opt.t8starImageQuality,
-                                                        t8starNanoImageSize: opt.t8starNanoImageSize,
-                                                        t8starNanoAspectRatio: opt.t8starNanoAspectRatio,
-                                                        t8starVideoModel: opt.t8starVideoModel
+                                                        aperture: opt.aperture
                                                     });
                                                 }
                                             }}
@@ -280,7 +213,7 @@ const SceneCard: React.FC<SceneCardProps> = (props) => {
                                 labels={state.labels}
                                 onUpdate={handleSynchronizedUpdate}
                                 hasImage={state.hasImage}
-                                assets={props.assets || []}
+                                assets={state.assets || []}
                                 chapterScenes={state.chapterScenes}
                                 onRemoveAsset={state.handleRemoveAsset}
                                 onOpenAssetSelector={() => state.setActiveAssetSelector('video')}
@@ -313,7 +246,7 @@ const SceneCard: React.FC<SceneCardProps> = (props) => {
                                 scene={state.scene}
                                 labels={state.labels}
                                 onUpdate={handleSynchronizedUpdate}
-                                assets={props.assets || []}
+                                assets={state.assets || []}
                                 chapterScenes={state.chapterScenes}
                                 onRemoveAsset={state.handleRemoveAsset}
                                 sceneImages={state.sceneImages}

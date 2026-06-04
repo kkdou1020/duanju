@@ -19,15 +19,7 @@ export interface PromptOption {
   lens?: string;
   focal_length?: string;
   aperture?: string;
-  textmodel?: string;
-  imagemodel?: string;
-  videomodel?: string;
-  t8starImageModel?: string;
-  t8starImageSize?: string;
-  t8starImageQuality?: string;
-  t8starNanoImageSize?: string;
-  t8starNanoAspectRatio?: string;
-  t8starVideoModel?: string;
+  videoModel?: string;
 }
 
 export interface DialogueLine {
@@ -67,15 +59,8 @@ export interface Scene {
     error?: string;
     operation?: any;                 // Cache of standard video operation
     startEndVideoOperation?: any;    // Cache of start/end video operation
-    textmodel?: string;
-    imagemodel?: string;
-    videomodel?: string;
-    t8starImageModel?: string;
-    t8starImageSize?: string;
-    t8starImageQuality?: string;
-    t8starNanoImageSize?: string;
-    t8starNanoAspectRatio?: string;
-    t8starVideoModel?: string;
+    canvas?: Record<string, { nodes: any[]; edges: any[] }>; // key is option_id ("A", "B", "C"), value is nodes & edges
+    videoModel?: string;
 }
 
 

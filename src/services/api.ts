@@ -417,10 +417,11 @@ export const generateSceneImage = async (
     assets: Asset[] = [],
     optionId?: string,
     allScenes?: Scene[],
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    customPrompt?: string
 ): Promise<any> => {
     const option = optionId && scene.prompt_options ? scene.prompt_options.find(o => o.option_id === optionId) : null;
-    const prompt = option ? (option.np_prompt || option.video_prompt || '') : (scene.np_prompt || scene.visual_desc || '');
+    const prompt = customPrompt || (option ? (option.np_prompt || option.video_prompt || '') : (scene.np_prompt || scene.visual_desc || ''));
 
     // Resolve all tags using unified dual-track logic
     const usedAssets = await resolveUsedAssets(prompt, assets, allScenes || []);
@@ -438,7 +439,8 @@ export const generateSceneImage = async (
         scene,
         globalStyle: styleToUse,
         assets: usedAssets,
-        optionId
+        optionId,
+        customPrompt
     }, signal);
 };
 
@@ -494,10 +496,11 @@ export const generateVideo = async (
     globalStyle?: GlobalStyle,
     allScenes: Scene[] = [],
     optionId?: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    customPrompt?: string
 ): Promise<{ taskId: string; operation: any }> => {
     const option = optionId && scene.prompt_options ? scene.prompt_options.find(o => o.option_id === optionId) : null;
-    const prompt = option ? (option.video_prompt || option.np_prompt || '') : (scene.video_prompt || scene.np_prompt || scene.visual_desc || '');
+    const prompt = customPrompt || (option ? (option.video_prompt || option.np_prompt || '') : (scene.video_prompt || scene.np_prompt || scene.visual_desc || ''));
 
     // Resolve all tags using unified dual-track logic
     const usedAssets = await resolveUsedAssets(prompt, assets, allScenes || []);
@@ -588,7 +591,7 @@ export const generateVideo = async (
     }
 
     const styleToUse = getStyleWithLockedDna(globalStyle);
-    return post('/media/video', { imageBase64: finalImageBase64, scene, aspectRatio, assets: usedAssets, globalStyle: styleToUse, optionId }, signal);
+    return post('/media/video', { imageBase64: finalImageBase64, scene, aspectRatio, assets: usedAssets, globalStyle: styleToUse, optionId, customPrompt }, signal);
 }
 
 /** Poll video generation status (single check) */

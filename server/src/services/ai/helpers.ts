@@ -1,23 +1,4 @@
 import { GenerateContentResponse } from "../../shared/types";
-import { HttpsProxyAgent } from "https-proxy-agent";
-
-let cachedProxyAgent: HttpsProxyAgent<string> | undefined = undefined;
-let isProxyChecked = false;
-
-export function getProxyAgent(): HttpsProxyAgent<string> | undefined {
-    if (isProxyChecked) return cachedProxyAgent;
-    const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || "";
-    if (proxyUrl) {
-        try {
-            cachedProxyAgent = new HttpsProxyAgent(proxyUrl);
-            console.log(`[Proxy] HttpsProxyAgent initialized with: ${proxyUrl}`);
-        } catch (err) {
-            console.error("[Proxy] Failed to initialize HttpsProxyAgent:", err);
-        }
-    }
-    isProxyChecked = true;
-    return cachedProxyAgent;
-}
 
 // --- Helpers ---
 export const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));

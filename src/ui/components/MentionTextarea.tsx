@@ -32,6 +32,7 @@ interface MentionTextareaProps {
     disableVideos?: boolean;
     className?: string;
     placeholder?: string;
+    onBlur?: () => void;
 }
 
 // Regex for matching @图像_ tags — uses the shared unified regex
@@ -142,7 +143,7 @@ const textToHtml = (
                 ? { bg: 'rgba(239,68,68,0.1)', border: 'rgba(248,113,113,0.5)', text: '#ef4444' }
                 : CHIP_COLORS[mode];
 
-            const defaultEmoji = info.category === 'audio' ? '🎵' : info.category === 'video' ? '🎬' : '🧑';
+            const defaultEmoji = info.category === 'audio' ? '🎵' : info.category === 'video' ? '🎬' : (info.category === 'image' || info.category === 'scene' ? '🖼️' : '🧑');
             const imgHtml = info.thumb
                 ? `<img src="${info.thumb}" style="width:14px;height:14px;border-radius:2px;object-fit:cover;vertical-align:-2px;margin-right:3px;display:inline-block;" />`
                 : `<span style="vertical-align:-1px;margin-right:3px;display:inline-block;font-size:inherit;">${defaultEmoji}</span>`;
@@ -209,7 +210,8 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
     mode = 'video',
     disableVideos = false,
     className = '',
-    placeholder = ''
+    placeholder = '',
+    onBlur
 }) => {
     const [showDropdown, setShowDropdown] = useState(false);
     const [query, setQuery] = useState('');
@@ -223,6 +225,17 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
     const dropdownRef = useRef<HTMLDivElement>(null);
     const lastRenderedValue = useRef<string>(value);
     const isInternalChange = useRef(false);
+
+    // Signature key generator to detect when tags resolve to thumbnails asynchronously
+    const getThumbKey = (val: string, assetsList: Asset[], siList: SceneImageCandidate[], vList: SceneImageCandidate[], aList: SceneImageCandidate[]) => {
+        return [...val.matchAll(TAG_REGEX)].map(m => {
+            const tagName = m[1] || m[3];
+            const tagId = m[2] || m[4];
+            return findAssetInfo(tagName, assetsList, siList, tagId, vList, aList).thumb || '';
+        }).join(',');
+    };
+
+    const lastThumbKeyRef = useRef<string>(getThumbKey(value, assets, sceneImages, videos, audios));
 
     const videoUploadRef = useRef<HTMLInputElement>(null);
     const audioUploadRef = useRef<HTMLInputElement>(null);
@@ -245,11 +258,16 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
             isInternalChange.current = false;
             return;
         }
-        if (value !== lastRenderedValue.current || disableVideos !== lastDisableVideosRef.current) {
+        
+        const currentThumbKey = getThumbKey(value, assets, sceneImages, videos, audios);
+        const hasThumbChanged = currentThumbKey !== lastThumbKeyRef.current;
+
+        if (value !== lastRenderedValue.current || disableVideos !== lastDisableVideosRef.current || hasThumbChanged) {
             const html = textToHtml(value, assets, sceneImages, mode as 'video' | 'image', videos, audios, disableVideos);
             editorRef.current.innerHTML = html || '';
             lastRenderedValue.current = value;
             lastDisableVideosRef.current = disableVideos;
+            lastThumbKeyRef.current = currentThumbKey;
         }
     }, [value, assets, sceneImages, videos, audios, mode, disableVideos]);
 
@@ -263,6 +281,23 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
     // Build candidate list
     const candidates = React.useMemo(() => {
         const items: { id: string; name: string; displayName: string; disabled: boolean; inPrompt: boolean; thumb?: string; category: 'asset' | 'scene' | 'video' | 'audio', canDelete?: boolean, mediaUrl?: string, mediaAssetId?: string }[] = [];
+
+        // Deduplicate incoming lists to prevent duplicate keys in lists
+        const uniqueAssetsMap = new Map<string, Asset>();
+        (availableAssets || []).forEach(a => { if (a && a.id) uniqueAssetsMap.set(a.id, a); });
+        const deduplicatedAssets = Array.from(uniqueAssetsMap.values());
+
+        const uniqueSceneImagesMap = new Map<string, any>();
+        (sceneImages || []).forEach(si => { if (si && si.id) uniqueSceneImagesMap.set(si.id, si); });
+        const deduplicatedSceneImages = Array.from(uniqueSceneImagesMap.values());
+
+        const uniqueVideosMap = new Map<string, any>();
+        (videos || []).forEach(v => { if (v && v.id) uniqueVideosMap.set(v.id, v); });
+        const deduplicatedVideos = Array.from(uniqueVideosMap.values());
+
+        const uniqueAudiosMap = new Map<string, any>();
+        (audios || []).forEach(a => { if (a && a.id) uniqueAudiosMap.set(a.id, a); });
+        const deduplicatedAudios = Array.from(uniqueAudiosMap.values());
 
         // Count ALL unique @图像 tags in prompt (including 分镜 tags)
         const currentTagMatches = [...value.matchAll(TAG_REGEX)];
@@ -280,11 +315,11 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
         const currentMentionCount = uniqueRefs.size;
         const atLimit = maxMentions !== undefined && currentMentionCount >= maxMentions;
 
-        const videoIds = new Set(videos.map(v => v.id));
-        const audioIds = new Set(audios.map(a => a.id));
-        const sceneImageIds = new Set(sceneImages.map(s => s.id));
+        const videoIds = new Set(deduplicatedVideos.map(v => v.id));
+        const audioIds = new Set(deduplicatedAudios.map(a => a.id));
+        const sceneImageIds = new Set(deduplicatedSceneImages.map(s => s.id));
 
-        for (const asset of availableAssets) {
+        for (const asset of deduplicatedAssets) {
             if (videoIds.has(asset.id) || audioIds.has(asset.id) || sceneImageIds.has(asset.id)) {
                 continue;
             }
@@ -310,7 +345,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
             }
         }
 
-        for (const si of sceneImages) {
+        for (const si of deduplicatedSceneImages) {
             let isInPrompt = promptIdSet.has(si.id) || promptNameSet.has(si.name);
             // Storyboard suffix matching: prompt has 分镜S01 but si.name is 分镜E1_S01
             if (!isInPrompt && isStoryboardTag(si.name)) {
@@ -353,7 +388,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
             }
         }
 
-        for (const v of videos) {
+        for (const v of deduplicatedVideos) {
             const isInPrompt = promptIdSet.has(v.id) || promptNameSet.has(v.name);
             const isDisabled = (atLimit && !isInPrompt) || disableVideos;
             if (!query || v.name.toLowerCase().includes(query.toLowerCase()) || v.id.toLowerCase().includes(query.toLowerCase())) {
@@ -372,7 +407,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
             }
         }
 
-        for (const a of audios) {
+        for (const a of deduplicatedAudios) {
             const isInPrompt = promptIdSet.has(a.id) || promptNameSet.has(a.name);
             const isDisabled = (atLimit && !isInPrompt) || disableVideos;
             if (!query || a.name.toLowerCase().includes(query.toLowerCase()) || a.id.toLowerCase().includes(query.toLowerCase())) {
@@ -522,7 +557,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
             const icon = document.createElement('span');
             // Use correct emoji based on asset category, matching textToHtml defaultEmoji logic
             const resolvedCategory = category || info.category;
-            icon.textContent = resolvedCategory === 'audio' ? '🎵' : resolvedCategory === 'video' ? '🎬' : '🧑';
+            icon.textContent = resolvedCategory === 'audio' ? '🎵' : resolvedCategory === 'video' ? '🎬' : (resolvedCategory === 'image' || resolvedCategory === 'scene' ? '🖼️' : '🧑');
             icon.style.cssText = 'vertical-align:-1px;margin-right:3px;display:inline-block;font-size:inherit;';
             chip.appendChild(icon);
         }
@@ -584,9 +619,10 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
         setTimeout(() => {
             if (!isUploadingRef.current && !isDeletingRef.current) {
                 setShowDropdown(false);
+                if (onBlur) onBlur();
             }
         }, 200);
-    }, []);
+    }, [onBlur]);
 
     // Scroll highlighted item into view
     useEffect(() => {

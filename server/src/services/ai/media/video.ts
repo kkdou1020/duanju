@@ -28,12 +28,12 @@ export const matchAssetsToPrompt = (prompt: string, assets: Asset[], explicitIds
 
 // Backend tag resolution removed. Handled by exact SSOT from frontend.
 
-export const constructVideoPrompt = (scene: Scene, globalStyle?: GlobalStyle, optionId?: string): string => {
+export const constructVideoPrompt = (scene: Scene, globalStyle?: GlobalStyle, optionId?: string, customPrompt?: string): string => {
     const stylePrefix = globalStyle?.visualTags ? `${globalStyle.visualTags}. ` : "";
     let finalPrompt = "";
     
     const option = optionId && scene.prompt_options ? scene.prompt_options.find((o: any) => o.option_id === optionId) : null;
-    const basePrompt = option ? (option.video_prompt || option.np_prompt || "") : (scene.video_prompt || scene.visual_desc || "");
+    const basePrompt = customPrompt || (option ? (option.video_prompt || option.np_prompt || "") : (scene.video_prompt || scene.visual_desc || ""));
 
     if (basePrompt) {
         if (stylePrefix && !basePrompt.startsWith(stylePrefix.trim())) {
@@ -105,20 +105,15 @@ export const submitVideoGeneration = async (
     assets: Asset[] = [],
     globalStyle?: GlobalStyle,
     allScenes: Scene[] = [], // Legacy parameter, kept for signature compatibility
-    optionId?: string
+    optionId?: string,
+    customPrompt?: string
 ): Promise<{ taskId: string; operation: any }> => {
+    const modelConfig = getModelManager().getConfig();
     const option = optionId && scene.prompt_options ? scene.prompt_options.find((o: any) => o.option_id === optionId) : null;
-    const modelConfigOverride: Partial<any> = {};
-    const configSource = option || scene;
-    if (configSource) {
-        if (configSource.videomodel) modelConfigOverride.videomodel = configSource.videomodel;
-        if (configSource.t8starVideoModel) modelConfigOverride.t8starVideoModel = configSource.t8starVideoModel;
-    }
+    const frontendModel = option?.videoModel || scene.videoModel;
+    let model = frontendModel || modelConfig.t8starVideoModel || "veo3.1-components";
 
-    const modelConfig = Object.keys(modelConfigOverride).length > 0 
-        ? { ...getModelManager().getConfig(), ...modelConfigOverride } 
-        : getModelManager().getConfig();
-    let model = modelConfig.t8starVideoModel || "veo3.1-components";
+    console.log(`[DEBUG] submitVideoGeneration model=${model}, videoApiKeyPrefix=${((getModelManager() as any).t8star.videoApiKey || '').substring(0, 8)}...`);
 
     // 智能路由：仅当选用普通 Veo 3.1 系列时，根据模式自动切换
     if (model === "veo" || model === "veo3.1" || model === "veo3.1-components") {
@@ -127,7 +122,7 @@ export const submitVideoGeneration = async (
     
     const isSeedance = model.includes("seedance") || model.includes("doubao");
 
-    const fullPrompt = constructVideoPrompt(scene, globalStyle, optionId);
+    const fullPrompt = constructVideoPrompt(scene, globalStyle, optionId, customPrompt);
     let imagesToSend: string[] = [];
     let videosToSend: string[] = [];
     let audiosToSend: string[] = [];
@@ -258,8 +253,7 @@ export const submitVideoGeneration = async (
                     audios: audiosToSend,
                     seedanceContent: isSeedance ? seedanceContent : undefined,
                     aspectRatio: aspectRatio,
-                    seconds: seconds,
-                    modelConfig: Object.keys(modelConfigOverride).length > 0 ? modelConfigOverride : undefined
+                    seconds: seconds
                 }
             });
         }, 3, 2000);

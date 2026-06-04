@@ -1,15 +1,15 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Scene, ImageGenStatus, GlobalStyle, Asset } from '@/shared/types';
 import { Translation } from '@/services/i18n/translations';
 import { LazyMedia } from '@/ui/common/LazyMedia';
-import { Image as ImageIcon, Aperture, RefreshCw, Download, Video, Film, Upload, Trash2, AlertCircle, Settings, X, Sparkles, Play, ChevronDown } from 'lucide-react';
+import { Image as ImageIcon, Aperture, RefreshCw, Download, Video, Film, Upload, Trash2, AlertCircle } from 'lucide-react';
 import { refreshVideoUrl } from '@/services/api';
 import { downloadAndSaveVideo } from '@/services/storage';
 
 interface SceneMediaViewerProps {
     scene: Scene;
     labels: Translation;
-    onUpdate: (id: string, fieldOrUpdates: keyof Scene | Partial<Scene>, value?: any) => void;
+    onUpdate: (id: string, field: keyof Scene, value: any) => void;
     genStatus: ImageGenStatus;
     videoStatus: ImageGenStatus;
     viewMode: 'image' | 'video';
@@ -53,298 +53,6 @@ const SceneMediaViewer: React.FC<SceneMediaViewerProps> = ({
     const imageStartTime = getTaskStartTime?.('image', viewingOptionId || undefined);
     const videoStartTime = getTaskStartTime?.('video', viewingOptionId || undefined);
 
-    const [showSettings, setShowSettings] = useState(false);
-
-    const getDropdownLabel = () => {
-        if (viewMode === 'image') {
-            const provider = scene.imagemodel || 't8star';
-            const model = scene.t8starImageModel || 'gpt-image-2';
-            return `生图: ${provider === 't8star' ? model : 'Polo'}`;
-        } else {
-            if (scene.isStartEndFrameMode) {
-                return '视频: 首尾帧模式';
-            }
-            const provider = scene.videomodel || 't8star';
-            const model = scene.t8starVideoModel || 'veo';
-            return `视频: ${provider === 't8star' ? (model === 'doubao-seedance-2-0-260128' ? 'seedance 2.0' : 'veo 3.1') : 'Polo'}`;
-        }
-    };
-
-    const handleVideoModeChange = (mode: 'reference' | 'startEnd') => {
-        if (mode === 'startEnd') {
-            const startId = `scene_img_${scene.id}`;
-            onUpdate(scene.id, {
-                isStartEndFrameMode: true,
-                startEndAssetIds: (!scene.startEndAssetIds || scene.startEndAssetIds.length === 0)
-                    ? [startId]
-                    : scene.startEndAssetIds
-            });
-        } else {
-            onUpdate(scene.id, 'isStartEndFrameMode', false);
-        }
-    };
-
-    const renderImageSettings = () => {
-        const activeImageModel = scene.imagemodel || 't8star';
-        const activeT8starImageModel = scene.t8starImageModel || 'gpt-image-2';
-        const activeImageQuality = scene.t8starImageQuality || 'auto';
-        const activeNanoImageSize = scene.t8starNanoImageSize || '2K';
-        const activeNanoAspectRatio = scene.t8starNanoAspectRatio || '16:9';
-
-        return (
-            <div className="flex flex-col gap-3 text-xs animate-in fade-in duration-200">
-                {/* Provider Select */}
-                <div className="flex flex-col gap-1">
-                    <span className="text-gray-400 font-medium">提供商</span>
-                    <select
-                        value={activeImageModel}
-                        onChange={(e) => onUpdate(scene.id, 'imagemodel', e.target.value)}
-                        className="bg-white dark:bg-[#151515] border border-gray-200 dark:border-white/10 rounded px-2.5 py-1 text-gray-700 dark:text-gray-200 outline-none w-full cursor-pointer focus:border-indigo-500"
-                    >
-                        <option value="t8star">T8star</option>
-                        <option value="polo">Polo</option>
-                    </select>
-                </div>
-
-                {/* T8Star options */}
-                {activeImageModel === 't8star' && (
-                    <>
-                        {/* Image Model Select */}
-                        <div className="flex flex-col gap-1">
-                            <span className="text-gray-400 font-medium">生图模型</span>
-                            <select
-                                value={activeT8starImageModel}
-                                onChange={(e) => onUpdate(scene.id, 't8starImageModel', e.target.value)}
-                                className="bg-white dark:bg-[#151515] border border-gray-200 dark:border-white/10 rounded px-2.5 py-1 text-gray-700 dark:text-gray-200 outline-none w-full cursor-pointer focus:border-indigo-500"
-                            >
-                                <option value="gpt-image-2">gpt-image-2</option>
-                                <option value="gpt-image-2-official">gpt-image-2 (官方版)</option>
-                                <option value="nano-banana-pro">nano-banana-pro</option>
-                            </select>
-                        </div>
-
-                        {/* Custom sizes for gpt-image-2 */}
-                        {(activeT8starImageModel === 'gpt-image-2' || activeT8starImageModel === 'gpt-image-2-official') && (
-                            <>
-                                {(() => {
-                                    const sizeMap: Record<string, Record<string, string>> = {
-                                      '1:1': { '1K': '1024x1024', '2K': '2048x2048', '4K': '4096x4096' },
-                                      '3:2': { '1K': '1200x800', '2K': '1536x1024', '4K': '3072x2048' },
-                                      '2:3': { '1K': '800x1200', '2K': '1024x1536', '4K': '2048x3072' },
-                                      '4:3': { '1K': '1152x864', '2K': '1408x1056', '4K': '2880x2160' },
-                                      '3:4': { '1K': '864x1152', '2K': '1056x1408', '4K': '2160x2880' },
-                                      '5:4': { '1K': '1280x1024', '2K': '1600x1280', '4K': '3200x2560' },
-                                      '4:5': { '1K': '1024x1280', '2K': '1280x1600', '4K': '2560x3200' },
-                                      '16:9': { '1K': '1280x720', '2K': '2048x1152', '4K': '3840x2160' },
-                                      '9:16': { '1K': '720x1280', '2K': '1152x2048', '4K': '2160x3840' },
-                                      '2:1': { '1K': '1280x640', '2K': '2048x1024', '4K': '4096x2048' },
-                                      '1:2': { '1K': '640x1280', '2K': '1024x2048', '4K': '2048x4096' },
-                                      '21:9': { '1K': '1680x720', '2K': '2464x1056', '4K': '3360x1440' },
-                                      '9:21': { '1K': '720x1680', '2K': '1056x2464', '4K': '1440x3360' },
-                                    };
-
-                                    const val = scene.t8starImageSize || '2048x1152'; // default to 16:9 2K
-                                    let ratio = '16:9';
-                                    let res = '2K';
-
-                                    let found = false;
-                                    for (const r in sizeMap) {
-                                      for (const s in sizeMap[r]) {
-                                        if (sizeMap[r][s] === val) {
-                                          ratio = r;
-                                          res = s;
-                                          found = true;
-                                          break;
-                                        }
-                                      }
-                                      if (found) break;
-                                    }
-
-                                    const handleRatioResChange = (newRatio: string, newRes: string) => {
-                                      onUpdate(scene.id, 't8starImageSize', sizeMap[newRatio][newRes]);
-                                    };
-
-                                    return (
-                                        <div className="flex gap-2">
-                                            <div className="flex-1 flex flex-col gap-1">
-                                                <span className="text-gray-400 font-medium">比例</span>
-                                                <select
-                                                    value={ratio}
-                                                    onChange={(e) => handleRatioResChange(e.target.value, res)}
-                                                    className="bg-white dark:bg-[#151515] border border-gray-200 dark:border-white/10 rounded px-2 py-1.5 text-gray-700 dark:text-gray-200 outline-none w-full cursor-pointer focus:border-indigo-500"
-                                                >
-                                                    {Object.keys(sizeMap).map(r => <option key={r} value={r}>{r}</option>)}
-                                                </select>
-                                            </div>
-                                            <div className="flex-1 flex flex-col gap-1">
-                                                <span className="text-gray-400 font-medium">分辨率</span>
-                                                <select
-                                                    value={res}
-                                                    onChange={(e) => handleRatioResChange(ratio, e.target.value)}
-                                                    className="bg-white dark:bg-[#151515] border border-gray-200 dark:border-white/10 rounded px-2 py-1.5 text-gray-700 dark:text-gray-200 outline-none w-full cursor-pointer focus:border-indigo-500"
-                                                >
-                                                    <option value="1K">1K</option>
-                                                    <option value="2K">2K</option>
-                                                </select>
-                                            </div>
-                                        </div>
-                                    );
-                                })()}
-
-                                {/* Quality Option */}
-                                <div className="flex flex-col gap-1">
-                                    <span className="text-gray-400 font-medium">质量</span>
-                                    <select
-                                        value={activeImageQuality}
-                                        onChange={(e) => onUpdate(scene.id, 't8starImageQuality', e.target.value)}
-                                        className="bg-white dark:bg-[#151515] border border-gray-200 dark:border-white/10 rounded px-2 py-1.5 text-gray-700 dark:text-gray-200 outline-none w-full cursor-pointer focus:border-indigo-500"
-                                    >
-                                        <option value="auto">Auto</option>
-                                        <option value="low">Low (低速)</option>
-                                        <option value="medium">Medium (中等)</option>
-                                        <option value="high">High (高质量)</option>
-                                    </select>
-                                </div>
-                            </>
-                        )}
-
-                        {/* Custom size and ratio for nano-banana-pro */}
-                        {activeT8starImageModel === 'nano-banana-pro' && (
-                            <>
-                                {/* Size Select */}
-                                <div className="flex flex-col gap-1">
-                                    <span className="text-gray-400 font-medium">尺寸</span>
-                                    <select
-                                        value={activeNanoImageSize}
-                                        onChange={(e) => onUpdate(scene.id, 't8starNanoImageSize', e.target.value)}
-                                        className="bg-white dark:bg-[#151515] border border-gray-200 dark:border-white/10 rounded px-2 py-1.5 text-gray-700 dark:text-gray-200 outline-none w-full cursor-pointer focus:border-indigo-500"
-                                    >
-                                        <option value="1K">1K</option>
-                                        <option value="2K">2K</option>
-                                    </select>
-                                </div>
-
-                                {/* Aspect Ratio Select */}
-                                <div className="flex flex-col gap-1">
-                                    <span className="text-gray-400 font-medium">比例</span>
-                                    <select
-                                        value={activeNanoAspectRatio}
-                                        onChange={(e) => onUpdate(scene.id, 't8starNanoAspectRatio', e.target.value)}
-                                        className="bg-white dark:bg-[#151515] border border-gray-200 dark:border-white/10 rounded px-2 py-1.5 text-gray-700 dark:text-gray-200 outline-none w-full cursor-pointer focus:border-indigo-500"
-                                    >
-                                        <option value="16:9">16:9</option>
-                                        <option value="9:16">9:16</option>
-                                        <option value="1:1">1:1</option>
-                                        <option value="4:3">4:3</option>
-                                        <option value="3:4">3:4</option>
-                                        <option value="3:2">3:2</option>
-                                        <option value="2:3">2:3</option>
-                                    </select>
-                                </div>
-                            </>
-                        )}
-                    </>
-                )}
-            </div>
-        );
-    };
-
-    const renderVideoSettings = () => {
-        const activeVideoModel = scene.videomodel || 't8star';
-        const activeT8starVideoModel = scene.t8starVideoModel || 'veo';
-        const activeMode = scene.isStartEndFrameMode ? 'startEnd' : 'reference';
-
-        return (
-            <div className="flex flex-col gap-3 text-xs animate-in fade-in duration-200">
-                {/* Mode Select */}
-                <div className="flex flex-col gap-1">
-                    <span className="text-gray-400 font-medium">视频生成模式</span>
-                    <select
-                        value={activeMode}
-                        onChange={(e) => handleVideoModeChange(e.target.value as 'reference' | 'startEnd')}
-                        className="bg-white dark:bg-[#151515] border border-gray-200 dark:border-white/10 rounded px-2.5 py-1 text-gray-700 dark:text-gray-200 outline-none w-full cursor-pointer focus:border-blue-500"
-                    >
-                        <option value="reference">参考图模式</option>
-                        <option value="startEnd">首尾帧模式</option>
-                    </select>
-                </div>
-
-                {/* Provider Select */}
-                <div className="flex flex-col gap-1">
-                    <span className="text-gray-400 font-medium">提供商</span>
-                    <select
-                        value={activeVideoModel}
-                        onChange={(e) => onUpdate(scene.id, 'videomodel', e.target.value)}
-                        className="bg-white dark:bg-[#151515] border border-gray-200 dark:border-white/10 rounded px-2.5 py-1 text-gray-700 dark:text-gray-200 outline-none w-full cursor-pointer focus:border-blue-500"
-                    >
-                        <option value="t8star">T8star</option>
-                        <option value="polo">Polo</option>
-                    </select>
-                </div>
-
-                {/* T8Star options */}
-                {activeVideoModel === 't8star' && (
-                    <>
-                        {/* Video Engine Select */}
-                        <div className="flex flex-col gap-1">
-                            <span className="text-gray-400 font-medium">引擎</span>
-                            <select
-                                value={activeT8starVideoModel}
-                                onChange={(e) => onUpdate(scene.id, 't8starVideoModel', e.target.value)}
-                                className="bg-white dark:bg-[#151515] border border-gray-200 dark:border-white/10 rounded px-2.5 py-1 text-gray-700 dark:text-gray-200 outline-none w-full cursor-pointer focus:border-blue-500"
-                            >
-                                <option value="veo">veo 3.1</option>
-                                <option value="doubao-seedance-2-0-260128">seedance 2.0</option>
-                            </select>
-                        </div>
-                    </>
-                )}
-            </div>
-        );
-    };
-
-    const renderDropdownTag = () => {
-        const label = getDropdownLabel();
-        return (
-            <div className="absolute top-2 left-2 z-30">
-                <button
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        setShowSettings(!showSettings);
-                    }}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold transition-all backdrop-blur-sm shadow-md border ${
-                        showSettings
-                            ? 'bg-indigo-600 dark:bg-banana-500 text-white dark:text-black border-indigo-500 dark:border-banana-400'
-                            : 'bg-white/80 dark:bg-black/60 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-black/80 border-gray-300 dark:border-white/10'
-                    }`}
-                >
-                    <div className={`w-2 h-2 rounded-full ${viewMode === 'image' ? 'bg-purple-500' : 'bg-blue-500'}`} />
-                    <span>{label}</span>
-                    <ChevronDown className="w-3.5 h-3.5 opacity-60" />
-                </button>
-
-                {showSettings && (
-                    <>
-                        {/* Backdrop to dismiss popover */}
-                        <div 
-                            className="fixed inset-0 z-40 bg-transparent" 
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setShowSettings(false);
-                            }} 
-                        />
-                        <div 
-                            className="absolute top-9 left-0 mt-1 w-60 bg-white/95 dark:bg-[#121212]/95 border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl backdrop-blur-lg z-50 p-3.5 text-gray-800 dark:text-gray-100 flex flex-col gap-3 max-h-[360px] overflow-y-auto"
-                            onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside
-                        >
-                            {viewMode === 'image' ? renderImageSettings() : renderVideoSettings()}
-                        </div>
-                    </>
-                )}
-            </div>
-        );
-    };
-
     const handleVideoError = async () => {
         const operation = isStartEndMode ? scene.startEndVideoOperation : scene.operation;
         if (!operation) {
@@ -378,8 +86,21 @@ const SceneMediaViewer: React.FC<SceneMediaViewerProps> = ({
             <div className="w-full md:w-[320px] bg-gray-100 dark:bg-black/40 min-h-[250px] relative border-b md:border-b-0 md:border-r border-gray-200 dark:border-white/5 flex items-center justify-center group shrink-0">
                 <input type="file" ref={fileInputRef} onChange={onFileChange} accept="image/*" className="hidden" />
 
-                {/* Settings Dropdown Tag */}
-                {renderDropdownTag()}
+                {/* Start/End Frame Mode Toggle */}
+                {scene.imageUrl && (
+                    <div className="absolute top-2 left-2 z-10">
+                        <button
+                            onClick={() => {
+                                onUpdate(scene.id, 'isStartEndFrameMode', false);
+                            }}
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all backdrop-blur-sm bg-indigo-600 dark:bg-banana-500 text-white dark:text-black shadow-lg shadow-indigo-500/20 dark:shadow-banana-500/20"
+                            title="关闭首尾帧模式"
+                        >
+                            <div className="w-2 h-2 rounded-full bg-white dark:bg-black" />
+                            首尾帧模式
+                        </button>
+                    </div>
+                )}
 
                 {hasImage ? (
                     <div className="relative w-full h-full flex items-center justify-center bg-gray-200 dark:bg-black">
@@ -464,8 +185,25 @@ const SceneMediaViewer: React.FC<SceneMediaViewerProps> = ({
             <input type="file" ref={fileInputRef} onChange={onFileChange} accept="image/*" className="hidden" />
             <input type="file" ref={videoFileInputRef} onChange={onVideoFileChange} accept="video/*" className="hidden" />
 
-            {/* Settings Dropdown Tag */}
-            {renderDropdownTag()}
+            {/* Start/End Frame Mode Toggle (show when image exists) */}
+            {scene.imageUrl && (
+                <div className="absolute top-2 left-2 z-10">
+                    <button
+                        onClick={() => {
+                            onUpdate(scene.id, 'isStartEndFrameMode', true);
+                            const startId = `scene_img_${scene.id}`;
+                            if (!scene.startEndAssetIds || scene.startEndAssetIds.length === 0) {
+                                onUpdate(scene.id, 'startEndAssetIds', [startId]);
+                            }
+                        }}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all backdrop-blur-sm bg-white/80 dark:bg-black/60 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-black/80 border border-gray-300 dark:border-white/10"
+                        title="开启首尾帧模式 (强制使用 veo3.1-pro-4k)"
+                    >
+                        <div className="w-2 h-2 rounded-full bg-gray-400" />
+                        首尾帧模式
+                    </button>
+                </div>
+            )}
 
             {/* Main Content Area */}
             <div className="flex-1 w-full flex items-center justify-center">
@@ -738,15 +476,7 @@ const SceneMediaViewerMemo = React.memo(SceneMediaViewer, (prev, next) => {
         && prev.scene.startEndVideoAssetId === next.scene.startEndVideoAssetId
         && prev.scene.isStartEndFrameMode === next.scene.isStartEndFrameMode
         && prev.scene.operation === next.scene.operation
-        && prev.scene.startEndVideoOperation === next.scene.startEndVideoOperation
-        && prev.scene.imagemodel === next.scene.imagemodel
-        && prev.scene.t8starImageModel === next.scene.t8starImageModel
-        && prev.scene.t8starImageSize === next.scene.t8starImageSize
-        && prev.scene.t8starImageQuality === next.scene.t8starImageQuality
-        && prev.scene.t8starNanoImageSize === next.scene.t8starNanoImageSize
-        && prev.scene.t8starNanoAspectRatio === next.scene.t8starNanoAspectRatio
-        && prev.scene.videomodel === next.scene.videomodel
-        && prev.scene.t8starVideoModel === next.scene.t8starVideoModel;
+        && prev.scene.startEndVideoOperation === next.scene.startEndVideoOperation;
 });
 
 export default SceneMediaViewerMemo;

@@ -8,8 +8,32 @@ import {
     compressDataUrlToJpegBase64,
     findFirstHttpUrlDeep
 } from "./t8star-utils";
-import fetch from 'node-fetch';
-import { getProxyAgent } from "../helpers";
+import nodeFetch from 'node-fetch';
+import { HttpsProxyAgent } from 'https-proxy-agent';
+
+let proxyAgent: any = null;
+let proxyAgentInitialized = false;
+
+const getProxyAgent = () => {
+    if (!proxyAgentInitialized) {
+        const proxyUrl = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy;
+        if (proxyUrl) {
+            proxyAgent = new HttpsProxyAgent(proxyUrl);
+        }
+        proxyAgentInitialized = true;
+    }
+    return proxyAgent;
+};
+
+const fetch = (url: any, options: any = {}) => {
+    const agent = getProxyAgent();
+    if (agent) {
+        options.agent = agent;
+    }
+    return nodeFetch(url, options);
+};
+
+
 
 export class T8StarProvider implements IAIProvider {
     private config: AIProviderConfig;
@@ -24,13 +48,14 @@ export class T8StarProvider implements IAIProvider {
     constructor(config?: AIProviderConfig) {
         this.config = config || {};
         // In backend mode, use real external URLs directly
-        this.textBaseUrl = this.config.baseUrl || "https://ai.t8star.org";
-        this.mediaBaseUrl = this.config.mediaBaseUrl || "https://ai.t8star.org";
+        this.textBaseUrl = this.config.baseUrl || "https://ai.t8star.cn";
+        this.mediaBaseUrl = this.config.mediaBaseUrl || "https://ai.t8star.cn";
 
         // API keys read from config (injected from .env)
         this.textApiKey = this.config.apiKey || process.env.T8_TEXT_API_KEY || "";
         this.imageApiKey = this.config.mediaApiKey || process.env.T8_IMAGE_API_KEY || "";
-        this.videoApiKey = this.config.videoApiKey || process.env.T8_VIDEO_API_KEY || "";
+        this.videoApiKey = this.config.videoApiKey || process.env.T8_VIDEO_API_KEY || this.config.mediaApiKey || "";
+        console.log("[T8Star] Initialized with videoApiKey prefix:", this.videoApiKey ? `${this.videoApiKey.substring(0, 8)}...` : "NONE");
         this.audioApiKey = this.config.audioApiKey || process.env.T8_AUDIO_API_KEY || "";
     }
 
@@ -140,7 +165,6 @@ export class T8StarProvider implements IAIProvider {
 
         try {
             const startTime = Date.now();
-            const agent = getProxyAgent();
             const res = await fetch(url, {
                 method: "POST",
                 headers: {
@@ -150,7 +174,6 @@ export class T8StarProvider implements IAIProvider {
                 },
                 body: JSON.stringify(body),
                 signal: controller.signal as any, // Cast to any to avoid type mismatch with older node-fetch types
-                ...(agent ? { agent } : {}),
             });
 
             const timeToHeaders = Date.now() - startTime;
@@ -185,7 +208,6 @@ export class T8StarProvider implements IAIProvider {
 
     private async postChatCompletionsT8star(body: any, apiKey: string, stream: boolean, signal?: AbortSignal) {
         const url = `${this.textBaseUrl.replace(/\/+$/, "")}/v1/chat/completions`;
-        const agent = getProxyAgent();
         const res = await fetch(url, {
             method: "POST",
             headers: {
@@ -195,7 +217,6 @@ export class T8StarProvider implements IAIProvider {
             },
             body: JSON.stringify(body),
             signal: signal as any,
-            ...(agent ? { agent } : {}),
         });
 
         if (!res.ok) {
@@ -225,8 +246,7 @@ export class T8StarProvider implements IAIProvider {
 
     private async fetchImageAsBase64(url: string): Promise<string | null> {
         try {
-            const agent = getProxyAgent();
-            const res = await fetch(url, agent ? { agent } : undefined);
+            const res = await fetch(url);
             const buffer = await res.buffer();
             const contentType = res.headers.get('content-type') || 'image/png';
             return `data:${contentType};base64,${buffer.toString('base64')}`;
@@ -596,6 +616,7 @@ export class T8StarProvider implements IAIProvider {
         const isSeedance = model.includes("seedance") || model.includes("doubao");
         const isVeo = model.includes("veo");
         const isV2Protocol = isVeo || isSeedance;
+        const activeApiKey = isSeedance ? this.imageApiKey : this.videoApiKey;
 
         if (!isV2Protocol) {
             const form = new FormData();
@@ -671,7 +692,7 @@ export class T8StarProvider implements IAIProvider {
                         if (ext === 'quicktime') ext = 'mov';
                         const filename = `${defaultName}.${ext}`;
                         console.log(`[T8Star] Uploading base64 media (${buffer.length} bytes) as ${filename}...`);
-                        return await this.uploadFile(buffer, mimeType, filename);
+                        return await this.uploadFile(buffer, mimeType, filename, activeApiKey);
                     }
                 }
                 return mediaStr; // Return as-is if not base64 or failed to parse
@@ -721,7 +742,7 @@ export class T8StarProvider implements IAIProvider {
                             if (ext === 'quicktime') ext = 'mov';
                             const filename = `${defaultName}.${ext}`;
                             console.log(`[T8Star] Uploading base64 media (${buffer.length} bytes) as ${filename}...`);
-                            return await this.uploadFile(buffer, mimeType, filename);
+                            return await this.uploadFile(buffer, mimeType, filename, activeApiKey);
                         }
                     }
                     return mediaStr;
@@ -740,15 +761,13 @@ export class T8StarProvider implements IAIProvider {
             }
         }
 
-        const agent = getProxyAgent();
         const res = await fetch(url, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "Authorization": `Bearer ${this.videoApiKey}`,
+                "Authorization": `Bearer ${activeApiKey}`,
             },
             body: JSON.stringify(payload),
-            ...(agent ? { agent } : {}),
         });
 
         if (!res.ok) {
@@ -777,12 +796,10 @@ export class T8StarProvider implements IAIProvider {
 
     private async postForm(path: string, form: FormData) {
         const url = `${this.mediaBaseUrl.replace(/\/+$/, "")}${path}`;
-        const agent = getProxyAgent();
         const res = await fetch(url, {
             method: "POST",
             headers: { Accept: "application/json", "Authorization": `Bearer ${this.videoApiKey}` },
             body: form as any,
-            ...(agent ? { agent } : {}),
         });
         if (!res.ok) {
             const text = await res.text().catch(() => "");
@@ -793,11 +810,9 @@ export class T8StarProvider implements IAIProvider {
 
     private async getJson(path: string) {
         const url = `${this.mediaBaseUrl.replace(/\/+$/, "")}${path}`;
-        const agent = getProxyAgent();
         const res = await fetch(url, {
             method: "GET",
             headers: { Accept: "application/json", "Authorization": `Bearer ${this.videoApiKey}` },
-            ...(agent ? { agent } : {}),
         });
         if (!res.ok) {
             const text = await res.text().catch(() => "");
@@ -810,19 +825,20 @@ export class T8StarProvider implements IAIProvider {
         const id = args?.operation?.operation?.id;
         if (!id) return args.operation;
 
+        const isSeedance = id.startsWith("cgt-");
+        const activeApiKey = isSeedance ? this.imageApiKey : this.videoApiKey;
+
         try {
             let url = `${this.mediaBaseUrl.replace(/\/+$/, "")}/v2/videos/generations/${encodeURIComponent(id)}`;
-            if (id.startsWith("cgt-")) {
+            if (isSeedance) {
                 url = `${this.mediaBaseUrl.replace(/\/+$/, "")}/seedance/v3/contents/generations/tasks/${encodeURIComponent(id)}`;
             }
             
-            const agent = getProxyAgent();
             const res = await fetch(url, {
                 method: "GET",
                 headers: {
-                    "Authorization": `Bearer ${this.videoApiKey}`,
+                    "Authorization": `Bearer ${activeApiKey}`,
                 },
-                ...(agent ? { agent } : {}),
             });
 
             if (res.ok) {
@@ -873,7 +889,6 @@ export class T8StarProvider implements IAIProvider {
 
     async speech(body: any): Promise<ArrayBuffer> {
         const url = `${this.textBaseUrl.replace(/\/+$/, "")}/v1/audio/speech`;
-        const agent = getProxyAgent();
         const res = await fetch(url, {
             method: "POST",
             headers: {
@@ -882,7 +897,6 @@ export class T8StarProvider implements IAIProvider {
                 "Authorization": `Bearer ${this.audioApiKey}`,
             },
             body: JSON.stringify(body),
-            ...(agent ? { agent } : {}),
         });
 
         if (!res.ok) {
@@ -893,7 +907,7 @@ export class T8StarProvider implements IAIProvider {
         return res.arrayBuffer();
     }
 
-    async uploadFile(fileBuffer: Buffer, mimeType: string, filename: string): Promise<string> {
+    async uploadFile(fileBuffer: Buffer, mimeType: string, filename: string, apiKey?: string): Promise<string> {
         const NodeFormData = require('form-data');
         const form = new NodeFormData();
         
@@ -902,18 +916,17 @@ export class T8StarProvider implements IAIProvider {
             contentType: mimeType || "application/octet-stream"
         });
         
+        const keyToUse = apiKey || this.videoApiKey;
         const urlReq = `${this.mediaBaseUrl.replace(/\/+$/, "")}/v1/files`;
-        const agent = getProxyAgent();
         try {
             const res = await fetch(urlReq, {
                 method: "POST",
                 headers: { 
                     Accept: "application/json", 
-                    "Authorization": `Bearer ${this.videoApiKey}`,
+                    "Authorization": `Bearer ${keyToUse}`,
                     ...form.getHeaders()
                 },
                 body: form as any,
-                ...(agent ? { agent } : {}),
             });
             if (!res.ok) {
                 const text = await res.text().catch(() => "");

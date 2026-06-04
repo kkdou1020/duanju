@@ -65,8 +65,32 @@ router.post('/upload', upload.single('file'), async (req: Request, res: Response
     }
 });
 
-import fetch from 'node-fetch';
-import { getProxyAgent } from '../services/ai/helpers';
+import nodeFetch from 'node-fetch';
+import { HttpsProxyAgent } from 'https-proxy-agent';
+
+let proxyAgent: any = null;
+let proxyAgentInitialized = false;
+
+const getProxyAgent = () => {
+    if (!proxyAgentInitialized) {
+        const proxyUrl = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy;
+        if (proxyUrl) {
+            proxyAgent = new HttpsProxyAgent(proxyUrl);
+        }
+        proxyAgentInitialized = true;
+    }
+    return proxyAgent;
+};
+
+const fetch = (url: any, options: any = {}) => {
+    const agent = getProxyAgent();
+    if (agent) {
+        options.agent = agent;
+    }
+    return nodeFetch(url, options);
+};
+
+
 
 // GET /api/media/download-proxy
 // Proxies video/image downloads from external CDNs to bypass browser CORS restrictions
@@ -77,8 +101,7 @@ router.get('/download-proxy', async (req: Request, res: Response) => {
     }
 
     try {
-        const agent = getProxyAgent();
-        const response = await fetch(mediaUrl, agent ? { agent } : undefined);
+        const response = await fetch(mediaUrl);
         if (!response.ok) {
             console.error(`[Media/download-proxy] Remote fetch failed with status: ${response.status}`);
             return res.status(response.status).send(`Failed to fetch media: ${response.statusText}`);
@@ -111,12 +134,12 @@ router.post('/scene-image', async (req: Request, res: Response) => {
     res.on('close', handleClose);
 
     try {
-        const { scene, globalStyle, assets, optionId } = req.body;
+        const { scene, globalStyle, assets, optionId, customPrompt } = req.body;
         if (!scene) {
             return res.status(400).json({ error: 'Missing required field: scene' });
         }
 
-        const result = await generateSceneImage(scene, globalStyle, assets || [], optionId, controller.signal);
+        const result = await generateSceneImage(scene, globalStyle, assets || [], optionId, controller.signal, customPrompt);
         res.json(result);
     } catch (e: any) {
         if (e.name === 'AbortError' || controller.signal.aborted) {
@@ -138,7 +161,7 @@ router.post('/scene-image', async (req: Request, res: Response) => {
 // POST /api/media/video — Submit task, return immediately
 router.post('/video', async (req: Request, res: Response) => {
     try {
-        const { imageBase64, scene, aspectRatio, assets, globalStyle, allScenes, optionId } = req.body;
+        const { imageBase64, scene, aspectRatio, assets, globalStyle, allScenes, optionId, customPrompt } = req.body;
         if (!scene) {
             return res.status(400).json({ error: 'Missing required field: scene' });
         }
@@ -150,7 +173,8 @@ router.post('/video', async (req: Request, res: Response) => {
             assets || [],
             globalStyle,
             allScenes,
-            optionId
+            optionId,
+            customPrompt
         );
         res.json(result);
     } catch (e: any) {
