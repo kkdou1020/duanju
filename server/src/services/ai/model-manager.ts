@@ -9,8 +9,8 @@ export type ProviderType = "polo" | "t8star" | "google";
 
 /** Centralized model name constants */
 export const MODELS = {
-    TEXT_FAST: 'gemini-3.1-flash-lite-preview-thinking-high',
-    TEXT_AGENT: 'gemini-3.1-flash-lite-preview-thinking-high',
+    TEXT_FAST: 'gemini-3.5-flash',
+    TEXT_AGENT: 'gemini-3.5-flash',
     IMAGE_GEN: 'gpt-image-2',
     IMAGE_POLO_OVERRIDE: 'gemini-3-pro-image-preview',
     TTS: 'tts-1-hd-1106',

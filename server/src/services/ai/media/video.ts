@@ -159,7 +159,7 @@ export const submitVideoGeneration = async (
             
             uniqueAssets.forEach(asset => {
                 let alias = "";
-                if (isStoryboardTag(asset.name)) {
+                if (isStoryboardTag(asset.name) || asset.name === '首帧' || asset.name === '尾帧') {
                     alias = `[Reference ${String.fromCharCode(65 + refFrameCount++)}]`;
                 } else if (asset.type === 'character') {
                     alias = `[Character ${String.fromCharCode(65 + charCount++)}]`;

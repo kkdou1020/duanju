@@ -101,7 +101,11 @@ export const CustomNoteNode: React.FC<CustomNoteNodeProps> = ({ id, data }) => {
             {/* Note text / editor */}
             <div className="min-h-[60px] flex flex-col">
                 {isEditing ? (
-                    <div className="flex flex-col gap-1.5">
+                    <div 
+                        className="flex flex-col gap-1.5 nodrag nopan nowheel"
+                        onKeyDown={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
+                    >
                         <textarea
                             ref={textareaRef}
                             value={editText}

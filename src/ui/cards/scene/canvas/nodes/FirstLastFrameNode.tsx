@@ -113,6 +113,24 @@ export const FirstLastFrameNode: React.FC<FirstLastFrameNodeProps> = ({ data }) 
                 title="连接视频源"
             />
 
+            {/* Output Handles for extracted start/end frames */}
+            <Handle
+                type="source"
+                position={Position.Right}
+                id="source-start"
+                style={{ top: '35%', background: '#fbbf24' }}
+                className="w-2.5 h-2.5 border-2 border-slate-900 rounded-full !right-[-5px]"
+                title="引出首帧图像"
+            />
+            <Handle
+                type="source"
+                position={Position.Right}
+                id="source-end"
+                style={{ top: '65%', background: '#a855f7' }}
+                className="w-2.5 h-2.5 border-2 border-slate-900 rounded-full !right-[-5px]"
+                title="引出尾帧图像"
+            />
+
             {/* Header */}
             <div className="flex items-center justify-between border-b border-white/5 pb-2">
                 <div className="flex items-center gap-2">

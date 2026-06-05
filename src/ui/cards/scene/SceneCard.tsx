@@ -152,7 +152,7 @@ const SceneCard: React.FC<SceneCardProps> = (props) => {
                                                     state.scene.refImageMode === opt.refImageMode;
 
                                                 if (!isAlreadyAdopted) {
-                                                    state.onUpdate(state.scene.id, {
+                                                    state.rawOnUpdate(state.scene.id, {
                                                         video_prompt: opt.video_prompt,
                                                         np_prompt: opt.np_prompt,
                                                         imageUrl: opt.imageUrl,

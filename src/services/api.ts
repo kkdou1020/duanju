@@ -249,7 +249,13 @@ const blobUrlToBase64 = async (blobUrl: string): Promise<string | null> => {
  * Track 1: Strict ID match (scene_img_xxx or scene_video_xxx)
  * Track 2: Smart Name Fallback (E1分镜S03-A or 分镜S03)
  */
-const resolveUsedAssets = async (prompt: string, assets: Asset[], allScenes: Scene[]): Promise<Asset[]> => {
+const resolveUsedAssets = async (
+    prompt: string, 
+    assets: Asset[], 
+    allScenes: Scene[],
+    scene?: Scene,
+    optionId?: string
+): Promise<Asset[]> => {
     const tags = extractAssetTags(prompt);
     const usedAssets: Asset[] = [];
 
@@ -258,6 +264,26 @@ const resolveUsedAssets = async (prompt: string, assets: Asset[], allScenes: Sce
         let refAssetId: string | undefined;
         let isVideoRef = false;
         let resolved = false;
+
+        // ── 0. Check if it is 首帧 or 尾帧 ──
+        if (tag.name === '首帧' || tag.name === '尾帧') {
+            const isStart = tag.name === '首帧';
+            if (scene && optionId) {
+                const canvasData = scene.canvas?.[optionId];
+                if (canvasData && canvasData.nodes) {
+                    const firstLastFrameNode = canvasData.nodes.find((n: any) => n.type === 'firstLastFrame');
+                    if (firstLastFrameNode) {
+                        const assetId = isStart ? firstLastFrameNode.data?.startImageAssetId : firstLastFrameNode.data?.endImageAssetId;
+                        const imageUrl = isStart ? firstLastFrameNode.data?.startImageUrl : firstLastFrameNode.data?.endImageUrl;
+                        if (assetId || imageUrl) {
+                            refAssetId = assetId;
+                            refUrl = imageUrl;
+                            resolved = true;
+                        }
+                    }
+                }
+            }
+        }
 
         // ── 1. Smart Name Fallback parsing (used if ID is missing or not a normal asset) ──
         let expectVideo = false;
@@ -424,7 +450,7 @@ export const generateSceneImage = async (
     const prompt = customPrompt || (option ? (option.np_prompt || option.video_prompt || '') : (scene.np_prompt || scene.visual_desc || ''));
 
     // Resolve all tags using unified dual-track logic
-    const usedAssets = await resolveUsedAssets(prompt, assets, allScenes || []);
+    const usedAssets = await resolveUsedAssets(prompt, assets, allScenes || [], scene, optionId);
 
     // Pre-upload heavy local assets to Cloud CDN to prevent Base64 payload bloat
     for (const asset of usedAssets) {
@@ -503,7 +529,7 @@ export const generateVideo = async (
     const prompt = customPrompt || (option ? (option.video_prompt || option.np_prompt || '') : (scene.video_prompt || scene.np_prompt || scene.visual_desc || ''));
 
     // Resolve all tags using unified dual-track logic
-    const usedAssets = await resolveUsedAssets(prompt, assets, allScenes || []);
+    const usedAssets = await resolveUsedAssets(prompt, assets, allScenes || [], scene, optionId);
 
     // 关键修复：首尾帧可能没写在提示词里，也可能是“另一个分镜的图片”，强制构造为 Asset
     if (scene.isStartEndFrameMode && scene.startEndAssetIds) {

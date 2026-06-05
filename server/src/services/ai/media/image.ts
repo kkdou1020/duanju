@@ -325,7 +325,7 @@ export const generateSceneImage = async (
     for (const asset of usedAssets) {
         if (asset.refImageUrl) {
             let alias = "";
-            if (isStoryboardTag(asset.name)) {
+            if (isStoryboardTag(asset.name) || asset.name === '首帧' || asset.name === '尾帧') {
                 alias = `[Reference ${String.fromCharCode(65 + refFrameCount++)}]`;
             } else if (asset.type === 'character') {
                 alias = `[Character ${String.fromCharCode(65 + charCount++)}]`;
@@ -362,7 +362,7 @@ export const generateSceneImage = async (
 
     // 3. Construct Final Prompt
     // Dynamically replace asset tags with their assigned aliases to avoid semantic leakage
-    const ASSET_TAG_REGEX_LOCAL = /\[@图像_([^#\]]+)(?:#([a-zA-Z0-9_]+))?\]|@图像_([^\s，。,.;；：:！!？?、）)｝}\]\[（(｛{@#]+)(?:#([a-zA-Z0-9_]+))?/g;
+    const ASSET_TAG_REGEX_LOCAL = /\[@图像_([^#\]]+)(?:#([a-zA-Z0-9_\-]+))?\]|@图像_([^\s，。,.;；：:！!？?、）)｝}\]\[（(｛{@#]+)(?:#([a-zA-Z0-9_\-]+))?/g;
     let fullText = finalPrompt.replace(ASSET_TAG_REGEX_LOCAL, (match, p1, p2, p3, p4) => {
         const name = p1 || p3;
         if (name && nameToAliasMap.has(name)) {

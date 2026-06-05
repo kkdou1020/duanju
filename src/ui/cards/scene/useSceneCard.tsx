@@ -220,7 +220,7 @@ export function useSceneCard(props: UseSceneCardProps) {
         sceneAudios: assetState.sceneAudios,
 
         // Props pass-through
-        scene, labels, onUpdate: handleSynchronizedUpdate, onDelete, onDuplicate,
+        scene, labels, onUpdate: handleSynchronizedUpdate, rawOnUpdate: onUpdate, onDelete, onDuplicate,
         globalStyle, assets: combinedAssets, onAddAsset, language, chapterScenes,
         flash, isGeneratingExternal, areAssetsReady, videoAssetsReady,
 

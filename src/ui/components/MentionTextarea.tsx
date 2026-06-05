@@ -218,6 +218,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
     const [highlightIdx, setHighlightIdx] = useState(0);
     const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
     const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null);
+    const [dropdownDirection, setDropdownDirection] = useState<'up' | 'down'>('up');
     const [previewImage, setPreviewImage] = useState<{ url: string; x: number; y: number } | null>(null);
 
     const editorRef = useRef<HTMLDivElement>(null);
@@ -688,8 +689,12 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
             return;
         }
         const rect = editorRef.current.getBoundingClientRect();
+        // If there is less than 240px space above the editor, pop DOWN instead of UP
+        const direction = rect.top < 240 ? 'down' : 'up';
+        setDropdownDirection(direction);
+
         setDropdownPos({
-            top: rect.top - 4,  // 4px gap above editor
+            top: direction === 'up' ? rect.top - 4 : rect.bottom + 4,
             left: rect.left,
         });
     }, [showDropdown]);
@@ -760,9 +765,14 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
                 <>
                     <div
                         ref={dropdownRef}
-                        style={{
+                        style={dropdownDirection === 'up' ? {
                             position: 'fixed',
                             bottom: `${window.innerHeight - dropdownPos.top}px`,
+                            left: `${dropdownPos.left}px`,
+                            zIndex: 9999,
+                        } : {
+                            position: 'fixed',
+                            top: `${dropdownPos.top}px`,
                             left: `${dropdownPos.left}px`,
                             zIndex: 9999,
                         }}

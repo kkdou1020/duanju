@@ -12,7 +12,6 @@ interface VideoOutputNodeProps {
         onUpload: (file: File) => void;
         onDelete: () => void;
         onDownload: () => void;
-        onExtractFrame?: (timeType: 'start' | 'end') => void;
     };
 }
 

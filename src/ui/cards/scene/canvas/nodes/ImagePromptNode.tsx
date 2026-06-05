@@ -17,13 +17,12 @@ interface ImagePromptNodeProps {
         aperture: string;
         onUpdate: (field: string, value: any) => void;
         onGenerate: () => void;
-        onApply?: () => void;
         genStatus: ImageGenStatus;
         onBlur?: () => void;
         assets: Asset[];
         sceneImages: SceneImageCandidate[];
         connectedImages?: Array<{ nodeId: string; url: string; assetId?: string; name: string }>;
-        onDisconnectImage?: (sourceNodeId: string) => void;
+        onDisconnectImage?: (sourceNodeId: string, name: string) => void;
         isMainGenerating?: boolean;
         isSelfGenerating?: boolean;
     };
@@ -52,7 +51,7 @@ const CameraDropdown: React.FC<{
     }, [value, isPreset]);
 
     return (
-        <div className="flex flex-col gap-1 w-[48%] min-w-[100px]">
+        <div className="flex flex-col gap-1 w-[48%] min-w-[100px] nodrag nopan nowheel" onKeyDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
             <span className="text-[10px] text-gray-400 font-bold tracking-wide">{label}</span>
             <select
                 value={selectValue}
@@ -100,7 +99,6 @@ export const ImagePromptNode: React.FC<ImagePromptNodeProps> = ({ id, data }) =>
         aperture,
         onUpdate,
         onGenerate,
-        onApply,
         genStatus,
         onBlur,
         assets,
@@ -133,7 +131,7 @@ export const ImagePromptNode: React.FC<ImagePromptNodeProps> = ({ id, data }) =>
             </div>
 
             {/* Dropdowns Group (model, Size, Quality) */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 nodrag nopan nowheel" onKeyDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
                 <div className="flex flex-col gap-1 col-span-2">
                     <span className="text-[10px] text-gray-400 font-bold tracking-wide">生图模型</span>
                     <select
@@ -220,31 +218,34 @@ export const ImagePromptNode: React.FC<ImagePromptNodeProps> = ({ id, data }) =>
                         参考图像 ({connectedImages.length})
                     </span>
                     <div className="flex flex-wrap gap-2">
-                        {connectedImages.map((img, idx) => (
-                            <div key={img.nodeId} className="relative group/thumb w-[60px] aspect-square rounded-lg bg-black/40 border border-white/10 overflow-hidden flex items-center justify-center">
-                                {img.url ? (
-                                    <img src={img.url} alt={`Ref ${idx+1}`} className="w-full h-full object-cover" />
-                                ) : (
-                                    <span className="text-[8px] text-gray-500 italic">空</span>
-                                )}
-                                
-                                {/* Order Number Badge */}
-                                <div className="absolute top-0 left-0 bg-cyan-500 text-black text-[9px] font-bold px-1 rounded-br-md">
-                                    {idx + 1}
+                        {connectedImages.map((img, idx) => {
+                            const uniqueKey = `${img.nodeId}_${img.name}_${idx}`;
+                            return (
+                                <div key={uniqueKey} className="relative group/thumb w-[60px] aspect-square rounded-lg bg-black/40 border border-white/10 overflow-hidden flex items-center justify-center">
+                                    {img.url ? (
+                                        <img src={img.url} alt={`Ref ${idx+1}`} className="w-full h-full object-cover" />
+                                    ) : (
+                                        <span className="text-[8px] text-gray-500 italic">空</span>
+                                    )}
+                                    
+                                    {/* Order Number Badge */}
+                                    <div className="absolute top-0 left-0 bg-cyan-500 text-black text-[9px] font-bold px-1 rounded-br-md">
+                                        {idx + 1}
+                                    </div>
+                                    
+                                    {/* Disconnect Connection Button */}
+                                    {onDisconnectImage && (
+                                        <button
+                                            onClick={() => onDisconnectImage(img.nodeId, img.name)}
+                                            className="absolute inset-0 bg-red-600/80 text-white text-[9px] font-bold opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
+                                            title="断开连线"
+                                        >
+                                            断开
+                                        </button>
+                                    )}
                                 </div>
-                                
-                                {/* Disconnect Connection Button */}
-                                {onDisconnectImage && (
-                                    <button
-                                        onClick={() => onDisconnectImage(img.nodeId)}
-                                        className="absolute inset-0 bg-red-600/80 text-white text-[9px] font-bold opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
-                                        title="断开连线"
-                                    >
-                                        断开
-                                    </button>
-                                )}
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
             )}
@@ -298,19 +299,6 @@ export const ImagePromptNode: React.FC<ImagePromptNodeProps> = ({ id, data }) =>
                     </>
                 )}
             </button>
-
-            {id !== 'image-prompt' && onApply && (
-                <button
-                    onClick={onApply}
-                    disabled={isMainGenerating || isSelfGenerating || isGenerating}
-                    className={`w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold transition-all mt-1 border
-                        ${(isMainGenerating || isSelfGenerating || isGenerating)
-                            ? 'bg-gray-800/50 border-white/5 text-gray-500 cursor-not-allowed opacity-50'
-                            : 'text-gray-200 border-cyan-500/30 hover:border-cyan-400 bg-cyan-500/5 hover:bg-cyan-500/10 active:scale-[0.98]'}`}
-                >
-                    应用为主版本
-                </button>
-            )}
 
             {/* Source handle: outputs the generated scene candidate */}
             <Handle

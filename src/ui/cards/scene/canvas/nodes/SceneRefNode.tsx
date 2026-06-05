@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { Film } from 'lucide-react';
 import { Scene } from '@/shared/types';
+import { loadAssetBase64 } from '@/services/storage';
 
 interface SceneRefNodeProps {
     data: {
@@ -16,7 +17,31 @@ export const SceneRefNode: React.FC<SceneRefNodeProps> = ({ data }) => {
     // Resolve specific option if specified
     const option = optionId && scene.prompt_options ? scene.prompt_options.find(o => o.option_id === optionId) : null;
     const imageUrl = option ? option.imageUrl : scene.imageUrl;
+    const imageAssetId = option ? option.imageAssetId : scene.imageAssetId;
     const displayName = option ? `分镜 ${scene.id}-${optionId}` : `分镜 ${scene.id}`;
+
+    const [resolvedUrl, setResolvedUrl] = useState(imageUrl);
+
+    useEffect(() => {
+        setResolvedUrl(imageUrl);
+    }, [imageUrl]);
+
+    useEffect(() => {
+        if (!imageAssetId) return;
+        let cancelled = false;
+        loadAssetBase64(imageAssetId)
+            .then((base64) => {
+                if (base64 && !cancelled) {
+                    setResolvedUrl(base64);
+                }
+            })
+            .catch((e) => {
+                console.error(`Failed to load SceneRefNode image ${imageAssetId} from storage:`, e);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [imageAssetId]);
 
     return (
         <div className="relative flex flex-col gap-1.5 p-2 rounded-xl border border-white/10 bg-[#16161a] hover:border-cyan-500/30 transition-colors shadow-xl w-[150px]">
@@ -28,8 +53,8 @@ export const SceneRefNode: React.FC<SceneRefNodeProps> = ({ data }) => {
 
             {/* Thumbnail Image Box */}
             <div className="w-full aspect-video rounded-lg bg-black/60 border border-white/5 flex items-center justify-center overflow-hidden">
-                {imageUrl ? (
-                    <img src={imageUrl} alt={displayName} className="w-full h-full object-cover pointer-events-none" />
+                {resolvedUrl ? (
+                    <img src={resolvedUrl} alt={displayName} className="w-full h-full object-cover pointer-events-none" />
                 ) : (
                     <span className="text-[9px] text-gray-500 italic">未生成分镜图</span>
                 )}

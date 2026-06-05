@@ -14,13 +14,12 @@ interface VideoPromptNodeProps {
         audio_bgm?: string;
         onUpdate: (field: string, value: any) => void;
         onGenerate: () => void;
-        onApply?: () => void;
         videoStatus: ImageGenStatus;
         onBlur?: () => void;
         assets: Asset[];
         sceneImages: SceneImageCandidate[];
         connectedImages?: Array<{ nodeId: string; url: string; assetId?: string; name: string }>;
-        onDisconnectImage?: (sourceNodeId: string) => void;
+        onDisconnectImage?: (sourceNodeId: string, name: string) => void;
         isMainGenerating?: boolean;
         isSelfGenerating?: boolean;
     };
@@ -35,7 +34,6 @@ export const VideoPromptNode: React.FC<VideoPromptNodeProps> = ({ id, data }) =>
         audio_bgm,
         onUpdate,
         onGenerate,
-        onApply,
         videoStatus,
         onBlur,
         assets,
@@ -69,7 +67,7 @@ export const VideoPromptNode: React.FC<VideoPromptNodeProps> = ({ id, data }) =>
             </div>
 
             {/* Config Fields */}
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3 nodrag nopan nowheel" onKeyDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
                 {/* Video Engine Model */}
                 <div className="flex flex-col gap-1">
                     <span className="text-[10px] text-gray-400 font-bold tracking-wide">生成模型 (Engine)</span>
@@ -104,38 +102,41 @@ export const VideoPromptNode: React.FC<VideoPromptNodeProps> = ({ id, data }) =>
                             参考图像 ({connectedImages.length})
                         </span>
                         <div className="flex flex-wrap gap-2">
-                            {connectedImages.map((img, idx) => (
-                                <div key={img.nodeId} className="relative group/thumb w-[60px] aspect-square rounded-lg bg-black/40 border border-white/10 overflow-hidden flex items-center justify-center">
-                                    {img.url ? (
-                                        <img src={img.url} alt={`Ref ${idx+1}`} className="w-full h-full object-cover" />
-                                    ) : (
-                                        <span className="text-[8px] text-gray-500 italic">空</span>
-                                    )}
-                                    
-                                    {/* Order Number Badge */}
-                                    <div className="absolute top-0 left-0 bg-purple-500 text-white text-[9px] font-bold px-1 rounded-br-md">
-                                        {idx + 1}
-                                    </div>
-
-                                    {/* Label for Start/End Frame if start/end frame mode is on */}
-                                    {refImageMode === 'start_end_frame' && (
-                                        <div className="absolute bottom-0 inset-x-0 bg-black/70 text-white text-[8px] text-center py-0.5 font-medium scale-[0.9]">
-                                            {idx === 0 ? '首帧' : idx === 1 ? '尾帧' : `参考 ${idx+1}`}
+                            {connectedImages.map((img, idx) => {
+                                const uniqueKey = `${img.nodeId}_${img.name}_${idx}`;
+                                return (
+                                    <div key={uniqueKey} className="relative group/thumb w-[60px] aspect-square rounded-lg bg-black/40 border border-white/10 overflow-hidden flex items-center justify-center">
+                                        {img.url ? (
+                                            <img src={img.url} alt={`Ref ${idx+1}`} className="w-full h-full object-cover" />
+                                        ) : (
+                                            <span className="text-[8px] text-gray-500 italic">空</span>
+                                        )}
+                                        
+                                        {/* Order Number Badge */}
+                                        <div className="absolute top-0 left-0 bg-purple-500 text-white text-[9px] font-bold px-1 rounded-br-md">
+                                            {idx + 1}
                                         </div>
-                                    )}
-                                    
-                                    {/* Disconnect Connection Button */}
-                                    {onDisconnectImage && (
-                                        <button
-                                            onClick={() => onDisconnectImage(img.nodeId)}
-                                            className="absolute inset-0 bg-red-600/80 text-white text-[9px] font-bold opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
-                                            title="断开连线"
-                                        >
-                                            断开
-                                        </button>
-                                    )}
-                                </div>
-                            ))}
+
+                                        {/* Label for Start/End Frame if start/end frame mode is on */}
+                                        {refImageMode === 'start_end_frame' && (
+                                            <div className="absolute bottom-0 inset-x-0 bg-black/70 text-white text-[8px] text-center py-0.5 font-medium scale-[0.9]">
+                                                {idx === 0 ? '首帧' : idx === 1 ? '尾帧' : `参考 ${idx+1}`}
+                                            </div>
+                                        )}
+                                        
+                                        {/* Disconnect Connection Button */}
+                                        {onDisconnectImage && (
+                                            <button
+                                                onClick={() => onDisconnectImage(img.nodeId, img.name)}
+                                                className="absolute inset-0 bg-red-600/80 text-white text-[9px] font-bold opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
+                                                title="断开连线"
+                                            >
+                                                断开
+                                            </button>
+                                        )}
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 )}
@@ -212,19 +213,6 @@ export const VideoPromptNode: React.FC<VideoPromptNodeProps> = ({ id, data }) =>
                     </>
                 )}
             </button>
-
-            {id !== 'video-prompt' && onApply && (
-                <button
-                    onClick={onApply}
-                    disabled={isMainGenerating || isSelfGenerating || isGenerating}
-                    className={`w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold transition-all mt-1 border
-                        ${(isMainGenerating || isSelfGenerating || isGenerating)
-                            ? 'bg-gray-800/50 border-white/5 text-gray-500 cursor-not-allowed opacity-50'
-                            : 'text-gray-200 border-purple-500/30 hover:border-purple-400 bg-purple-500/5 hover:bg-purple-500/10 active:scale-[0.98]'}`}
-                >
-                    应用为主版本
-                </button>
-            )}
 
             {/* Source handle: outputs the generated video result */}
             <Handle
