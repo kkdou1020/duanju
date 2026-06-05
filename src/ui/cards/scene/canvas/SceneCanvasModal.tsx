@@ -364,8 +364,8 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
 
     // History Stack for Undo/Redo
     const historyRef = useRef<{
-        past: Array<{ nodes: any[]; edges: any[] }>;
-        future: Array<{ nodes: any[]; edges: any[] }>;
+        past: Array<{ nodes: any[]; edges: any[]; prompts?: { np_prompt: string; video_prompt: string; activeOption: string } }>;
+        future: Array<{ nodes: any[]; edges: any[]; prompts?: { np_prompt: string; video_prompt: string; activeOption: string } }>;
     }>({ past: [], future: [] });
 
     const [pastCount, setPastCount] = useState(0);
@@ -379,7 +379,18 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
         }));
         const snapshotEdges = latestEdgesRef.current.map(e => ({ ...e }));
 
-        historyRef.current.past.push({ nodes: snapshotNodes, edges: snapshotEdges });
+        const option = getOptionData(activeOption);
+        const snapshotPrompts = {
+            np_prompt: option.np_prompt || '',
+            video_prompt: option.video_prompt || '',
+            activeOption
+        };
+
+        historyRef.current.past.push({
+            nodes: snapshotNodes,
+            edges: snapshotEdges,
+            prompts: snapshotPrompts
+        });
         if (historyRef.current.past.length > 50) {
             historyRef.current.past.shift();
         }
@@ -387,7 +398,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
         
         setPastCount(historyRef.current.past.length);
         setFutureCount(0);
-    }, []);
+    }, [activeOption, getOptionData]);
 
     const syncEdgesToPromptText = useCallback((restoredNodes: any[], restoredEdges: any[]) => {
         const imageEdges = restoredEdges.filter(e => e.target === 'image-prompt');
@@ -510,13 +521,19 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
         const past = historyRef.current.past;
         if (past.length === 0) return;
 
+        const option = getOptionData(activeOption);
         const currentSnapshot = {
             nodes: latestNodesRef.current.map(n => ({
                 ...n,
                 position: { ...n.position },
                 data: { ...n.data }
             })),
-            edges: latestEdgesRef.current.map(e => ({ ...e }))
+            edges: latestEdgesRef.current.map(e => ({ ...e })),
+            prompts: {
+                np_prompt: option.np_prompt || '',
+                video_prompt: option.video_prompt || '',
+                activeOption
+            }
         };
 
         const previousSnapshot = past.pop()!;
@@ -531,23 +548,50 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
         setPastCount(past.length);
         setFutureCount(historyRef.current.future.length);
         
-        syncEdgesToPromptText(previousSnapshot.nodes, previousSnapshot.edges);
+        if (previousSnapshot.prompts) {
+            const { np_prompt, video_prompt, activeOption: snapOpt } = previousSnapshot.prompts;
+            onSceneUpdate(scene.id, (prev) => {
+                const options = prev.prompt_options ? [...prev.prompt_options] : [];
+                let optIdx = options.findIndex(o => o.option_id === snapOpt);
+                if (optIdx !== -1) {
+                    options[optIdx] = {
+                        ...options[optIdx],
+                        np_prompt,
+                        video_prompt
+                    };
+                }
+                const updates: Partial<Scene> = { prompt_options: options };
+                if (snapOpt === 'A') {
+                    updates.np_prompt = np_prompt;
+                    updates.video_prompt = video_prompt;
+                }
+                return updates;
+            });
+        } else {
+            syncEdgesToPromptText(previousSnapshot.nodes, previousSnapshot.edges);
+        }
 
         pendingSaveRef.current = true;
         debouncedSaveLayout();
-    }, [setNodes, setEdges, debouncedSaveLayout, syncEdgesToPromptText]);
+    }, [setNodes, setEdges, debouncedSaveLayout, syncEdgesToPromptText, activeOption, getOptionData, onSceneUpdate, scene.id]);
 
     const redo = useCallback(() => {
         const future = historyRef.current.future;
         if (future.length === 0) return;
 
+        const option = getOptionData(activeOption);
         const currentSnapshot = {
             nodes: latestNodesRef.current.map(n => ({
                 ...n,
                 position: { ...n.position },
                 data: { ...n.data }
             })),
-            edges: latestEdgesRef.current.map(e => ({ ...e }))
+            edges: latestEdgesRef.current.map(e => ({ ...e })),
+            prompts: {
+                np_prompt: option.np_prompt || '',
+                video_prompt: option.video_prompt || '',
+                activeOption
+            }
         };
 
         const nextSnapshot = future.pop()!;
@@ -562,11 +606,32 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
         setPastCount(historyRef.current.past.length);
         setFutureCount(future.length);
 
-        syncEdgesToPromptText(nextSnapshot.nodes, nextSnapshot.edges);
+        if (nextSnapshot.prompts) {
+            const { np_prompt, video_prompt, activeOption: snapOpt } = nextSnapshot.prompts;
+            onSceneUpdate(scene.id, (prev) => {
+                const options = prev.prompt_options ? [...prev.prompt_options] : [];
+                let optIdx = options.findIndex(o => o.option_id === snapOpt);
+                if (optIdx !== -1) {
+                    options[optIdx] = {
+                        ...options[optIdx],
+                        np_prompt,
+                        video_prompt
+                    };
+                }
+                const updates: Partial<Scene> = { prompt_options: options };
+                if (snapOpt === 'A') {
+                    updates.np_prompt = np_prompt;
+                    updates.video_prompt = video_prompt;
+                }
+                return updates;
+            });
+        } else {
+            syncEdgesToPromptText(nextSnapshot.nodes, nextSnapshot.edges);
+        }
 
         pendingSaveRef.current = true;
         debouncedSaveLayout();
-    }, [setNodes, setEdges, debouncedSaveLayout, syncEdgesToPromptText]);
+    }, [setNodes, setEdges, debouncedSaveLayout, syncEdgesToPromptText, activeOption, getOptionData, onSceneUpdate, scene.id]);
 
     // Clipboard operations (Copy, Cut, Paste)
     const copyNodes = useCallback(() => {
@@ -1228,29 +1293,29 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                 const currentPrompt = scene.prompt_options?.find(o => o.option_id === activeOption)?.np_prompt || '';
                 let cleanRegex: RegExp;
                 if (isAsset) {
-                    cleanRegex = new RegExp(`\\[@图像_${assetName}#${assetId}\\]`, 'g');
+                    cleanRegex = new RegExp(`\\[@图像_(${assetName})#${assetId}\\]`, 'g');
                 } else if (isFirstLastFrame) {
                     const startId = sourceNode.data.startImageAssetId || `first_frame_${sourceNode.id}`;
                     const endId = sourceNode.data.endImageAssetId || `last_frame_${sourceNode.id}`;
-                    cleanRegex = new RegExp(`\\[@图像_(?:首帧|尾帧)#(?:${startId}|${endId}|first_frame_${sourceNode.id}|last_frame_${sourceNode.id})\\]`, 'g');
+                    cleanRegex = new RegExp(`\\[@图像_(${edge.sourceHandle === 'source-start' ? '首帧' : '尾帧'})#(?:${startId}|${endId}|first_frame_${sourceNode.id}|last_frame_${sourceNode.id})\\]`, 'g');
                 } else {
-                    cleanRegex = new RegExp(`\\[@图像_分镜${sceneObj.id}(?:-[A-C])?#scene_img_${sceneObj.id}(?:_[A-C])?\\]`, 'g');
+                    cleanRegex = new RegExp(`\\[@图像_(分镜${sceneObj.id})(?:-[A-C])?#scene_img_${sceneObj.id}(?:_[A-C])?\\]`, 'g');
                 }
-                const newPrompt = currentPrompt.replace(cleanRegex, '').replace(/\s+/g, ' ').trim();
+                const newPrompt = currentPrompt.replace(cleanRegex, '$1').replace(/\s+/g, ' ').trim();
                 updateOptionField('np_prompt', newPrompt);
             } else if (edge.target === 'video-prompt') {
                 const currentPrompt = scene.prompt_options?.find(o => o.option_id === activeOption)?.video_prompt || '';
                 let cleanRegex: RegExp;
                 if (isAsset) {
-                    cleanRegex = new RegExp(`\\[@图像_${assetName}#${assetId}\\]`, 'g');
+                    cleanRegex = new RegExp(`\\[@图像_(${assetName})#${assetId}\\]`, 'g');
                 } else if (isFirstLastFrame) {
                     const startId = sourceNode.data.startImageAssetId || `first_frame_${sourceNode.id}`;
                     const endId = sourceNode.data.endImageAssetId || `last_frame_${sourceNode.id}`;
-                    cleanRegex = new RegExp(`\\[@图像_(?:首帧|尾帧)#(?:${startId}|${endId}|first_frame_${sourceNode.id}|last_frame_${sourceNode.id})\\]`, 'g');
+                    cleanRegex = new RegExp(`\\[@图像_(${edge.sourceHandle === 'source-start' ? '首帧' : '尾帧'})#(?:${startId}|${endId}|first_frame_${sourceNode.id}|last_frame_${sourceNode.id})\\]`, 'g');
                 } else {
-                    cleanRegex = new RegExp(`\\[@图像_分镜${sceneObj.id}(?:-[A-C])?#scene_img_${sceneObj.id}(?:_[A-C])?\\]`, 'g');
+                    cleanRegex = new RegExp(`\\[@图像_(分镜${sceneObj.id})(?:-[A-C])?#scene_img_${sceneObj.id}(?:_[A-C])?\\]`, 'g');
                 }
-                const newPrompt = currentPrompt.replace(cleanRegex, '').replace(/\s+/g, ' ').trim();
+                const newPrompt = currentPrompt.replace(cleanRegex, '$1').replace(/\s+/g, ' ').trim();
                 updateOptionField('video_prompt', newPrompt);
             }
         });
@@ -1286,29 +1351,29 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                 const currentPrompt = scene.prompt_options?.find(o => o.option_id === activeOption)?.np_prompt || '';
                 let cleanRegex: RegExp;
                 if (isAsset) {
-                    cleanRegex = new RegExp(`\\[@图像_${assetName}#${assetId}\\]`, 'g');
+                    cleanRegex = new RegExp(`\\[@图像_(${assetName})#${assetId}\\]`, 'g');
                 } else if (isFirstLastFrame) {
                     const startId = sourceNode.data.startImageAssetId || `first_frame_${sourceNode.id}`;
                     const endId = sourceNode.data.endImageAssetId || `last_frame_${sourceNode.id}`;
-                    cleanRegex = new RegExp(`\\[@图像_(?:首帧|尾帧)#(?:${startId}|${endId}|first_frame_${sourceNode.id}|last_frame_${sourceNode.id})\\]`, 'g');
+                    cleanRegex = new RegExp(`\\[@图像_(${edge.sourceHandle === 'source-start' ? '首帧' : '尾帧'})#(?:${startId}|${endId}|first_frame_${sourceNode.id}|last_frame_${sourceNode.id})\\]`, 'g');
                 } else {
-                    cleanRegex = new RegExp(`\\[@图像_分镜${sceneObj.id}(?:-[A-C])?#scene_img_${sceneObj.id}(?:_[A-C])?\\]`, 'g');
+                    cleanRegex = new RegExp(`\\[@图像_(分镜${sceneObj.id})(?:-[A-C])?#scene_img_${sceneObj.id}(?:_[A-C])?\\]`, 'g');
                 }
-                const newPrompt = currentPrompt.replace(cleanRegex, '').replace(/\s+/g, ' ').trim();
+                const newPrompt = currentPrompt.replace(cleanRegex, '$1').replace(/\s+/g, ' ').trim();
                 updateOptionField('np_prompt', newPrompt);
             } else if (edge.target === 'video-prompt') {
                 const currentPrompt = scene.prompt_options?.find(o => o.option_id === activeOption)?.video_prompt || '';
                 let cleanRegex: RegExp;
                 if (isAsset) {
-                    cleanRegex = new RegExp(`\\[@图像_${assetName}#${assetId}\\]`, 'g');
+                    cleanRegex = new RegExp(`\\[@图像_(${assetName})#${assetId}\\]`, 'g');
                 } else if (isFirstLastFrame) {
                     const startId = sourceNode.data.startImageAssetId || `first_frame_${sourceNode.id}`;
                     const endId = sourceNode.data.endImageAssetId || `last_frame_${sourceNode.id}`;
-                    cleanRegex = new RegExp(`\\[@图像_(?:首帧|尾帧)#(?:${startId}|${endId}|first_frame_${sourceNode.id}|last_frame_${sourceNode.id})\\]`, 'g');
+                    cleanRegex = new RegExp(`\\[@图像_(${edge.sourceHandle === 'source-start' ? '首帧' : '尾帧'})#(?:${startId}|${endId}|first_frame_${sourceNode.id}|last_frame_${sourceNode.id})\\]`, 'g');
                 } else {
-                    cleanRegex = new RegExp(`\\[@图像_分镜${sceneObj.id}(?:-[A-C])?#scene_img_${sceneObj.id}(?:_[A-C])?\\]`, 'g');
+                    cleanRegex = new RegExp(`\\[@图像_(分镜${sceneObj.id})(?:-[A-C])?#scene_img_${sceneObj.id}(?:_[A-C])?\\]`, 'g');
                 }
-                const newPrompt = currentPrompt.replace(cleanRegex, '').replace(/\s+/g, ' ').trim();
+                const newPrompt = currentPrompt.replace(cleanRegex, '$1').replace(/\s+/g, ' ').trim();
                 updateOptionField('video_prompt', newPrompt);
             }
         });
@@ -1731,6 +1796,63 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
     }, [edges, nodes]);
 
     const handleDisconnectImage = useCallback((videoNodeId: string, sourceNodeId: string, name?: string) => {
+        // 1. 记录历史快照以支持 Ctrl+Z 撤销
+        takeHistorySnapshot();
+
+        // 2. 清理对应文本中的 [@图像_...] 标签
+        // 使用 Ref 获取最新节点状态，规避 React Flow 闭包过期问题
+        const sourceNode = latestNodesRef.current.find(n => n.id === sourceNodeId);
+        if (sourceNode) {
+            const isAsset = sourceNode.type === 'asset';
+            const isFirstLastFrame = sourceNode.type === 'firstLastFrame';
+            const sceneObj = sourceNode.data.scene;
+            const assetName = isAsset ? sourceNode.data.asset.name : `分镜${sceneObj?.id}`;
+            const assetId = isAsset ? sourceNode.data.asset.id : `scene_img_${sceneObj?.id}`;
+
+            if (videoNodeId.startsWith('image-prompt')) {
+                const currentPrompt = scene.prompt_options?.find(o => o.option_id === activeOption)?.np_prompt || '';
+                let cleanRegex: RegExp;
+                if (isAsset) {
+                    cleanRegex = new RegExp(`\\[@图像_(${assetName})#${assetId}\\]`, 'g');
+                } else if (isFirstLastFrame) {
+                    const startId = sourceNode.data.startImageAssetId || `first_frame_${sourceNode.id}`;
+                    const endId = sourceNode.data.endImageAssetId || `last_frame_${sourceNode.id}`;
+                    if (name === '首帧') {
+                        cleanRegex = new RegExp(`\\[@图像_(首帧)#(?:${startId}|first_frame_${sourceNode.id})\\]`, 'g');
+                    } else if (name === '尾帧') {
+                        cleanRegex = new RegExp(`\\[@图像_(尾帧)#(?:${endId}|last_frame_${sourceNode.id})\\]`, 'g');
+                    } else {
+                        cleanRegex = new RegExp(`\\[@图像_(首帧|尾帧)#(?:${startId}|${endId}|first_frame_${sourceNode.id}|last_frame_${sourceNode.id})\\]`, 'g');
+                    }
+                } else {
+                    cleanRegex = new RegExp(`\\[@图像_(分镜${sceneObj.id})(?:-[A-C])?#scene_img_${sceneObj.id}(?:_[A-C])?\\]`, 'g');
+                }
+                const newPrompt = currentPrompt.replace(cleanRegex, '$1').replace(/\s+/g, ' ').trim();
+                updateOptionField('np_prompt', newPrompt);
+            } else if (videoNodeId.startsWith('video-prompt')) {
+                const currentPrompt = scene.prompt_options?.find(o => o.option_id === activeOption)?.video_prompt || '';
+                let cleanRegex: RegExp;
+                if (isAsset) {
+                    cleanRegex = new RegExp(`\\[@图像_(${assetName})#${assetId}\\]`, 'g');
+                } else if (isFirstLastFrame) {
+                    const startId = sourceNode.data.startImageAssetId || `first_frame_${sourceNode.id}`;
+                    const endId = sourceNode.data.endImageAssetId || `last_frame_${sourceNode.id}`;
+                    if (name === '首帧') {
+                        cleanRegex = new RegExp(`\\[@图像_(首帧)#(?:${startId}|first_frame_${sourceNode.id})\\]`, 'g');
+                    } else if (name === '尾帧') {
+                        cleanRegex = new RegExp(`\\[@图像_(尾帧)#(?:${endId}|last_frame_${sourceNode.id})\\]`, 'g');
+                    } else {
+                        cleanRegex = new RegExp(`\\[@图像_(首帧|尾帧)#(?:${startId}|${endId}|first_frame_${sourceNode.id}|last_frame_${sourceNode.id})\\]`, 'g');
+                    }
+                } else {
+                    cleanRegex = new RegExp(`\\[@图像_(分镜${sceneObj.id})(?:-[A-C])?#scene_img_${sceneObj.id}(?:_[A-C])?\\]`, 'g');
+                }
+                const newPrompt = currentPrompt.replace(cleanRegex, '$1').replace(/\s+/g, ' ').trim();
+                updateOptionField('video_prompt', newPrompt);
+            }
+        }
+
+        // 3. 断开画布连线
         setEdges((eds) => eds.filter(e => {
             const matchesSourceAndTarget = e.source === sourceNodeId && e.target === videoNodeId;
             if (!matchesSourceAndTarget) return true;
@@ -1739,7 +1861,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
             return false;
         }));
         pendingSaveRef.current = true;
-    }, [setEdges]);
+    }, [setEdges, takeHistorySnapshot, activeOption, scene]);
 
     // Automatically sync connected image IDs to scene's startEndAssetIds or videoAssetIds
     useEffect(() => {
