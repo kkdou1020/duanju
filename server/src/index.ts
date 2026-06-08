@@ -16,7 +16,20 @@ process.on('uncaughtException', (error: Error) => {
     console.error('Error Stack:', error.stack || error);
 });
 
+// Zombie process prevention: exit when parent process (Electron) disconnects
+if (process.send) {
+    process.on('disconnect', () => {
+        console.log('[Express] Parent process disconnected. Exiting to prevent zombie process...');
+        process.exit(0);
+    });
+}
+
 // Load environment variables
+if (process.env.EXTERNAL_ENV_PATH) {
+    const extPath = path.join(process.env.EXTERNAL_ENV_PATH, '.env');
+    console.log(`[Express] Loading external env from: ${extPath}`);
+    dotenv.config({ path: extPath, override: true });
+}
 dotenv.config({ path: path.join(__dirname, '../../.env'), override: true });
 dotenv.config({ path: path.join(__dirname, '../.env'), override: true });
 

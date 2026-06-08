@@ -1,6 +1,7 @@
 {
   "name": "duanju-server",
   "version": "2.0.0",
+  "type": "commonjs",
   "description": "Backend server for duanju app with AI business logic",
   "main": "dist/index.js",
   "scripts": {
