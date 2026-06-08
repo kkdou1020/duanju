@@ -167,7 +167,7 @@ export const runAgent1_NarrativeAnalysis = async (
 
                 const response = await retryWithBackoff<GenerateContentResponse>(() => ai.models.generateContent({
                     model: MODELS.TEXT_FAST,
-                    contents: { parts: [{ text: `Analyze the text and generate COMPLETE SCREENPLAY SCRIPTS (剧本) for ${episodeRange}. Each episode MUST have a full 'script' field (≥3000 chars, target 5000+). The script field must NOT be empty.` }] },
+                    contents: { parts: [{ text: `Analyze the text and generate COMPLETE SCREENPLAY SCRIPTS (剧本) for ${episodeRange}. Each episode MUST have a full 'script' field (≥3000 chars, target 5000+). The script field must NOT be empty. Control the number of storyboards (represented by the '△' symbol) in each episode strictly between 20 and 30.` }] },
                     config: {
                         systemInstruction: sysPrompt,
                         responseMimeType: "application/json",

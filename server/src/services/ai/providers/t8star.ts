@@ -47,6 +47,7 @@ export class T8StarProvider implements IAIProvider {
     private imageApiKey: string;
     private videoApiKey: string;
     private audioApiKey: string;
+    private nanobananaApiKey: string;
 
     constructor(config?: AIProviderConfig) {
         this.config = config || {};
@@ -60,6 +61,7 @@ export class T8StarProvider implements IAIProvider {
         this.videoApiKey = this.config.videoApiKey || "";
         console.log("[T8Star] Initialized with videoApiKey prefix:", this.videoApiKey ? `${this.videoApiKey.substring(0, 8)}...` : "NONE");
         this.audioApiKey = this.config.audioApiKey || "";
+        this.nanobananaApiKey = this.config.nanobananaApiKey || "";
     }
 
     private isT8starModel(model?: string) {
@@ -137,7 +139,9 @@ export class T8StarProvider implements IAIProvider {
 
     private async postJson(baseUrl: string, path: string, body: any, apiKey: string, signal?: AbortSignal) {
         const fs = require('fs');
-        const logFile = 'C:\\Users\\Administrator\\Desktop\\duanju\\duanju0302\\server-debug.log';
+        const pathLib = require('path');
+        const baseDir = process.env.EXTERNAL_ENV_PATH || pathLib.join(__dirname, '../../../../../');
+        const logFile = pathLib.join(baseDir, 'server-debug.log');
         const log = (msg: string) => {
             const timeStr = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-');
             const line = `[${timeStr}] ${msg}\n`;
@@ -421,7 +425,10 @@ export class T8StarProvider implements IAIProvider {
                 body.extra_body = { ...(body.extra_body || {}), google: googleExtra };
             }
 
-            const data = await this.postChatCompletionsT8star(body, this.textApiKey, stream, config?.signal);
+            const activeApiKey = (model?.includes("nano-banana") || model?.includes("nanobanana")) && this.nanobananaApiKey
+                ? this.nanobananaApiKey
+                : this.textApiKey;
+            const data = await this.postChatCompletionsT8star(body, activeApiKey, stream, config?.signal);
 
             if (data?._stream) {
                 const text = data.fullText || "";
@@ -501,7 +508,9 @@ export class T8StarProvider implements IAIProvider {
 
 
             let apiKey = this.imageApiKey;
-            if (config?.imageConfig?.useOfficialKey) {
+            if ((model?.includes("nano-banana") || model?.includes("nanobanana")) && this.nanobananaApiKey) {
+                apiKey = this.nanobananaApiKey;
+            } else if (config?.imageConfig?.useOfficialKey) {
                 apiKey = process.env.T8_OFFICIAL_IMAGE_KEY || this.imageApiKey;
             }
 

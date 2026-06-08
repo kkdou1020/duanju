@@ -75,14 +75,16 @@
       "server/node_modules/**/*",
       "server/package.json",
       "package.json",
-      ".env"
+      ".env",
+      "public/icon.png"
     ],
     "win": {
       "target": [
         "nsis",
         "portable"
       ],
-      "icon": "public/favicon.ico"
+      "icon": "public/icon.png",
+      "requestedExecutionLevel": "requireAdministrator"
     },
     "nsis": {
       "oneClick": false,

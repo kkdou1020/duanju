@@ -52,6 +52,7 @@ const getApiKey = (target) => {
     case 'POLO_TEXT': return process.env.POLO_TEXT_API_KEY || process.env.GEMINI_TEXT_API_KEY || process.env.API_KEY;
     case 'POLO_IMAGE': return process.env.POLO_IMAGE_API_KEY || process.env.GEMINI_IMAGE_API_KEY;
     case 'POLO_VIDEO': return process.env.POLO_VIDEO_API_KEY || process.env.VIDEO_API_KEY;
+    case 'NANOBANANA': return process.env.NANOBANANA_API_KEY;
     default: return null;
   }
 };

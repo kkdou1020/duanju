@@ -41,4 +41,5 @@ export interface AIProviderConfig {
     mediaApiKey?: string;
     videoApiKey?: string;
     audioApiKey?: string;
+    nanobananaApiKey?: string;
 }

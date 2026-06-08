@@ -34,9 +34,9 @@ function findAvailablePort(startPort, callback) {
   });
 }
 
-// 2. 日志持久化：将后端输出流重定向写入到 AppData 文件中
+// 2. 日志持久化：将后端输出流重定向写入到安装路径的 logs 文件夹下
 function getLogStream() {
-  const logDir = path.join(app.getPath('userData'), 'logs');
+  const logDir = path.join(appPath, 'logs');
   if (!fs.existsSync(logDir)) {
     fs.mkdirSync(logDir, { recursive: true });
   }
@@ -94,7 +94,7 @@ function startExpressServer(port) {
       dialog.showErrorBox(
         "后台服务崩溃",
         "后台服务在多次尝试启动后均告失败。请检查端口是否被占用，或将日志反馈给开发人员。日志路径：\n" + 
-        path.join(app.getPath('userData'), 'logs')
+        path.join(appPath, 'logs')
       );
     }
   });
@@ -156,7 +156,7 @@ function createWindow() {
       contextIsolation: true,
     },
     title: "NanoBanana Storyboarder",
-    icon: path.join(__dirname, 'public/favicon.ico')
+    icon: path.join(__dirname, 'public/icon.png')
   });
 
   checkServerReady(serverPort, () => {

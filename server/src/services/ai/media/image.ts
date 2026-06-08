@@ -380,7 +380,9 @@ export const generateSceneImage = async (
     console.log(`[Scene Gen] Final Prompt: ${fullText}`);
 
     const fs = require('fs');
-    const logFile = 'C:\\Users\\Administrator\\Desktop\\duanju\\duanju0302\\server-debug.log';
+    const pathLib = require('path');
+    const baseDir = process.env.EXTERNAL_ENV_PATH || pathLib.join(__dirname, '../../../../../');
+    const logFile = pathLib.join(baseDir, 'server-debug.log');
     const log = (msg: string) => {
         const timeStr = new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-');
         const line = `[${timeStr}] ${msg}\n`;

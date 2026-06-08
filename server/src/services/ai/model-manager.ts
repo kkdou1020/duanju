@@ -68,6 +68,7 @@ class ModelManager {
             mediaApiKey: process.env.T8_IMAGE_API_KEY || "",
             videoApiKey: process.env.T8_VIDEO_API_KEY || "",
             audioApiKey: process.env.T8_AUDIO_API_KEY || "",
+            nanobananaApiKey: process.env.NANOBANANA_API_KEY || "",
         };
 
         this.polo = new PoloProvider(poloConfig);

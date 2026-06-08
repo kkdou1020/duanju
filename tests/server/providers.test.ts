@@ -125,6 +125,86 @@ describe('T8StarProvider', () => {
             expect(provider.extractInlineB64(null)).toBeNull();
         });
     });
+
+    // ─── API Key Routing ───
+    describe('API Key Routing', () => {
+        it('uses nanobananaApiKey for nano-banana-pro model in generateContent', async () => {
+            const { T8StarProvider } = await import('../../server/src/services/ai/providers/t8star');
+            const customProvider = new T8StarProvider({
+                apiKey: 'text-key',
+                mediaApiKey: 'image-key',
+                nanobananaApiKey: 'banana-key'
+            });
+
+            let usedKey = '';
+            (customProvider as any).postJson = async (baseUrl: string, path: string, body: any, apiKey: string) => {
+                usedKey = apiKey;
+                return { data: [{ url: 'http://example.com/image.png' }] };
+            };
+
+            await customProvider.generateContent({
+                model: 'nano-banana-pro',
+                contents: 'test prompt'
+            });
+
+            expect(usedKey).toBe('banana-key');
+        });
+
+        it('uses nanobananaApiKey for text models containing nano-banana', async () => {
+            const { T8StarProvider } = await import('../../server/src/services/ai/providers/t8star');
+            const customProvider = new T8StarProvider({
+                apiKey: 'text-key',
+                mediaApiKey: 'image-key',
+                nanobananaApiKey: 'banana-key'
+            });
+
+            let usedKey = '';
+            (customProvider as any).postChatCompletionsT8star = async (body: any, apiKey: string, stream: boolean) => {
+                usedKey = apiKey;
+                return { choices: [{ message: { content: 'hello' } }] };
+            };
+
+            await customProvider.generateContent({
+                model: 'nano-banana-2-2k',
+                contents: 'test prompt'
+            });
+
+            expect(usedKey).toBe('banana-key');
+        });
+
+        it('falls back to default keys for non-nanobanana models', async () => {
+            const { T8StarProvider } = await import('../../server/src/services/ai/providers/t8star');
+            const customProvider = new T8StarProvider({
+                apiKey: 'text-key',
+                mediaApiKey: 'image-key',
+                nanobananaApiKey: 'banana-key'
+            });
+
+            let textUsedKey = '';
+            (customProvider as any).postChatCompletionsT8star = async (body: any, apiKey: string, stream: boolean) => {
+                textUsedKey = apiKey;
+                return { choices: [{ message: { content: 'hello' } }] };
+            };
+
+            let imageUsedKey = '';
+            (customProvider as any).postJson = async (baseUrl: string, path: string, body: any, apiKey: string) => {
+                imageUsedKey = apiKey;
+                return { data: [{ url: 'http://example.com/image.png' }] };
+            };
+
+            await customProvider.generateContent({
+                model: 'gemini-3.5-flash',
+                contents: 'test'
+            });
+            expect(textUsedKey).toBe('text-key');
+
+            await customProvider.generateContent({
+                model: 'gpt-image-2',
+                contents: 'test'
+            });
+            expect(imageUsedKey).toBe('image-key');
+        });
+    });
 });
 
 // ════════════════════════════════════════════
