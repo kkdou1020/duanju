@@ -7,7 +7,7 @@ import nodeFetch from 'node-fetch';
 import { getProxyAgent } from "../helpers";
 
 const fetch = (url: any, options: any = {}) => {
-    const agent = getProxyAgent();
+    const agent = getProxyAgent(url);
     if (agent) {
         options.agent = agent;
     }

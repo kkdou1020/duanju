@@ -150,18 +150,25 @@ class ModelManager {
                 };
 
                 const resolveGptImageSize = (sizeVal: string | undefined): string => {
-                    if (!sizeVal || sizeVal === 'auto') {
-                        return this.config.t8starImageSize || 'auto';
+                    let baseSize = sizeVal;
+                    if (!baseSize || baseSize === 'auto') {
+                        // Fallback to active style aspect ratio if scene imageSize is set to auto or not specified
+                        const ar = args.config?.imageConfig?.aspectRatio || args.config?.imageConfig?.aspect_ratio;
+                        if (ar && ar !== 'auto') {
+                            baseSize = ar;
+                        } else {
+                            return this.config.t8starImageSize || 'auto';
+                        }
                     }
-                    if (sizeVal.includes('x')) {
-                        return sizeVal;
+                    if (baseSize.includes('x')) {
+                        return baseSize;
                     }
-                    const ratio = sizeVal;
+                    const ratio = baseSize;
                     const res = '2K';
                     if (sizeMap[ratio]?.[res]) {
                         return sizeMap[ratio][res];
                     }
-                    return sizeVal;
+                    return baseSize;
                 };
 
                 if (requestedModel === "gpt-image-2-official") {
@@ -182,7 +189,7 @@ class ModelManager {
                                          (customSize && customSize.includes("K")) ? customSize : 
                                          (this.config.t8starNanoImageSize || "2K");
                         const nanoRatio = (customSize && customSize.includes(":")) ? customSize : 
-                                          (this.config.t8starNanoAspectRatio || "16:9");
+                                          (args.config?.imageConfig?.aspectRatio || args.config?.imageConfig?.aspect_ratio || this.config.t8starNanoAspectRatio || "16:9");
                         newConfig.imageConfig.overrideNanoSize = nanoSize;
                         newConfig.imageConfig.overrideNanoAspectRatio = nanoRatio;
                     }

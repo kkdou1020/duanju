@@ -4,13 +4,13 @@ import { HttpsProxyAgent } from "https-proxy-agent";
 let cachedProxyAgent: HttpsProxyAgent<string> | undefined = undefined;
 let isProxyChecked = false;
 
-export function getProxyAgent(): HttpsProxyAgent<string> | undefined {
+export function getProxyAgent(requestUrl?: string): HttpsProxyAgent<string> | undefined {
     if (isProxyChecked) return cachedProxyAgent;
     const proxyUrl = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy || "";
     if (proxyUrl) {
         try {
-            cachedProxyAgent = new HttpsProxyAgent(proxyUrl);
-            console.log(`[Proxy] HttpsProxyAgent initialized with: ${proxyUrl}`);
+            cachedProxyAgent = new HttpsProxyAgent(proxyUrl, { keepAlive: false });
+            console.log(`[Proxy] HttpsProxyAgent initialized with: ${proxyUrl} (keepAlive: false)`);
         } catch (err) {
             console.error("[Proxy] Failed to initialize HttpsProxyAgent:", err);
         }
