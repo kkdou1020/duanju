@@ -10,7 +10,6 @@ import {
 } from "./t8star-utils";
 import nodeFetch from 'node-fetch';
 import { getProxyAgent } from "../helpers";
-
 const fetch = (url: any, options: any = {}) => {
     const agent = getProxyAgent();
     if (agent) {
@@ -18,6 +17,25 @@ const fetch = (url: any, options: any = {}) => {
     }
     return nodeFetch(url, options);
 };
+
+function normalizeSchemaTypes(schema: any): any {
+    if (!schema || typeof schema !== 'object') return schema;
+    const newSchema = { ...schema };
+    if (typeof newSchema.type === 'string') {
+        newSchema.type = newSchema.type.toLowerCase();
+    }
+    if (newSchema.properties && typeof newSchema.properties === 'object') {
+        const newProps: any = {};
+        for (const [key, val] of Object.entries(newSchema.properties)) {
+            newProps[key] = normalizeSchemaTypes(val);
+        }
+        newSchema.properties = newProps;
+    }
+    if (newSchema.items && typeof newSchema.items === 'object') {
+        newSchema.items = normalizeSchemaTypes(newSchema.items);
+    }
+    return newSchema;
+}
 
 
 export class T8StarProvider implements IAIProvider {
@@ -50,6 +68,7 @@ export class T8StarProvider implements IAIProvider {
         return (
             model.includes("gemini") ||
             model.includes("nano-banana") ||
+            model.includes("gpt-") ||
             model === "gemini-3.1-flash-lite-preview-thinking-high"
         );
     }
@@ -193,40 +212,54 @@ export class T8StarProvider implements IAIProvider {
 
     private async postChatCompletionsT8star(body: any, apiKey: string, stream: boolean, signal?: AbortSignal) {
         const url = `${this.textBaseUrl.replace(/\/+$/, "")}/v1/chat/completions`;
-        const res = await fetch(url, {
-            method: "POST",
-            headers: {
-                Accept: stream ? "text/event-stream" : "application/json",
-                "Content-Type": "application/json",
-                ...(apiKey ? { "Authorization": `Bearer ${apiKey}` } : {}),
-            },
-            body: JSON.stringify(body),
-            signal: signal as any,
-        });
+        console.log(`[T8Star postChatCompletionsT8star] Starting request to ${url} with model ${body.model}...`);
+        const startTime = Date.now();
+        try {
+            const res = await fetch(url, {
+                method: "POST",
+                headers: {
+                    Accept: stream ? "text/event-stream" : "application/json",
+                    "Content-Type": "application/json",
+                    ...(apiKey ? { "Authorization": `Bearer ${apiKey}` } : {}),
+                },
+                body: JSON.stringify(body),
+                signal: signal as any,
+            });
 
-        if (!res.ok) {
-            const text = await res.text().catch(() => "");
-            throw new Error(`HTTP Error: ${res.status} ${text}`);
+            console.log(`[T8Star postChatCompletionsT8star] Received response headers with status ${res.status} in ${Date.now() - startTime}ms`);
+
+            if (!res.ok) {
+                const text = await res.text().catch(() => "");
+                throw new Error(`HTTP Error: ${res.status} ${text}`);
+            }
+
+            if (!stream) {
+                const json = await res.json();
+                console.log(`[T8Star postChatCompletionsT8star] Finished JSON parsing in ${Date.now() - startTime}ms`);
+                return json;
+            }
+
+            // Stream handling for Node.js
+            const responseText = await res.text();
+            let fullText = "";
+            const lines = responseText.split(/\r?\n/);
+            for (const raw of lines) {
+                const line = raw.trim();
+                if (!line.startsWith("data:")) continue;
+                const data = line.slice(5).trim();
+                if (!data || data === "[DONE]") continue;
+                try {
+                    const json = JSON.parse(data);
+                    const delta = json?.choices?.[0]?.delta?.content;
+                    if (typeof delta === "string") fullText += delta;
+                } catch { }
+            }
+            console.log(`[T8Star postChatCompletionsT8star] Finished Stream parsing in ${Date.now() - startTime}ms`);
+            return { _stream: true, fullText };
+        } catch (error: any) {
+            console.error(`[T8Star postChatCompletionsT8star] Error after ${Date.now() - startTime}ms:`, error);
+            throw error;
         }
-
-        if (!stream) return res.json() as Promise<any>;
-
-        // Stream handling for Node.js
-        const responseText = await res.text();
-        let fullText = "";
-        const lines = responseText.split(/\r?\n/);
-        for (const raw of lines) {
-            const line = raw.trim();
-            if (!line.startsWith("data:")) continue;
-            const data = line.slice(5).trim();
-            if (!data || data === "[DONE]") continue;
-            try {
-                const json = JSON.parse(data);
-                const delta = json?.choices?.[0]?.delta?.content;
-                if (typeof delta === "string") fullText += delta;
-            } catch { }
-        }
-        return { _stream: true, fullText };
     }
 
     private async fetchImageAsBase64(url: string): Promise<string | null> {
@@ -350,12 +383,13 @@ export class T8StarProvider implements IAIProvider {
             };
 
             if (config?.responseSchema) {
+                const schema = model.includes('gpt-') ? normalizeSchemaTypes(config.responseSchema) : config.responseSchema;
                 body.tools = [{
                     type: "function",
                     function: {
                         name: "submit_structured_output",
                         description: "Submit the structured output data",
-                        parameters: config.responseSchema
+                        parameters: schema
                     }
                 }];
                 body.tool_choice = {
@@ -381,7 +415,7 @@ export class T8StarProvider implements IAIProvider {
             }
             if (config?.speechConfig) googleExtra.speech_config = config.speechConfig;
             if (config?.responseModalities) googleExtra.response_modalities = config.responseModalities;
-            if (config?.responseSchema) googleExtra.response_schema = config.responseSchema;
+            if (config?.responseSchema && !model.includes('gpt-')) googleExtra.response_schema = config.responseSchema;
 
             if (Object.keys(googleExtra).length) {
                 body.extra_body = { ...(body.extra_body || {}), google: googleExtra };

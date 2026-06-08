@@ -150,15 +150,25 @@ export function useSessionRestore(state: SessionState) {
                     }
                     if (savedState.chunks) {
                         const hydratedChunks = await Promise.all(
-                            savedState.chunks.map(async (chunk: NovelChunk) => ({
-                                ...chunk,
-                                assets: await Promise.all(
-                                    chunk.assets.map((a: Asset) => hydrateAsset(a))
-                                ),
-                                scenes: await Promise.all(
-                                    chunk.scenes.map((s: Scene) => hydrateScene(s))
-                                ),
-                            }))
+                            savedState.chunks.map(async (chunk: NovelChunk) => {
+                                const hasScenes = Array.isArray(chunk.scenes) && chunk.scenes.length > 0;
+                                let stableStatus = chunk.status;
+                                if (chunk.status === 'scripting' || chunk.status === 'extracting') {
+                                    stableStatus = hasScenes ? 'storyboarded' : 'idle';
+                                } else if (chunk.status === 'shooting') {
+                                    stableStatus = 'scripted';
+                                }
+                                return {
+                                    ...chunk,
+                                    status: stableStatus,
+                                    assets: await Promise.all(
+                                        chunk.assets.map((a: Asset) => hydrateAsset(a))
+                                    ),
+                                    scenes: await Promise.all(
+                                        chunk.scenes.map((s: Scene) => hydrateScene(s))
+                                    ),
+                                };
+                            })
                         );
                         setChunks(hydratedChunks);
                     }

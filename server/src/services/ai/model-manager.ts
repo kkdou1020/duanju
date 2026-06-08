@@ -9,8 +9,8 @@ export type ProviderType = "polo" | "t8star" | "google";
 
 /** Centralized model name constants */
 export const MODELS = {
-    TEXT_FAST: 'gemini-3.5-flash',
-    TEXT_AGENT: 'gemini-3.5-flash',
+    TEXT_FAST: 'gpt-5.4-mini-2026-03-17',
+    TEXT_AGENT: 'gpt-5.4-mini-2026-03-17',
     IMAGE_GEN: 'gpt-image-2',
     IMAGE_POLO_OVERRIDE: 'gemini-3-pro-image-preview',
     TTS: 'tts-1-hd-1106',
@@ -20,6 +20,7 @@ export interface ModelConfig {
     textmodel: ProviderType;
     imagemodel: ProviderType;
     videomodel: ProviderType;
+    t8starTextModel?: string;
     t8starImageModel?: string;
     t8starImageSize?: string;
     t8starImageQuality?: string;
@@ -32,6 +33,7 @@ const DEFAULT_CONFIG: ModelConfig = {
     textmodel: "t8star",
     imagemodel: "t8star",
     videomodel: "t8star",
+    t8starTextModel: "gpt-5.4-mini-2026-03-17",
     t8starImageModel: "gpt-image-2",
     t8starImageSize: "auto",
     t8starImageQuality: "auto",
@@ -78,6 +80,9 @@ class ModelManager {
             if (config[key] && VALID_PROVIDERS.includes(config[key] as ProviderType)) {
                 this.config[key] = config[key] as ProviderType;
             }
+        }
+        if (config.t8starTextModel && typeof config.t8starTextModel === 'string') {
+            this.config.t8starTextModel = config.t8starTextModel;
         }
         if (config.t8starImageModel && typeof config.t8starImageModel === 'string') {
             this.config.t8starImageModel = config.t8starImageModel;
@@ -183,6 +188,10 @@ class ModelManager {
                     }
                 }
                 finalArgs = { ...args, model: requestedModel, config: newConfig };
+            }
+        } else {
+            if (this.config.textmodel === "t8star" && this.config.t8starTextModel) {
+                finalArgs = { ...args, model: this.config.t8starTextModel };
             }
         }
 

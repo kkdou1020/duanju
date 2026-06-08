@@ -253,7 +253,8 @@ export const extractAssetsFromBeats = async (
     language: string = 'Chinese',
     existingAssets: Asset[] = [],
     workStyle: string = '',
-    useOriginalCharacters: boolean = false
+    useOriginalCharacters: boolean = false,
+    signal?: AbortSignal
 ): Promise<Asset[]> => {
     // Enrich each beat with all visual context (not just visual_action)
     const beatsText = (beatSheet.beats || [])
@@ -295,15 +296,21 @@ export const extractAssetsFromBeats = async (
                         }
                     }
                 },
+                signal
             }
-        }));
+        }), 3, 2000, undefined, signal);
         const assetJson = safeJsonParse<any>(assetResponse.text, { assets: [] });
         if (Array.isArray(assetJson)) {
             assets = assetJson;
         } else if (assetJson && Array.isArray(assetJson.assets)) {
             assets = assetJson.assets;
         }
-    } catch (e) { console.warn("[extractAssetsFromBeats] Agent A2 failed:", e); }
+    } catch (e: any) {
+        if (e.name === 'AbortError' || e.message === 'Aborted' || signal?.aborted) {
+            throw e;
+        }
+        console.warn("[extractAssetsFromBeats] Agent A2 failed:", e);
+    }
 
     return assets;
 };

@@ -40,7 +40,8 @@ export const runAgent3_AssetProductionStream = async function* (
     assets: Asset[],
     stylePrefix: string,
     aspectRatio: string = '16:9',
-    onProgress?: (msg: string) => void
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal
 ): AsyncGenerator<Scene[], void, unknown> {
     // 核心修改：让 Agent 3 彻底放弃标签格式，只看纯名字，彻底消除大模型格式幻觉，也避免与 Agent 4 的标签化发生套娃覆盖。
     const assetMap = assets.map(a => `- ${a.name} → DNA: ${a.visualDna || ''}, Desc: ${a.description}`).join('\n');
@@ -63,6 +64,10 @@ export const runAgent3_AssetProductionStream = async function* (
     let prevBatchEndContext = '';
 
     for (let i = 0; i < batchCount; i++) {
+        if (signal?.aborted) {
+            console.log('[Agent 3] Task aborted early. Stopping stream.');
+            throw new Error("Aborted");
+        }
         const start = i * batchSize;
         const end = Math.min(start + batchSize, totalBeats);
         if (start >= totalBeats) break;
@@ -138,6 +143,9 @@ export const runAgent3_AssetProductionStream = async function* (
             : '';
 
         for (let attempt = 1; attempt <= MAX_BATCH_RETRIES; attempt++) {
+            if (signal?.aborted) {
+                throw new Error("Aborted");
+            }
             try {
                 if (onProgress) {
                     onProgress(`Asset Production: Batch ${i + 1}/${batchCount}${attempt > 1 ? ` [Retry ${attempt}/${MAX_BATCH_RETRIES}]` : ''}...`);
@@ -149,9 +157,10 @@ export const runAgent3_AssetProductionStream = async function* (
                     config: {
                         systemInstruction: sysPrompt,
                         responseMimeType: "application/json",
-                        responseSchema: agent3Schema
+                        responseSchema: agent3Schema,
+                        signal
                     }
-                }));
+                }), 3, 2000, undefined, signal);
 
                 const parsed = safeJsonParse<any>(response.text, { scenes: [] });
 
@@ -235,8 +244,11 @@ export const runAgent3_AssetProductionStream = async function* (
                 if (finalizedBatch.length > 0 && assets.length > 0) {
                     try {
                         if (onProgress) onProgress('Asset Matching: Semantic review...');
-                        finalizedBatch = await semanticAssetMatch(finalizedBatch, assets);
+                        finalizedBatch = await semanticAssetMatch(finalizedBatch, assets, signal);
                     } catch (e: any) {
+                        if (e.name === 'AbortError' || e.message === 'Aborted' || signal?.aborted) {
+                            throw e;
+                        }
                         console.warn('[Agent3] Semantic asset match failed chunk:', e?.message || e);
                     }
 
@@ -270,8 +282,11 @@ export const runAgent3_AssetProductionStream = async function* (
 
                     try {
                         if (onProgress) onProgress('Asset Matching: Smart Semantic Tag Injection...');
-                        finalizedBatch = await llmTagInjector(finalizedBatch, assets);
+                        finalizedBatch = await llmTagInjector(finalizedBatch, assets, signal);
                     } catch (e: any) {
+                        if (e.name === 'AbortError' || e.message === 'Aborted' || signal?.aborted) {
+                            throw e;
+                        }
                         console.warn('[Agent4] LLM Tag Injector failed chunk:', e?.message || e);
                     }
                 }
@@ -293,9 +308,22 @@ export const runAgent3_AssetProductionStream = async function* (
                 yield finalizedBatch;
                 break;
             } catch (batchError: any) {
+                if (batchError.name === 'AbortError' || batchError.message === 'Aborted' || signal?.aborted) {
+                    throw batchError;
+                }
                 console.error(`[Agent3][Batch ${i + 1}/${batchCount}][Retry ${attempt}/${MAX_BATCH_RETRIES}] failed (beats ${start}-${end}):`, batchError?.message || batchError);
                 if (attempt < MAX_BATCH_RETRIES) {
-                    await wait(Math.pow(2, attempt) * 2000);
+                    await new Promise<void>((resolve, reject) => {
+                        const t = setTimeout(() => {
+                            if (signal) signal.removeEventListener('abort', abortHandler);
+                            resolve();
+                        }, Math.pow(2, attempt) * 2000);
+                        const abortHandler = () => {
+                            clearTimeout(t);
+                            reject(new Error("Aborted"));
+                        };
+                        if (signal) signal.addEventListener('abort', abortHandler);
+                    });
                 }
             }
         }
@@ -322,7 +350,6 @@ export const runAgent3_AssetProductionStream = async function* (
             continue;
         }
     }
-
 };
 
 /**
@@ -335,10 +362,11 @@ export const runAgent3_AssetProduction = async (
     assets: Asset[],
     stylePrefix: string,
     aspectRatio: string = '16:9',
-    onProgress?: (msg: string) => void
+    onProgress?: (msg: string) => void,
+    signal?: AbortSignal
 ): Promise<Scene[]> => {
     let allScenes: Scene[] = [];
-    for await (const chunk of runAgent3_AssetProductionStream(beatSheet, language, assets, stylePrefix, aspectRatio, onProgress)) {
+    for await (const chunk of runAgent3_AssetProductionStream(beatSheet, language, assets, stylePrefix, aspectRatio, onProgress, signal)) {
         allScenes.push(...chunk);
     }
     return allScenes;
@@ -348,8 +376,11 @@ export const runAgent3_AssetProduction = async (
  * Agent 4: Smart LLM Tag Injector
  * 并发处理所有场景的提示词选项，利用上下文真正理解名字含义并强制注入标签语法。
  */
-export async function llmTagInjector(scenes: Scene[], assets: Asset[]): Promise<Scene[]> {
+export async function llmTagInjector(scenes: Scene[], assets: Asset[], signal?: AbortSignal): Promise<Scene[]> {
     return Promise.all(scenes.map(async scene => {
+        if (signal?.aborted) {
+            throw new Error("Aborted");
+        }
         const activeIds = scene.assetIds || [];
         if (activeIds.length === 0 || !scene.prompt_options || scene.prompt_options.length === 0) return scene;
 
@@ -407,9 +438,10 @@ ${inputPayload}`
                 config: {
                     systemInstruction: "你是一个极其精准的语义格式化机器人。仅在确认语境指代目标出场人物/物品时包裹指定的格式化标签。必须返回一个 JSON 对象，其包含一个 `options` 字段，且 `options` 是一个数组，映射所有修改后的原文项。",
                     responseMimeType: "application/json",
-                    responseSchema: schema
+                    responseSchema: schema,
+                    signal
                 }
-            }), 2);
+            }), 2, 2000, undefined, signal);
 
             const parsed = safeJsonParse<{options: any[]}>(response.text, {options: []});
             if (parsed && Array.isArray(parsed.options) && parsed.options.length === scene.prompt_options.length) {
@@ -428,7 +460,10 @@ ${inputPayload}`
                 }
                 return { ...scene, prompt_options: newOptions };
             }
-        } catch(e) {
+        } catch(e: any) {
+            if (e.name === 'AbortError' || e.message === 'Aborted' || signal?.aborted) {
+                throw e;
+            }
             console.error(`[Agent 4] Smart LLM Tag Injector failed for scene ${scene.id}:`, e);
         }
         return scene;
@@ -440,7 +475,10 @@ ${inputPayload}`
  * 将所有场景的 visual_desc 和完整资产清单发给 LLM，
  * 让它基于语义理解返回每个场景应该关联的 asset_id 列表。
  */
-async function semanticAssetMatch(scenes: Scene[], assets: Asset[]): Promise<Scene[]> {
+async function semanticAssetMatch(scenes: Scene[], assets: Asset[], signal?: AbortSignal): Promise<Scene[]> {
+    if (signal?.aborted) {
+        throw new Error("Aborted");
+    }
     const assetCatalog = assets.map(a => `${a.id} | ${a.name} | ${a.type || 'unknown'}`).join('\n');
     const sceneList = scenes.map(s => `${s.id} | ${s.visual_desc || s.narration || ''}`).join('\n');
 
@@ -482,9 +520,10 @@ ${sceneList}
         config: {
             systemInstruction: '你是资产匹配专家。根据场景描述内容，精准匹配所有语义相关的资产。输出JSON格式。',
             responseMimeType: "application/json",
-            responseSchema: matchSchema
+            responseSchema: matchSchema,
+            signal
         }
-    }));
+    }), 3, 2000, undefined, signal);
 
     const parsed = safeJsonParse<any>(response.text, { matches: [] });
     const matchMap = new Map<string, string[]>();

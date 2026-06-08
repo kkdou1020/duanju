@@ -98,7 +98,8 @@ export const runAgent2_Annotation = async (
     language: string,
     lensLibraryPrompt: string,
     visualDna: string = "",
-    narrativeContext: string = ""
+    narrativeContext: string = "",
+    signal?: AbortSignal
 ): Promise<MasterBeatSheet> => {
 
     // 1. Programmatic splitting by "△"
@@ -128,6 +129,9 @@ export const runAgent2_Annotation = async (
     console.log(`[Agent2/PureDirector] Pre-sliced into ${beatTexts.length} beats. Requesting LLM parameters...`);
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        if (signal?.aborted) {
+            throw new Error("Aborted");
+        }
         try {
             if (attempt > 1) {
                 console.warn(`[Agent2/PureDirector][Retry ${attempt}/${MAX_RETRIES}] Retrying...`);
@@ -139,9 +143,10 @@ export const runAgent2_Annotation = async (
                 config: {
                     systemInstruction: sysPrompt,
                     responseMimeType: "application/json",
-                    responseSchema: agent2Schema
+                    responseSchema: agent2Schema,
+                    signal
                 }
-            }));
+            }), 3, 2000, undefined, signal);
 
             const result = parseAgent2Response(response.text);
 
@@ -199,11 +204,24 @@ export const runAgent2_Annotation = async (
             console.log(`[Agent2/PureDirector] Success: Emitted ${result.beats.length} beats. Text integrity preserved programmatically.`);
             return result;
         } catch (e: any) {
+            if (e.name === 'AbortError' || e.message === 'Aborted' || signal?.aborted) {
+                throw e;
+            }
             console.error(`[Agent2/PureDirector][Retry ${attempt}/${MAX_RETRIES}] failed:`, e?.message || e);
             if (attempt >= MAX_RETRIES) {
                 throw new Error(`[Agent2/PureDirector] Failed after ${MAX_RETRIES} retries: ${e?.message || e}`);
             }
-            await wait(Math.pow(2, attempt) * 2000);
+            await new Promise<void>((resolve, reject) => {
+                const t = setTimeout(() => {
+                    if (signal) signal.removeEventListener('abort', abortHandler);
+                    resolve();
+                }, Math.pow(2, attempt) * 2000);
+                const abortHandler = () => {
+                    clearTimeout(t);
+                    reject(new Error("Aborted"));
+                };
+                if (signal) signal.addEventListener('abort', abortHandler);
+            });
         }
     }
 

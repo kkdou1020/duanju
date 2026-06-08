@@ -26,7 +26,7 @@ describe('T8StarProvider', () => {
         });
         it('returns false for other models', async () => {
             provider = await getProvider();
-            expect(provider.isT8starModel('gpt-4')).toBe(false);
+            expect(provider.isT8starModel('claude-3')).toBe(false);
         });
         it('returns false for undefined', async () => {
             provider = await getProvider();

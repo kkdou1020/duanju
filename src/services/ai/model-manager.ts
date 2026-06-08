@@ -7,8 +7,8 @@ export type ProviderType = "polo" | "t8star";
 
 /** Centralized model name constants */
 export const MODELS = {
-  TEXT_FAST: 'gemini-3.5-flash',
-  TEXT_AGENT: 'gemini-3.5-flash',
+  TEXT_FAST: 'gpt-5.4-mini-2026-03-17',
+  TEXT_AGENT: 'gpt-5.4-mini-2026-03-17',
   IMAGE_GEN: 'gpt-image-2',
   IMAGE_POLO_OVERRIDE: 'gemini-3-pro-image-preview',
   TTS: 'tts-1-hd-1106',
@@ -18,6 +18,7 @@ export interface ModelConfig {
   textmodel: ProviderType;
   imagemodel: ProviderType;
   videomodel: ProviderType;
+  t8starTextModel?: string;
   t8starImageModel?: string;
   t8starImageSize?: string;
   t8starImageQuality?: string;
@@ -30,6 +31,7 @@ const DEFAULT_CONFIG: ModelConfig = {
   textmodel: "t8star",
   imagemodel: "t8star",
   videomodel: "t8star",
+  t8starTextModel: "gpt-5.4-mini-2026-03-17",
   t8starImageModel: "gpt-image-2",
   t8starImageSize: "auto",
   t8starImageQuality: "auto",
@@ -71,12 +73,16 @@ class ModelManager {
           validated[key] = parsed[key];
         }
       }
-        validated.t8starImageModel = parsed.t8starImageModel || "gpt-image-2";
-        validated.t8starImageSize = parsed.t8starImageSize || "auto";
-        validated.t8starImageQuality = parsed.t8starImageQuality || "auto";
-        validated.t8starNanoImageSize = parsed.t8starNanoImageSize || "2K";
-        validated.t8starNanoAspectRatio = parsed.t8starNanoAspectRatio || "16:9";
-        validated.t8starVideoModel = parsed.t8starVideoModel || "veo3.1-components";
+      
+      const t8starTextModel = parsed.t8starTextModel || "gpt-5.4-mini-2026-03-17";
+      validated.t8starTextModel = t8starTextModel === "gemini-3.5-flash" ? "gpt-5.4-mini-2026-03-17" : t8starTextModel;
+      
+      validated.t8starImageModel = parsed.t8starImageModel || "gpt-image-2";
+      validated.t8starImageSize = parsed.t8starImageSize || "auto";
+      validated.t8starImageQuality = parsed.t8starImageQuality || "auto";
+      validated.t8starNanoImageSize = parsed.t8starNanoImageSize || "2K";
+      validated.t8starNanoAspectRatio = parsed.t8starNanoAspectRatio || "16:9";
+      validated.t8starVideoModel = parsed.t8starVideoModel || "veo3.1-components";
       return validated;
     } catch {
       return DEFAULT_CONFIG;

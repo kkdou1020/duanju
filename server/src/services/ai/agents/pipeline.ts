@@ -16,20 +16,37 @@ export async function executeWithRetryAndValidation<T>(
     validator: (result: T) => boolean,
     agentName: string,
     contextInfo: any,
-    maxRetries: number = 5
+    maxRetries: number = 5,
+    signal?: AbortSignal
 ): Promise<T> {
     let lastError: any;
     for (let i = 0; i < maxRetries; i++) {
+        if (signal?.aborted) {
+            throw new Error("Aborted");
+        }
         try {
             const result = await operation();
             if (validator(result)) {
                 return result;
             }
             throw new Error(`Validation failed: Result is empty or invalid.`);
-        } catch (e) {
+        } catch (e: any) {
+            if (e.name === 'AbortError' || e.message === 'Aborted' || signal?.aborted) {
+                throw e;
+            }
             lastError = e;
             const delay = Math.pow(2, i) * 1000;
-            await wait(delay);
+            await new Promise<void>((resolve, reject) => {
+                const t = setTimeout(() => {
+                    if (signal) signal.removeEventListener('abort', abortHandler);
+                    resolve();
+                }, delay);
+                const abortHandler = () => {
+                    clearTimeout(t);
+                    reject(new Error("Aborted"));
+                };
+                if (signal) signal.addEventListener('abort', abortHandler);
+            });
         }
     }
     throw new Error(`[${agentName}] Execution failed after ${maxRetries} retries: ${lastError instanceof Error ? lastError.message : String(lastError)}`);
@@ -44,9 +61,10 @@ export const analyzeNarrative = async (
     onProgress?: (msg: string) => void,
     onBatchComplete?: (episodes: any[], meta: any) => void,
     directorStyle?: string,
-    directorStrength?: number
+    directorStrength?: number,
+    signal?: AbortSignal
 ): Promise<NarrativeBlueprint> => {
-    return await runAgent1_NarrativeAnalysis(text, language, prevContext, episodeCount, onProgress, onBatchComplete, directorStyle, directorStrength);
+    return await runAgent1_NarrativeAnalysis(text, language, prevContext, episodeCount, onProgress, onBatchComplete, directorStyle, directorStrength, signal);
 };
 
 // --- Step 1: Generate Beat Sheet + Extract Assets ---
@@ -56,7 +74,8 @@ export const generateBeatSheet = async (
     language: string,
     style: GlobalStyle,
     existingAssets: Asset[] = [],
-    overrideText?: string
+    overrideText?: string,
+    signal?: AbortSignal
 ): Promise<{ beatSheet: MasterBeatSheet; assets: Asset[]; scenes: Scene[] }> => {
     const workStyle = style.work?.custom || (style.work?.selected !== 'None' ? style.work?.selected : '') || '';
     const useOriginalCharacters = style.work?.useOriginalCharacters || false;
@@ -94,11 +113,12 @@ export const generateBeatSheet = async (
     }, null, 2);
 
     const beatSheet = await executeWithRetryAndValidation(
-        () => runAgent2_Annotation(scriptText, language, compactLensLibrary, visualDna, narrativeContext),
+        () => runAgent2_Annotation(scriptText, language, compactLensLibrary, visualDna, narrativeContext, signal),
         (res) => res && Array.isArray(res.beats) && res.beats.length > 0,
         "Agent 2 (Full Director)",
         { episode: episode.episode_number, language },
-        2
+        2,
+        signal
     );
 
     // ------------------- 新增：资产提取与智能继承逻辑 -------------------
@@ -109,7 +129,7 @@ export const generateBeatSheet = async (
         const extractedNames = new Set(extracted.map(a => a.name));
         const extractedIds = new Set(extracted.map(a => a.id));
         
-        // 查找在剧本中出现，且未被 LLM 提取的已有资产
+        // 查找在剧本中出现，且未被 LLM 提取 of 已有资产
         const inherited = existing.filter(ea => {
             const isNotExtracted = !extractedNames.has(ea.name) && !extractedIds.has(ea.id);
             // 简单粗暴的文本包含匹配（可涵盖绝大多数人名/道具名）
@@ -128,14 +148,17 @@ export const generateBeatSheet = async (
     const fullBeatsText = (beatSheet.beats || []).map((b: any) => b.visual_action || '').join(' ');
 
     // 第 1 次提取
-    let rawBeatAssets = await extractAssetsFromBeats(beatSheet, language, existingAssets, workStyle, useOriginalCharacters);
+    let rawBeatAssets = await extractAssetsFromBeats(beatSheet, language, existingAssets, workStyle, useOriginalCharacters, signal);
     let beatAssets = enrichWithExisting(rawBeatAssets, existingAssets, fullBeatsText);
 
     // 智能重试：兜底后如果依然为 0，大概率是空镜剧本。只允许 1 次额外重试，防止大模型抽风漏掉“全新角色”。
     let attempts = 1;
     while (beatAssets.length === 0 && attempts < 2) {
+        if (signal?.aborted) {
+            throw new Error("Aborted");
+        }
         console.warn(`[generateBeatSheet] Asset extraction returned empty, fast retry ${attempts}/1...`);
-        rawBeatAssets = await extractAssetsFromBeats(beatSheet, language, existingAssets, workStyle, useOriginalCharacters);
+        rawBeatAssets = await extractAssetsFromBeats(beatSheet, language, existingAssets, workStyle, useOriginalCharacters, signal);
         beatAssets = enrichWithExisting(rawBeatAssets, existingAssets, fullBeatsText);
         attempts++;
     }
@@ -167,7 +190,8 @@ export const generatePromptsFromBeats = async (
     episodeNumber: number,
     language: string,
     assets: Asset[],
-    style: GlobalStyle
+    style: GlobalStyle,
+    signal?: AbortSignal
 ): Promise<{ scenes: Scene[]; visualDna: string }> => {
     // 锁定后的DNA直接从 style.visualTags 读取
     // computeStylePrefix 会处理 1:1 还原等特殊逻辑
@@ -176,11 +200,12 @@ export const generatePromptsFromBeats = async (
     const stylePrefix = computeStylePrefix(style);
 
     const scenes = await executeWithRetryAndValidation(
-        () => runAgent3_AssetProduction(beatSheet, language, assets, stylePrefix, style.aspectRatio || '16:9'),
+        () => runAgent3_AssetProduction(beatSheet, language, assets, stylePrefix, style.aspectRatio || '16:9', undefined, signal),
         (res) => res && Array.isArray(res) && res.length > 0,
         "Agent 3 (Asset Producer)",
         { beatCount: beatSheet.beats.length },
-        1 // Agent 3 handles retries internally
+        1, // Agent 3 handles retries internally
+        signal
     );
 
     const labeledScenes = scenes.map(scene => ({
@@ -196,13 +221,14 @@ export const generatePromptsFromBeatsStream = async function* (
     episodeNumber: number,
     language: string,
     assets: Asset[],
-    style: GlobalStyle
+    style: GlobalStyle,
+    signal?: AbortSignal
 ): AsyncGenerator<{ scenes: Scene[]; visualDna?: string }> {
     let visualDna = style.visualTags || '';
     const stylePrefix = computeStylePrefix(style);
 
     let firstChunk = true;
-    for await (const chunk of runAgent3_AssetProductionStream(beatSheet, language, assets, stylePrefix, style.aspectRatio || '16:9')) {
+    for await (const chunk of runAgent3_AssetProductionStream(beatSheet, language, assets, stylePrefix, style.aspectRatio || '16:9', undefined, signal)) {
         if (!chunk || chunk.length === 0) continue;
         
         const labeledScenes = chunk.map(scene => ({
@@ -226,9 +252,10 @@ export const generateEpisodeScenes = async (
     language: string,
     assets: Asset[],
     style: GlobalStyle,
-    overrideText?: string
+    overrideText?: string,
+    signal?: AbortSignal
 ): Promise<Scene[]> => {
-    const { beatSheet } = await generateBeatSheet(episode, batch_meta, language, style, assets, overrideText);
-    const result = await generatePromptsFromBeats(beatSheet, episode.episode_number, language, assets, style);
+    const { beatSheet } = await generateBeatSheet(episode, batch_meta, language, style, assets, overrideText, signal);
+    const result = await generatePromptsFromBeats(beatSheet, episode.episode_number, language, assets, style, signal);
     return result.scenes;
 };

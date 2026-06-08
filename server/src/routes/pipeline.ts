@@ -5,6 +5,15 @@ const router = Router();
 
 // POST /api/pipeline/analyze
 router.post('/analyze', async (req: Request, res: Response) => {
+    const controller = new AbortController();
+    const handleClose = () => {
+        if (!res.writableEnded) {
+            console.log('[Pipeline/analyze] Connection closed prematurely by client, aborting request');
+            controller.abort();
+        }
+    };
+    res.on('close', handleClose);
+
     try {
         const { text, language, prevContext, episodeCount, directorStyle, directorStrength } = req.body;
         if (!text || !language) {
@@ -19,17 +28,31 @@ router.post('/analyze', async (req: Request, res: Response) => {
             undefined,
             undefined,
             directorStyle,
-            directorStrength
+            directorStrength,
+            controller.signal
         );
         res.json(result);
     } catch (e: any) {
         console.error('[Pipeline/analyze]', e);
-        res.status(500).json({ error: e?.message || 'Internal error' });
+        if (!res.headersSent) {
+            res.status(500).json({ error: e?.message || 'Internal error' });
+        }
+    } finally {
+        res.off('close', handleClose);
     }
 });
 
 // POST /api/pipeline/beat-sheet
 router.post('/beat-sheet', async (req: Request, res: Response) => {
+    const controller = new AbortController();
+    const handleClose = () => {
+        if (!res.writableEnded) {
+            console.log('[Pipeline/beat-sheet] Connection closed prematurely by client, aborting request');
+            controller.abort();
+        }
+    };
+    res.on('close', handleClose);
+
     try {
         const { episode, batch_meta, language, style, existingAssets, overrideText } = req.body;
         if (!episode || !language || !style) {
@@ -42,17 +65,31 @@ router.post('/beat-sheet', async (req: Request, res: Response) => {
             language,
             style,
             existingAssets || [],
-            overrideText
+            overrideText,
+            controller.signal
         );
         res.json(result);
     } catch (e: any) {
         console.error('[Pipeline/beat-sheet]', e);
-        res.status(500).json({ error: e?.message || 'Internal error' });
+        if (!res.headersSent) {
+            res.status(500).json({ error: e?.message || 'Internal error' });
+        }
+    } finally {
+        res.off('close', handleClose);
     }
 });
 
 // POST /api/pipeline/prompts
 router.post('/prompts', async (req: Request, res: Response) => {
+    const controller = new AbortController();
+    const handleClose = () => {
+        if (!res.writableEnded) {
+            console.log('[Pipeline/prompts] Connection closed prematurely by client, aborting request');
+            controller.abort();
+        }
+    };
+    res.on('close', handleClose);
+
     try {
         const { beatSheet, episodeNumber, language, assets, style } = req.body;
         if (!beatSheet || !language || !style) {
@@ -64,12 +101,17 @@ router.post('/prompts', async (req: Request, res: Response) => {
             episodeNumber || 0,
             language,
             assets || [],
-            style
+            style,
+            controller.signal
         );
         res.json({ scenes: result.scenes, visualDna: result.visualDna });
     } catch (e: any) {
         console.error('[Pipeline/prompts]', e);
-        res.status(500).json({ error: e?.message || 'Internal error' });
+        if (!res.headersSent) {
+            res.status(500).json({ error: e?.message || 'Internal error' });
+        }
+    } finally {
+        res.off('close', handleClose);
     }
 });
 
@@ -107,6 +149,15 @@ router.post('/retry-single-beat', async (req: Request, res: Response) => {
 
 // POST /api/pipeline/prompts-stream
 router.post('/prompts-stream', async (req: Request, res: Response) => {
+    const controller = new AbortController();
+    const handleClose = () => {
+        if (!res.writableEnded) {
+            console.log('[Pipeline/prompts-stream] Connection closed prematurely by client, aborting request');
+            controller.abort();
+        }
+    };
+    res.on('close', handleClose);
+
     try {
         const { beatSheet, episodeNumber, language, assets, style } = req.body;
         if (!beatSheet || !language || !style) {
@@ -121,7 +172,8 @@ router.post('/prompts-stream', async (req: Request, res: Response) => {
             episodeNumber || 0,
             language,
             assets || [],
-            style
+            style,
+            controller.signal
         );
 
         for await (const chunk of generator) {
@@ -136,11 +188,22 @@ router.post('/prompts-stream', async (req: Request, res: Response) => {
             res.write(JSON.stringify({ type: 'error', error: e?.message || 'Internal error' }) + '\n');
             res.end();
         }
+    } finally {
+        res.off('close', handleClose);
     }
 });
 
 // POST /api/pipeline/episode-scenes (legacy combined)
 router.post('/episode-scenes', async (req: Request, res: Response) => {
+    const controller = new AbortController();
+    const handleClose = () => {
+        if (!res.writableEnded) {
+            console.log('[Pipeline/episode-scenes] Connection closed prematurely by client, aborting request');
+            controller.abort();
+        }
+    };
+    res.on('close', handleClose);
+
     try {
         const { episode, batch_meta, language, assets, style, overrideText } = req.body;
         if (!episode || !language || !style) {
@@ -153,12 +216,17 @@ router.post('/episode-scenes', async (req: Request, res: Response) => {
             language,
             assets || [],
             style,
-            overrideText
+            overrideText,
+            controller.signal
         );
         res.json({ scenes: result });
     } catch (e: any) {
         console.error('[Pipeline/episode-scenes]', e);
-        res.status(500).json({ error: e?.message || 'Internal error' });
+        if (!res.headersSent) {
+            res.status(500).json({ error: e?.message || 'Internal error' });
+        }
+    } finally {
+        res.off('close', handleClose);
     }
 });
 

@@ -14,7 +14,8 @@ export const runAgent1_NarrativeAnalysis = async (
     onProgress?: (msg: string) => void,
     onBatchComplete?: (episodes: any[], meta: any) => void,
     directorStyle?: string,
-    directorStrength?: number
+    directorStrength?: number,
+    signal?: AbortSignal
 ): Promise<NarrativeBlueprint> => {
     if (onProgress) {
         onProgress(`Generating Narrative Blueprint...`);
@@ -54,6 +55,9 @@ export const runAgent1_NarrativeAnalysis = async (
     let latestCliffhanger = "";
 
     for (let i = 0; i < batches.length; i++) {
+        if (signal?.aborted) {
+            throw new Error("Aborted");
+        }
         const batch = batches[i];
         const currentBatchNum = i + 1;
         const totalBatches = batches.length;
@@ -78,7 +82,7 @@ export const runAgent1_NarrativeAnalysis = async (
         } else if (episodeCount && episodeCount > 0) {
             episodeInstruction = `- **强制分集**: 用户指定了生成 **${episodeCount} 集**。你必须严格将输入内容划分为 ${episodeCount} 集。`;
         } else {
-            episodeInstruction = "- **智能分集**: 根据输入文本的体量和剧情起伏，将其自动划分为 N 集（每集 3-5 分钟）。";
+            episodeInstruction = "- **智能分集**: 根据输入文本的体量 and 剧情起伏，将其自动划分为 N 集（每集 3-5 分钟）。";
         }
 
         const narrativeSchema = {
@@ -138,6 +142,9 @@ export const runAgent1_NarrativeAnalysis = async (
         let batchSuccess = false;
 
         for (let attempt = 1; attempt <= MAX_BATCH_RETRIES; attempt++) {
+            if (signal?.aborted) {
+                throw new Error("Aborted");
+            }
             try {
                 if (attempt > 1 && onProgress) {
                     onProgress(`[Agent1][Batch ${currentBatchNum}/${totalBatches}][Retry ${attempt}/${MAX_BATCH_RETRIES}]...`);
@@ -165,9 +172,10 @@ export const runAgent1_NarrativeAnalysis = async (
                         systemInstruction: sysPrompt,
                         responseMimeType: "application/json",
                         responseSchema: narrativeSchema,
-                        maxOutputTokens: 65536
+                        maxOutputTokens: 65536,
+                        signal
                     }
-                }), 3, 5000);
+                }), 3, 5000, undefined, signal);
 
                 console.debug(`[Agent1] Batch ${currentBatchNum}/${totalBatches} raw response received (${(response.text || '').length} chars)`);
 
@@ -235,9 +243,22 @@ export const runAgent1_NarrativeAnalysis = async (
 
                 console.warn(`[Agent1][Batch ${currentBatchNum}/${totalBatches}][Retry ${attempt}/${MAX_BATCH_RETRIES}] returned no valid episodes.`);
             } catch (e: any) {
+                if (e.name === 'AbortError' || e.message === 'Aborted' || signal?.aborted) {
+                    throw e;
+                }
                 console.error(`[Agent1][Batch ${currentBatchNum}/${totalBatches}][Retry ${attempt}/${MAX_BATCH_RETRIES}] failed:`, e?.message || e);
                 if (attempt < MAX_BATCH_RETRIES) {
-                    await wait(Math.pow(2, attempt) * 2000);
+                    await new Promise<void>((resolve, reject) => {
+                        const t = setTimeout(() => {
+                            if (signal) signal.removeEventListener('abort', abortHandler);
+                            resolve();
+                        }, Math.pow(2, attempt) * 2000);
+                        const abortHandler = () => {
+                            clearTimeout(t);
+                            reject(new Error("Aborted"));
+                        };
+                        if (signal) signal.addEventListener('abort', abortHandler);
+                    });
                 }
             }
         }
