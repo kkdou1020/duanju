@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ProviderConfig } from '@/shared/types';
 import { modelManager, parseVideoModel } from '@/services/ai/model-manager';
-import { Check, Trash2, Plus, Info, RefreshCw, AlertCircle } from 'lucide-react';
+import { Check, Trash2, Plus, Info, RefreshCw, AlertCircle, Download, Upload } from 'lucide-react';
 
 interface SettingsPanelProps {
   providers: ProviderConfig[];
@@ -148,13 +148,101 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     }
   };
 
+  const handleExportSettings = () => {
+    try {
+      const config = modelManager.getConfig();
+      const backupData = {
+        type: 'nanobanana_settings_backup',
+        version: 1,
+        timestamp: Date.now(),
+        config
+      };
+      const jsonStr = JSON.stringify(backupData, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `nanobanana_settings_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      console.error("Export settings failed", e);
+      alert(language === "Chinese" ? `导出设置失败: ${e.message}` : `Failed to export settings: ${e.message}`);
+    }
+  };
+
+  const handleImportSettings = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const reader = new FileReader();
+      const jsonStr = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsText(file);
+      });
+
+      const data = JSON.parse(jsonStr);
+      if (data.type !== 'nanobanana_settings_backup' || !data.config) {
+        throw new Error(language === "Chinese" ? "无效的系统设置备份文件" : "Invalid settings backup file");
+      }
+
+      const confirmMsg = language === "Chinese"
+        ? "导入设置将覆盖您当前的 API Key、服务商 URL 以及通道模型配置，确定要继续吗？"
+        : "Importing settings will overwrite your current API keys, urls and active channels. Continue?";
+
+      if (!window.confirm(confirmMsg)) return;
+
+      // Update configuration in modelManager
+      modelManager.setConfig(data.config);
+
+      // Update local React state of providers so UI updates immediately
+      if (data.config.providers) {
+        onUpdateProviders(data.config.providers);
+      }
+
+      // Update active model states in parent
+      if (data.config.textmodel) onChangeActiveModel('text', data.config.textmodel);
+      if (data.config.imagemodel) onChangeActiveModel('image', data.config.imagemodel);
+      if (data.config.videomodel) onChangeActiveModel('video', data.config.videomodel);
+
+      alert(language === "Chinese" ? "系统设置导入成功！" : "Settings imported successfully!");
+    } catch (err: any) {
+      console.error("Import settings failed", err);
+      alert(language === "Chinese" ? `导入设置失败: ${err.message}` : `Failed to import settings: ${err.message}`);
+    } finally {
+      e.target.value = '';
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-white dark:bg-dark-800 border-x border-b border-gray-200 dark:border-white/10 rounded-b-xl overflow-hidden shadow-sm dark:shadow-xl p-4 space-y-4 overflow-y-auto">
       {/* Top Provider Selector Grid */}
       <div>
-        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block mb-2">
-          {language === "Chinese" ? "接口通道选择" : "Interface Channel Selector"}
-        </span>
+        <div className="flex justify-between items-center mb-2">
+          <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">
+            {language === "Chinese" ? "接口通道选择" : "Interface Channel Selector"}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportSettings}
+              className="text-[10px] text-indigo-600 dark:text-banana-400 hover:underline flex items-center gap-0.5 font-bold"
+              title={language === "Chinese" ? "导出系统设置备份 (JSON)" : "Export Settings Backup (JSON)"}
+            >
+              <Download className="w-3 h-3" />
+              {language === "Chinese" ? "导出设置" : "Export Settings"}
+            </button>
+            <span className="text-gray-300 dark:text-white/10 text-[10px]">|</span>
+            <label className="text-[10px] text-indigo-600 dark:text-banana-400 hover:underline flex items-center gap-0.5 font-bold cursor-pointer" title={language === "Chinese" ? "导入系统设置备份 (JSON)" : "Import Settings Backup (JSON)"}>
+              <Upload className="w-3 h-3" />
+              {language === "Chinese" ? "导入设置" : "Import Settings"}
+              <input type="file" accept=".json" className="hidden" onChange={handleImportSettings} />
+            </label>
+          </div>
+        </div>
         <div className="flex flex-wrap gap-2">
           {providers.map(p => (
             <button
