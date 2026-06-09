@@ -247,13 +247,72 @@ export const generateSceneImage = async (
 
     const styleToUse = getStyleWithLockedDna(globalStyle);
 
-    return post('/media/scene-image', {
+    // Step 1: Submit the task asynchronously
+    const { taskId } = await post('/media/scene-image-async', {
         scene,
         globalStyle: styleToUse,
         assets: usedAssets,
         optionId,
         customPrompt
     }, signal);
+
+    if (!taskId) {
+        throw new Error("Failed to submit image generation task: no taskId returned");
+    }
+
+    // Step 2: Poll status until task completes
+    return new Promise((resolve, reject) => {
+        let attempts = 0;
+        const maxRetries = 120; // 120 * 4s = 480 seconds total timeout
+        const intervalMs = 4000;
+
+        const cleanup = () => {
+            clearInterval(timer);
+            if (signal) {
+                signal.removeEventListener('abort', handleAbort);
+            }
+        };
+
+        const handleAbort = () => {
+            cleanup();
+            reject(new DOMException("Aborted", "AbortError"));
+        };
+
+        if (signal) {
+            if (signal.aborted) {
+                reject(new DOMException("Aborted", "AbortError"));
+                return;
+            }
+            signal.addEventListener('abort', handleAbort);
+        }
+
+        const timer = setInterval(async () => {
+            attempts++;
+            if (attempts > maxRetries) {
+                cleanup();
+                reject(new Error("Image generation timed out after polling."));
+                return;
+            }
+            if (signal?.aborted) {
+                handleAbort();
+                return;
+            }
+            try {
+                const res = await get<{ done: boolean; status: string; url?: string; imageAssetId?: string; error?: string }>(`/media/scene-image-status/${encodeURIComponent(taskId)}`);
+                if (res.done) {
+                    cleanup();
+                    if (res.status === 'completed' && res.url) {
+                        resolve({ imageUrl: res.url, imageAssetId: res.imageAssetId });
+                    } else {
+                        reject(new Error(res.error || "Image generation failed"));
+                    }
+                }
+            } catch (err) {
+                cleanup();
+                reject(err);
+            }
+        }, intervalMs);
+    });
 };
 
 const uploadCache = new Map<string, string>();

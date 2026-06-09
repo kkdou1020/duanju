@@ -143,6 +143,71 @@ router.post('/scene-image', async (req: Request, res: Response) => {
     }
 });
 
+interface ImageTask {
+    status: 'pending' | 'completed' | 'failed';
+    imageUrl?: string;
+    imageAssetId?: string;
+    error?: string;
+    createdAt: number;
+}
+const imageTasks = new Map<string, ImageTask>();
+
+// POST /api/media/scene-image-async
+router.post('/scene-image-async', async (req: Request, res: Response) => {
+    try {
+        const { scene, globalStyle, assets, optionId, customPrompt } = req.body;
+        if (!scene) {
+            return res.status(400).json({ error: 'Missing required field: scene' });
+        }
+
+        const taskId = `img-task-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        imageTasks.set(taskId, {
+            status: 'pending',
+            createdAt: Date.now()
+        });
+
+        // Run in background
+        generateSceneImage(scene, globalStyle, assets || [], optionId, undefined, customPrompt)
+            .then((result) => {
+                imageTasks.set(taskId, {
+                    status: 'completed',
+                    imageUrl: result.imageUrl,
+                    imageAssetId: result.imageAssetId,
+                    createdAt: Date.now()
+                });
+            })
+            .catch((err) => {
+                console.error(`[Async Image Task ${taskId} Failed]`, err);
+                imageTasks.set(taskId, {
+                    status: 'failed',
+                    error: err?.message || 'Image generation failed',
+                    createdAt: Date.now()
+                });
+            });
+
+        res.json({ taskId });
+    } catch (e: any) {
+        console.error('[Media/scene-image-async]', e);
+        res.status(500).json({ error: e?.message || 'Internal error' });
+    }
+});
+
+// GET /api/media/scene-image-status/:taskId
+router.get('/scene-image-status/:taskId', (req: Request, res: Response) => {
+    const { taskId } = req.params;
+    const task = imageTasks.get(taskId);
+    if (!task) {
+        return res.status(404).json({ error: 'Task not found' });
+    }
+    res.json({
+        done: task.status !== 'pending',
+        status: task.status,
+        url: task.imageUrl,
+        imageAssetId: task.imageAssetId,
+        error: task.error
+    });
+});
+
 // POST /api/media/video — Submit task, return immediately
 router.post('/video', async (req: Request, res: Response) => {
     try {
