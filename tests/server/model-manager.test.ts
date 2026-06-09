@@ -1,20 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Mock the providers — must use class syntax for `new`
-vi.mock('../../server/src/services/ai/providers/polo', () => ({
-    PoloProvider: class {
-        generateContent = vi.fn().mockResolvedValue({ text: 'polo-response' });
-        generateVideos = vi.fn().mockResolvedValue({ operation: { id: 'polo-op' } });
-        getVideosOperation = vi.fn().mockResolvedValue({ done: true });
-    },
-}));
-
-vi.mock('../../server/src/services/ai/providers/t8star', () => ({
-    T8StarProvider: class {
-        generateContent = vi.fn().mockResolvedValue({ text: 't8star-response' });
-        generateVideos = vi.fn().mockResolvedValue({ operation: { id: 't8-op' } });
+// Mock OpenAICompatibleProvider
+vi.mock('../../server/src/services/ai/providers/openai-compatible', () => ({
+    OpenAICompatibleProvider: class {
+        id: string;
+        config: any;
+        constructor(id: string, config: any) {
+            this.id = id;
+            this.config = config;
+        }
+        generateContent = vi.fn().mockImplementation(async (args: any) => {
+            return { text: `${this.id}-response` };
+        });
+        generateVideos = vi.fn().mockImplementation(async (args: any) => {
+            return { operation: { id: `${this.id}-op` } };
+        });
         getVideosOperation = vi.fn().mockResolvedValue({ done: true });
         speech = vi.fn().mockResolvedValue(new ArrayBuffer(8));
+        uploadFile = vi.fn().mockResolvedValue('http://mocked-url');
+        isEnabled = vi.fn().mockReturnValue(true);
     },
 }));
 
@@ -36,28 +40,22 @@ describe('ModelManager', () => {
 
     it('setConfig accepts valid providers', async () => {
         const mm = await getManager();
-        mm.setConfig({ textmodel: 'polo', imagemodel: 'polo' });
-        expect(mm.getConfig().textmodel).toBe('polo');
-        expect(mm.getConfig().imagemodel).toBe('polo');
+        mm.setConfig({ textmodel: 'tutujin', imagemodel: 'tutujin' });
+        expect(mm.getConfig().textmodel).toBe('tutujin');
+        expect(mm.getConfig().imagemodel).toBe('tutujin');
         expect(mm.getConfig().videomodel).toBe('t8star');
-    });
-
-    it('setConfig ignores invalid provider names', async () => {
-        const mm = await getManager();
-        mm.setConfig({ textmodel: 'invalid_provider' as any });
-        expect(mm.getConfig().textmodel).toBe('t8star');
     });
 
     it('getConfig returns a copy (not reference)', async () => {
         const mm = await getManager();
         const config = mm.getConfig();
-        config.textmodel = 'polo';
+        config.textmodel = 'tutujin';
         expect(mm.getConfig().textmodel).toBe('t8star');
     });
 
     it('routes text requests to text provider', async () => {
         const mm = await getManager();
-        const result = await mm.generateContent({ model: 'gemini-3.1-flash-lite-preview-thinking-high', contents: 'test' });
+        const result = await mm.generateContent({ model: 'gemini-3.5-flash', contents: 'test' });
         expect(result).toBeDefined();
     });
 

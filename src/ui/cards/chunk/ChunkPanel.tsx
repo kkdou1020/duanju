@@ -735,6 +735,7 @@ const CanvasModalWrapper: React.FC<CanvasModalWrapperProps> = ({
             genStatusMap={genStatusMap}
             videoStatusMap={videoStatusMap}
             onAddAsset={onAddAsset}
+            language={language}
         />
     );
 };

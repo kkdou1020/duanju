@@ -94,35 +94,40 @@ describe('constructVideoPrompt', () => {
 // submitVideoGeneration & pollVideoStatus
 // ════════════════════════════════════════════
 describe('submitVideoGeneration', () => {
-    it('routes to veo3.1-components when isStartEndFrameMode is false and model is veo', async () => {
-        getModelManager().setConfig({ t8starVideoModel: 'veo' });
+    it('cleans model name from config (splits by colon)', async () => {
+        getModelManager().setConfig({ t8starVideoModel: 'veo3.1-components:auto' });
         const spy = vi.spyOn(ai.models, 'generateVideos').mockResolvedValue({
             operation: { id: 'op_123' }
         } as any);
 
-        const scene = baseScene({ id: 'S01', isStartEndFrameMode: false });
-        const result = await submitVideoGeneration('https://example.com/img.png', scene, '16:9', []);
-        
-        expect(spy).toHaveBeenCalled();
-        const callArgs = spy.mock.calls[0][0];
-        expect(callArgs.model).toBe('veo3.1-components');
-        expect(result.taskId).toBe('op_123');
-        spy.mockRestore();
+        try {
+            const scene = baseScene({ id: 'S01', isStartEndFrameMode: false });
+            const result = await submitVideoGeneration('https://example.com/img.png', scene, '16:9', []);
+            
+            expect(spy).toHaveBeenCalled();
+            const callArgs = spy.mock.calls[0][0];
+            expect(callArgs.model).toBe('veo3.1-components');
+            expect(result.taskId).toBe('op_123');
+        } finally {
+            spy.mockRestore();
+        }
     });
 
-    it('routes to veo3.1 when isStartEndFrameMode is true and model is veo', async () => {
-        getModelManager().setConfig({ t8starVideoModel: 'veo' });
+    it('cleans model name from scene (splits by colon)', async () => {
         const spy = vi.spyOn(ai.models, 'generateVideos').mockResolvedValue({
             operation: { id: 'op_456' }
         } as any);
 
-        const scene = baseScene({ id: 'S01', isStartEndFrameMode: true });
-        const result = await submitVideoGeneration('https://example.com/img.png', scene, '16:9', []);
-        
-        expect(spy).toHaveBeenCalled();
-        const callArgs = spy.mock.calls[0][0];
-        expect(callArgs.model).toBe('veo3.1');
-        spy.mockRestore();
+        try {
+            const scene = baseScene({ id: 'S01', isStartEndFrameMode: true, videoModel: 'veo3.1:start_end_frame' });
+            const result = await submitVideoGeneration('https://example.com/img.png', scene, '16:9', []);
+            
+            expect(spy).toHaveBeenCalled();
+            const callArgs = spy.mock.calls[0][0];
+            expect(callArgs.model).toBe('veo3.1');
+        } finally {
+            spy.mockRestore();
+        }
     });
 
     it('throws error when traditional model is used with video reference assets', async () => {
@@ -143,6 +148,7 @@ describe('submitVideoGeneration', () => {
         const scene = baseScene({ id: 'S01', visual_desc: '[@图像_岑矜#hero] 走进大殿' });
         const heroAsset: Asset = { id: 'hero', name: '岑矜', type: 'character', refImageUrl: 'https://example.com/hero.png' } as any;
 
+        console.log(`[TEST DEBUG] getConfig in test:`, JSON.stringify(getModelManager().getConfig()));
         await submitVideoGeneration('https://example.com/img.png', scene, '16:9', [heroAsset]);
 
         expect(spy).toHaveBeenCalled();

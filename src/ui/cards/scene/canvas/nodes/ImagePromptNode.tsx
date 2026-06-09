@@ -3,6 +3,7 @@ import { Handle, Position } from '@xyflow/react';
 import { Aperture, Settings, Sparkles, Loader2 } from 'lucide-react';
 import MentionTextarea, { SceneImageCandidate } from '@/ui/components/MentionTextarea';
 import { ImageGenStatus, Asset } from '@/shared/types';
+import { useModelConfig } from '@/services/ai/model-manager';
 
 interface ImagePromptNodeProps {
     id: string;
@@ -109,6 +110,13 @@ export const ImagePromptNode: React.FC<ImagePromptNodeProps> = ({ id, data }) =>
         isSelfGenerating
     } = data;
 
+    const config = useModelConfig();
+    const activeImgProvider = config.providers.find(p => p.id === config.imagemodel);
+    const imageModels = activeImgProvider?.imageModels && activeImgProvider.imageModels.length > 0
+        ? activeImgProvider.imageModels
+        : ['gpt-image-2'];
+
+    const defaultImageModel = imageModels[0];
     const isGenerating = genStatus === ImageGenStatus.GENERATING;
 
     return (
@@ -135,80 +143,73 @@ export const ImagePromptNode: React.FC<ImagePromptNodeProps> = ({ id, data }) =>
                 <div className="flex flex-col gap-1 col-span-2">
                     <span className="text-[10px] text-gray-400 font-bold tracking-wide">生图模型</span>
                     <select
-                        value={imageModel || 'gpt-image-2'}
+                        value={imageModel || defaultImageModel}
                         onChange={(e) => {
                             const newModel = e.target.value;
                             onUpdate('imageModel', newModel);
                             if (newModel === 'nano-banana-pro') {
                                 onUpdate('imageQuality', '2K');
-                            } else if (newModel === 'polo') {
-                                onUpdate('imageSize', '');
-                                onUpdate('imageQuality', '');
                             } else {
                                 onUpdate('imageQuality', 'auto');
                             }
                         }}
                         className="text-xs bg-[#16161a] border border-white/10 rounded-lg px-2.5 py-1.5 text-gray-200 outline-none focus:border-cyan-500 cursor-pointer w-full"
                     >
-                        <option value="gpt-image-2">gpt-image-2</option>
-                        <option value="nano-banana-pro">nano-banana-pro</option>
-                        <option value="gpt-image-2-official">gpt-image-2 (官方版)</option>
+                        {imageModels.map(m => (
+                            <option key={m} value={m}>{m}</option>
+                        ))}
                     </select>
                 </div>
 
-                {imageModel !== 'polo' && (
-                    <>
-                        <div className="flex flex-col gap-1">
-                            <span className="text-[10px] text-gray-400 font-bold tracking-wide">尺寸比例</span>
+                <div className="flex flex-col gap-1">
+                    <span className="text-[10px] text-gray-400 font-bold tracking-wide">尺寸比例</span>
+                    <select
+                        value={imageSize || '16:9'}
+                        onChange={(e) => onUpdate('imageSize', e.target.value)}
+                        className="text-xs bg-[#16161a] border border-white/10 rounded-lg px-2 py-1.5 text-gray-200 outline-none focus:border-cyan-500 cursor-pointer"
+                    >
+                        <option value="16:9">16:9</option>
+                        <option value="9:16">9:16</option>
+                        <option value="1:1">1:1</option>
+                        <option value="3:2">3:2</option>
+                        <option value="2:3">2:3</option>
+                        <option value="4:5">4:5</option>
+                        <option value="5:4">5:4</option>
+                        <option value="3:4">3:4</option>
+                        <option value="4:3">4:3</option>
+                    </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                    {imageModel === 'nano-banana-pro' ? (
+                        <>
+                            <span className="text-[10px] text-gray-400 font-bold tracking-wide">图像分辨率</span>
                             <select
-                                value={imageSize || '16:9'}
-                                onChange={(e) => onUpdate('imageSize', e.target.value)}
+                                value={imageQuality || '2K'}
+                                onChange={(e) => onUpdate('imageQuality', e.target.value)}
                                 className="text-xs bg-[#16161a] border border-white/10 rounded-lg px-2 py-1.5 text-gray-200 outline-none focus:border-cyan-500 cursor-pointer"
                             >
-                                <option value="16:9">16:9</option>
-                                <option value="9:16">9:16</option>
-                                <option value="1:1">1:1</option>
-                                <option value="3:2">3:2</option>
-                                <option value="2:3">2:3</option>
-                                <option value="4:5">4:5</option>
-                                <option value="5:4">5:4</option>
-                                <option value="3:4">3:4</option>
-                                <option value="4:3">4:3</option>
+                                <option value="1K">1K</option>
+                                <option value="2K">2K</option>
+                                <option value="4K" disabled>4K (暂不可用)</option>
                             </select>
-                        </div>
-
-                        <div className="flex flex-col gap-1">
-                            {imageModel === 'nano-banana-pro' ? (
-                                <>
-                                    <span className="text-[10px] text-gray-400 font-bold tracking-wide">图像分辨率</span>
-                                    <select
-                                        value={imageQuality || '2K'}
-                                        onChange={(e) => onUpdate('imageQuality', e.target.value)}
-                                        className="text-xs bg-[#16161a] border border-white/10 rounded-lg px-2 py-1.5 text-gray-200 outline-none focus:border-cyan-500 cursor-pointer"
-                                    >
-                                        <option value="1K">1K</option>
-                                        <option value="2K">2K</option>
-                                        <option value="4K" disabled>4K (暂不可用)</option>
-                                    </select>
-                                </>
-                            ) : (
-                                <>
-                                    <span className="text-[10px] text-gray-400 font-bold tracking-wide">生成质量</span>
-                                    <select
-                                        value={imageQuality || 'auto'}
-                                        onChange={(e) => onUpdate('imageQuality', e.target.value)}
-                                        className="text-xs bg-[#16161a] border border-white/10 rounded-lg px-2 py-1.5 text-gray-200 outline-none focus:border-cyan-500 cursor-pointer"
-                                    >
-                                        <option value="auto">auto</option>
-                                        <option value="low">low</option>
-                                        <option value="medium">medium</option>
-                                        <option value="high">high</option>
-                                    </select>
-                                </>
-                            )}
-                        </div>
-                    </>
-                )}
+                        </>
+                    ) : (
+                        <>
+                            <span className="text-[10px] text-gray-400 font-bold tracking-wide">生成质量</span>
+                            <select
+                                value={imageQuality || 'auto'}
+                                onChange={(e) => onUpdate('imageQuality', e.target.value)}
+                                className="text-xs bg-[#16161a] border border-white/10 rounded-lg px-2 py-1.5 text-gray-200 outline-none focus:border-cyan-500 cursor-pointer"
+                            >
+                                <option value="auto">auto</option>
+                                <option value="low">low</option>
+                                <option value="medium">medium</option>
+                                <option value="high">high</option>
+                            </select>
+                        </>
+                    )}
+                </div>
             </div>
 
             {/* Connected Reference Images Thumbnails */}

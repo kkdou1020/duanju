@@ -44,17 +44,30 @@ app.use('/api/', (req, res, next) => {
 
 // Helper to get API key from environment
 const getApiKey = (target) => {
-  switch (target) {
-    case 'T8_TEXT': return process.env.T8_TEXT_API_KEY || process.env.TEXT_API_KEY;
-    case 'T8_IMAGE': return process.env.T8_IMAGE_API_KEY || process.env.IMAGE_API_KEY;
-    case 'T8_VIDEO': return process.env.T8_VIDEO_API_KEY || process.env.VIDEO_API_KEY;
-    case 'T8_AUDIO': return process.env.T8_AUDIO_API_KEY || process.env.AUDIO_API_KEY;
-    case 'POLO_TEXT': return process.env.POLO_TEXT_API_KEY || process.env.GEMINI_TEXT_API_KEY || process.env.API_KEY;
-    case 'POLO_IMAGE': return process.env.POLO_IMAGE_API_KEY || process.env.GEMINI_IMAGE_API_KEY;
-    case 'POLO_VIDEO': return process.env.POLO_VIDEO_API_KEY || process.env.VIDEO_API_KEY;
-    case 'NANOBANANA': return process.env.NANOBANANA_API_KEY;
-    default: return null;
+  try {
+    const { getModelManager } = require('./dist/services/ai/model-manager');
+    const mm = getModelManager();
+    const providers = mm.getConfig().providers || [];
+    for (const provider of providers) {
+      const prefix = provider.id === "t8star" ? "T8" : provider.id.toUpperCase();
+      if (target.startsWith(`${prefix}_`)) {
+        const scope = target.substring(prefix.length + 1);
+        const apiKey = process.env[`${prefix}_${scope}_API_KEY`] || process.env[`${prefix}_API_KEY`] || provider.apiKey;
+        return apiKey;
+      }
+    }
+  } catch (e) {
+    if (target.startsWith('T8_')) {
+      const scope = target.substring(3);
+      return process.env[`T8_${scope}_API_KEY`] || process.env.T8_API_KEY || process.env.API_KEY;
+    }
+    if (target.startsWith('TUTUJIN_')) {
+      const scope = target.substring(8);
+      return process.env[`TUTUJIN_${scope}_API_KEY`] || process.env.TUTUJIN_API_KEY;
+    }
   }
+  if (target === 'NANOBANANA') return process.env.NANOBANANA_API_KEY;
+  return null;
 };
 
 const injectAuthHeader = (proxyReq, req) => {
@@ -65,66 +78,70 @@ const injectAuthHeader = (proxyReq, req) => {
       const authValue = apiKey.toLowerCase().startsWith('bearer ') ? apiKey : `Bearer ${apiKey}`;
       proxyReq.setHeader('Authorization', authValue);
     }
-    // Remove the helper header before forwarding
     proxyReq.removeHeader('x-key-target');
   }
 };
 
-// Proxy for T8Star API
+// Dynamic Wildcard Proxy: handles /api/proxy/:providerId
 app.use(
-  '/api/t8star',
-  createProxyMiddleware({
-    target: 'https://ai.t8star.org',
-    changeOrigin: true,
-    secure: false,
-    timeout: 300000, // 5 minutes
-    proxyTimeout: 300000, // 5 minutes
-    pathRewrite: {
-      '^/api/t8star': '',
-    },
-    onProxyReq: (proxyReq, req, res) => {
-      injectAuthHeader(proxyReq, req);
-      // Log the outgoing request for debugging
-      console.log(`[T8Star Proxy] ${req.method} ${req.url} -> ${proxyReq.path}`);
-      console.log(`[T8Star Proxy] Authorization header present: ${!!proxyReq.getHeader('Authorization')}`);
-    },
-    onProxyRes: (proxyRes, req, res) => {
-      // Remove Content-Length to force chunked transfer, preventing ERR_CONTENT_LENGTH_MISMATCH
-      delete proxyRes.headers['content-length'];
-
-      if (proxyRes.statusCode >= 400) {
-        let body = '';
-        proxyRes.on('data', (chunk) => { body += chunk.toString(); });
-        proxyRes.on('end', () => {
-          console.error(`[T8Star Proxy] ERROR ${proxyRes.statusCode} for ${req.method} ${req.url}`);
-          console.error(`[T8Star Proxy] Response body: ${body.substring(0, 500)}`);
-        });
+  '/api/proxy/:providerId',
+  (req, res, next) => {
+    const providerId = req.params.providerId;
+    try {
+      const { getModelManager } = require('./dist/services/ai/model-manager');
+      const mm = getModelManager();
+      const providers = mm.getConfig().providers || [];
+      const provider = providers.find(p => p.id === providerId);
+      if (!provider || !provider.enabled) {
+        return res.status(404).send('Provider not found or disabled');
       }
-    },
-    onError: (err, req, res) => {
-      console.error('Proxy Error (T8Star):', err);
-      res.status(500).send('Proxy Error');
+
+      const target = provider.baseUrl;
+      const middleware = createProxyMiddleware({
+        target,
+        changeOrigin: true,
+        secure: false,
+        timeout: 300000,
+        proxyTimeout: 300000,
+        pathRewrite: { [`^/api/proxy/${providerId}`]: '' },
+        onProxyReq: (proxyReq, req) => {
+          injectAuthHeader(proxyReq, req);
+          console.log(`[Dynamic Proxy ${provider.name}] ${req.method} ${req.url} -> ${proxyReq.path}`);
+        },
+        onError: (err, req, res) => {
+          console.error(`Proxy Error (${providerId}):`, err);
+          res.status(500).send('Proxy Error');
+        }
+      });
+      return middleware(req, res, next);
+    } catch (e) {
+      return res.status(500).send('Proxy manager not built');
     }
-  })
+  }
 );
 
-// Proxy for Polo API
-app.use(
-  '/api/polo',
-  createProxyMiddleware({
-    target: 'https://work.poloapi.com',
+// Backward-compatible static routes (T8Star and Tutujin)
+const registerStaticProxy = (path, defaultTarget, envPrefix) => {
+  return createProxyMiddleware({
+    target: process.env[`${envPrefix}_BASE_URL`] || defaultTarget,
     changeOrigin: true,
     secure: false,
-    pathRewrite: {
-      '^/api/polo': '',
+    timeout: 300000,
+    proxyTimeout: 300000,
+    pathRewrite: { [`^${path}`]: '' },
+    onProxyReq: (proxyReq, req) => {
+      injectAuthHeader(proxyReq, req);
+      console.log(`[Proxy ${envPrefix}] ${req.method} ${req.url} -> ${proxyReq.path}`);
     },
-    onProxyReq: injectAuthHeader,
     onError: (err, req, res) => {
-      console.error('Proxy Error (Polo):', err);
+      console.error(`Proxy Error (${envPrefix}):`, err);
       res.status(500).send('Proxy Error');
     }
-  })
-);
+  });
+};
+
+app.use('/api/t8star', registerStaticProxy('/api/t8star', 'https://ai.t8star.org', 'T8'));
+app.use('/api/tutujin', registerStaticProxy('/api/tutujin', 'https://api.tutujin.com/v1', 'TUTUJIN'));
 
 // Serve static files from the frontend build directory
 // Assuming the frontend is built to ../dist

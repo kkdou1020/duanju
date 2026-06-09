@@ -91,6 +91,7 @@ export type Translation = {
   genVideo: string;
   videoGenerating: string;
   allChaptersDone: string;
+  tabSettings: string;
 };
 
 export const translations: Record<string, Translation> = {
@@ -183,7 +184,8 @@ export const translations: Record<string, Translation> = {
     sfxLabel: "音效",
     genVideo: "生成视频",
     videoGenerating: "视频生成中...",
-    allChaptersDone: "所有章节已完成！"
+    allChaptersDone: "所有章节已完成！",
+    tabSettings: "系统设置"
   },
   English: {
     appTitle: "NanoBanana",
@@ -274,6 +276,7 @@ export const translations: Record<string, Translation> = {
     sfxLabel: "SFX",
     genVideo: "Gen Video",
     videoGenerating: "Generating...",
-    allChaptersDone: "All chapters completed!"
+    allChaptersDone: "All chapters completed!",
+    tabSettings: "Settings"
   }
 };

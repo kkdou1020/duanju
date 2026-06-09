@@ -20,6 +20,7 @@ export interface PromptOption {
   focal_length?: string;
   aperture?: string;
   videoModel?: string;
+  refImageMode?: string;
 }
 
 export interface DialogueLine {
@@ -61,6 +62,7 @@ export interface Scene {
     startEndVideoOperation?: any;    // Cache of start/end video operation
     canvas?: Record<string, { nodes: any[]; edges: any[] }>; // key is option_id ("A", "B", "C"), value is nodes & edges
     videoModel?: string;
+    refImageMode?: string;
 }
 
 
@@ -158,7 +160,25 @@ export type GenerateContentResponse = {
 
 export type VideosOperation = {
     done: boolean;
-    operation?: { id?: string; status?: string };
+    operation?: { id?: string; status?: string; useBackup?: boolean };
     response?: { generatedVideos?: Array<{ video?: { uri?: string } }> };
     error?: any;
 };
+
+export interface ProviderConfig {
+    id: string;
+    name: string;
+    baseUrl: string;
+    apiKey: string;
+    imageApiKey?: string;
+    videoApiKey?: string;
+    audioApiKey?: string;
+    nanobananaApiKey?: string;
+    modelApiKeys?: Record<string, string>;
+    enabled: boolean;
+    showInNode: boolean;
+    imageModels: string[];
+    videoModels: string[];
+    chatModels: string[];
+}
+

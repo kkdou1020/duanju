@@ -171,8 +171,26 @@ export type GenerateContentResponse = {
 
 export type VideosOperation = {
   done: boolean;
-  operation?: { id?: string; status?: string };
+  operation?: { id?: string; status?: string; useBackup?: boolean };
   response?: { generatedVideos?: Array<{ video?: { uri?: string } }> };
   error?: any;
 };
+
+export interface ProviderConfig {
+  id: string;
+  name: string;
+  baseUrl: string;
+  apiKey: string;
+  imageApiKey?: string;
+  videoApiKey?: string;
+  audioApiKey?: string;
+  nanobananaApiKey?: string;
+  modelApiKeys?: Record<string, string>;
+  enabled: boolean;
+  showInNode: boolean;
+  imageModels: string[];
+  videoModels: string[];
+  chatModels: string[];
+}
+
 

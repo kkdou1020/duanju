@@ -1,24 +1,26 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { 
-    ReactFlow, 
-    Background, 
-    Controls, 
+import {
+    ReactFlow,
+    Background,
+    Controls,
     MiniMap,
-    useNodesState, 
-    useEdgesState, 
-    addEdge, 
+    useNodesState,
+    useEdgesState,
+    addEdge,
     Panel,
     Connection,
     Edge,
     Node
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { X, ChevronLeft, Layers, Plus, Trash2, Aperture, Film, Image as ImageIcon, User, MapPin, Box, Video, Music, Undo, Redo, Copy, Scissors, Clipboard } from 'lucide-react';
+import { X, ChevronLeft, Layers, Plus, Trash2, Aperture, Film, Image as ImageIcon, User, MapPin, Box, Video, Music, Undo, Redo, Copy, Scissors, Clipboard, Settings, Check } from 'lucide-react';
 import { Scene, Asset, GlobalStyle, ImageGenStatus } from '@/shared/types';
 import { Translation } from '@/services/i18n/translations';
 import { loadAssetBase64, saveAsset, downloadAndSaveVideo, loadAssetUrl } from '@/services/storage';
 import { generateSceneImage, generateVideo, pollVideoUntilDone, generateSpeech, pcmToWav } from '@/services/ai';
 import { extractAssetTags, resolveTagToAsset, isStoryboardTag, ASSET_TAG_REGEX, ParsedTag } from '@/shared/asset-tags';
+import { SettingsPanel } from '@/ui/panels/SettingsPanel';
+import { modelManager, useModelConfig } from '@/services/ai/model-manager';
 
 const API_BASE = (import.meta as any).env?.DEV ? 'http://127.0.0.1:3002/api' : '/api';
 
@@ -36,7 +38,7 @@ import { CustomNoteNode } from './nodes/CustomNoteNode';
 const extractVideoFrame = (videoUrl: string, timeType: 'start' | 'end'): Promise<Blob> => {
     return new Promise((resolve, reject) => {
         const video = document.createElement('video');
-        
+
         // Style and append the video to the DOM to force browser decoding pipelines to initialize
         video.style.position = 'absolute';
         video.style.width = '0';
@@ -44,7 +46,7 @@ const extractVideoFrame = (videoUrl: string, timeType: 'start' | 'end'): Promise
         video.style.opacity = '0';
         video.style.pointerEvents = 'none';
         document.body.appendChild(video);
-        
+
         const timeoutId = setTimeout(() => {
             cleanup();
             reject(new Error('Video frame extraction timed out'));
@@ -104,10 +106,10 @@ const extractVideoFrame = (videoUrl: string, timeType: 'start' | 'end'): Promise
         if (!videoUrl.startsWith('blob:')) {
             video.crossOrigin = 'anonymous';
         }
-        
+
         video.muted = true;
         video.playsInline = true;
-        
+
         // Trigger media load sequence
         let resolvedSrc = videoUrl;
         if (videoUrl.startsWith('http')) {
@@ -172,6 +174,7 @@ interface SceneCanvasModalProps {
     videoStatusMap: Record<string, ImageGenStatus>;
     onAddAsset?: (asset: Asset) => void;
     initialOptionId?: string;
+    language?: string;
 }
 
 const CAMERAS = ['None', 'Arri Alexa Mini LF', 'Red V-Raptor', 'Sony Venice 2', 'Panavision DXL2', 'BMD Ursa Mini Pro', 'Canon C500 Mk II'];
@@ -245,10 +248,13 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
     genStatusMap,
     videoStatusMap,
     onAddAsset,
-    initialOptionId
+    initialOptionId,
+    language = "Chinese"
 }) => {
     // Current Active Option: A / B / C
     const [activeOption, setActiveOption] = useState<'A' | 'B' | 'C'>((initialOptionId as any) || 'A');
+    const [showSettingsModal, setShowSettingsModal] = useState(false);
+    const modelConfig = useModelConfig();
 
     const currentGenStatus = genStatusMap[activeOption] || ImageGenStatus.IDLE;
     const currentVideoStatus = videoStatusMap[activeOption] || ImageGenStatus.IDLE;
@@ -395,7 +401,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
             historyRef.current.past.shift();
         }
         historyRef.current.future = [];
-        
+
         setPastCount(historyRef.current.past.length);
         setFutureCount(0);
     }, [activeOption, getOptionData]);
@@ -541,13 +547,13 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
 
         setNodes(previousSnapshot.nodes);
         setEdges(previousSnapshot.edges);
-        
+
         latestNodesRef.current = previousSnapshot.nodes;
         latestEdgesRef.current = previousSnapshot.edges;
 
         setPastCount(past.length);
         setFutureCount(historyRef.current.future.length);
-        
+
         if (previousSnapshot.prompts) {
             const { np_prompt, video_prompt, activeOption: snapOpt } = previousSnapshot.prompts;
             onSceneUpdate(scene.id, (prev) => {
@@ -646,7 +652,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
         const functionalTypes = ['imagePrompt', 'imageOutput', 'videoPrompt', 'videoOutput', 'firstLastFrame', 'audio'];
         const hasFunctional = selectedNodes.some(n => functionalTypes.includes(n.type || ''));
         const copyableNodes = selectedNodes.filter(n => !functionalTypes.includes(n.type || ''));
-        
+
         if (hasFunctional) {
             window.dispatchEvent(new CustomEvent('show-toast', {
                 detail: { message: "主配置/主输出功能节点不支持复制，已自动忽略！", type: 'warning' }
@@ -686,7 +692,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
 
         const functionalTypes = ['imagePrompt', 'imageOutput', 'videoPrompt', 'videoOutput', 'firstLastFrame', 'audio'];
         const copyableNodes = selectedNodes.filter(n => !functionalTypes.includes(n.type || ''));
-        
+
         const hasFunctional = selectedNodes.some(n => functionalTypes.includes(n.type || ''));
         if (hasFunctional) {
             window.dispatchEvent(new CustomEvent('show-toast', {
@@ -867,7 +873,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
 
     const onPaneDoubleClick = useCallback((event: React.MouseEvent) => {
         if (!reactFlowInstance) return;
-        
+
         takeHistorySnapshot();
         const position = reactFlowInstance.screenToFlowPosition({
             x: event.clientX,
@@ -898,13 +904,13 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
         takeHistorySnapshot();
         setNodes(currentNodes => {
             const customNotes = currentNodes.filter(n => n.type === 'customNote').map(n => n.id);
-            
+
             let imageInputIdx = 0;
             let videoInputIdx = 0;
 
             const updatedNodes = currentNodes.map((node) => {
                 const updatedNode = { ...node };
-                
+
                 if (node.id === 'image-prompt') {
                     updatedNode.position = { x: 330, y: 50 };
                 } else if (node.id === 'image-output') {
@@ -918,7 +924,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                 } else if (node.type === 'sceneRef' || node.type === 'asset') {
                     const isConnectedToImage = edges.some(e => e.source === node.id && e.target === 'image-prompt');
                     const isConnectedToVideo = edges.some(e => e.source === node.id && e.target === 'video-prompt');
-                    
+
                     if (isConnectedToVideo && !isConnectedToImage) {
                         updatedNode.position = { x: 80, y: 950 + (videoInputIdx++) * 160 };
                     } else {
@@ -941,7 +947,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
         setEdges(currentEdges => {
             const nextEdges = [...currentEdges];
             let changed = false;
-            
+
             const hasImagePrompt = latestNodesRef.current.some(n => n.id === 'image-prompt');
             const hasImageOutput = latestNodesRef.current.some(n => n.id === 'image-output');
             if (hasImagePrompt && hasImageOutput) {
@@ -982,7 +988,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
         });
 
         pendingSaveRef.current = true;
-        
+
         window.dispatchEvent(new CustomEvent('show-toast', {
             detail: { message: "画布排版已重置为标准树状布局！", type: 'success' }
         }));
@@ -1214,9 +1220,9 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
             return addEdge({
                 ...connection,
                 animated: true,
-                style: { 
-                    stroke: (connection.target === 'image-prompt') ? '#06b6d4' : '#a855f7', 
-                    strokeWidth: 2 
+                style: {
+                    stroke: (connection.target === 'image-prompt') ? '#06b6d4' : '#a855f7',
+                    strokeWidth: 2
                 }
             } as any, currentEdges);
         });
@@ -1266,7 +1272,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                 updateOptionField('video_prompt', newPrompt);
             }
         }
-        
+
         // Mark pending save so useEffect can trigger handleSaveLayout
         pendingSaveRef.current = true;
     }, [nodes, activeOption, scene, takeHistorySnapshot]);
@@ -1328,10 +1334,10 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
     const handleNodesDelete = useCallback((nodesToDelete: Node[]) => {
         takeHistorySnapshot();
         console.log("Nodes deleted from canvas:", nodesToDelete.map(n => n.id));
-        
+
         // Find outgoing edges from the deleted nodes
         const outgoingEdges = edges.filter(e => nodesToDelete.some(n => n.id === e.source));
-        
+
         outgoingEdges.forEach(edge => {
             const sourceNode = nodes.find(n => n.id === edge.source);
             if (!sourceNode) return;
@@ -1403,7 +1409,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                         sceneIdStr = partsUnderscore.slice(0, -1).join('_');
                     }
                 }
-                const sceneObj = allScenes.find(s => 
+                const sceneObj = allScenes.find(s =>
                     s.id === sceneIdStr ||
                     s.id === `scene_${sceneIdStr}` ||
                     `scene_${s.id}` === sceneIdStr ||
@@ -1438,7 +1444,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
 
         // 1. 解析所有生图/生视频配置节点中引用的标签列表
         const nodeToTagsMap = new Map<string, { tags: ParsedTag[], isVideo: boolean, targetHandle: string }>();
-        
+
         currentNodes.forEach((n: any) => {
             if (n.id === 'image-prompt') {
                 nodeToTagsMap.set(n.id, {
@@ -1483,7 +1489,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                     const expectedName = isStart ? '首帧' : '尾帧';
                     const fallbackId = isStart ? `first_frame_${sourceNode.id}` : `last_frame_${sourceNode.id}`;
                     const realId = isStart ? sourceNode.data?.startImageAssetId : sourceNode.data?.endImageAssetId;
-                    
+
                     return targetInfo.tags.some(tag => {
                         if (tag.name !== expectedName) return false;
                         return tag.id === fallbackId || (realId && tag.id === realId) || !tag.id;
@@ -1524,7 +1530,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                         }
                     }
 
-                    sceneObj = allScenes.find(s => 
+                    sceneObj = allScenes.find(s =>
                         s.id === sceneIdStr ||
                         s.id === `scene_${sceneIdStr}` ||
                         `scene_${s.id}` === sceneIdStr ||
@@ -1536,7 +1542,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                         nodeType = 'sceneRef';
                     }
                 } else if (tag.name === '首帧' || tag.name === '尾帧') {
-                    const matchedNode = nextNodes.find((n: any) => 
+                    const matchedNode = nextNodes.find((n: any) =>
                         n.type === 'firstLastFrame' && (
                             n.id === tag.id ||
                             n.data?.startImageAssetId === tag.id ||
@@ -1590,7 +1596,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                             id: sourceNodeId,
                             type: 'sceneRef',
                             position: { x: 80, y: nodeY },
-                            data: { 
+                            data: {
                                 scene: sceneObj,
                                 optionId: optId
                             }
@@ -1617,9 +1623,9 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
 
                 // 检查边是否存在，不存在则添加
                 const sourceHandleId = nodeType === 'firstLastFrame' ? (tag.name === '首帧' ? 'source-start' : 'source-end') : undefined;
-                const exists = cleanedEdges.some(e => 
-                    e.source === actualSourceId && 
-                    e.target === targetNodeId && 
+                const exists = cleanedEdges.some(e =>
+                    e.source === actualSourceId &&
+                    e.target === targetNodeId &&
                     (!sourceHandleId || e.sourceHandle === sourceHandleId)
                 );
                 if (!exists) {
@@ -1650,7 +1656,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
             return true;
         });
 
-        const edgeLengthDiff = currentEdges.length !== cleanedEdges.length || 
+        const edgeLengthDiff = currentEdges.length !== cleanedEdges.length ||
             JSON.stringify(currentEdges.map(e => e.id).sort()) !== JSON.stringify(cleanedEdges.map(e => e.id).sort());
 
         if (changedNodes) {
@@ -1687,7 +1693,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
             }
             const options = prev.prompt_options ? [...prev.prompt_options] : [];
             let optIdx = options.findIndex(o => o.option_id === activeOption);
-            
+
             if (optIdx === -1) {
                 // Instantiate default options if missing
                 options.push({
@@ -1866,11 +1872,11 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
     // Automatically sync connected image IDs to scene's startEndAssetIds or videoAssetIds
     useEffect(() => {
         if (!isOpen) return;
-        
+
         // Find all incoming edges to the main video-prompt node
         const incomingEdges = edges.filter(e => e.target === 'video-prompt');
         const imageAssetIds: string[] = [];
-        
+
         incomingEdges.forEach(edge => {
             const sourceNode = nodes.find(n => n.id === edge.source);
             if (sourceNode) {
@@ -1886,7 +1892,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                 }
             }
         });
-        
+
         // De-duplicate
         const uniqueIds = Array.from(new Set(imageAssetIds));
 
@@ -1894,23 +1900,23 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
         const firstLastNode = nodes.find(n => n.type === 'firstLastFrame');
         const customStartId = firstLastNode?.data?.startImageAssetId;
         const customEndId = firstLastNode?.data?.endImageAssetId;
-        
+
         if (scene.isStartEndFrameMode) {
             // For Start & End mode:
             // index 0: start frame (always current scene image, i.e. scene_img_S02_A, or custom start frame if extracted)
             // index 1: end frame (the custom end frame, or first connected asset/sceneRef)
             const currentSceneImgId = `scene_img_${scene.id}_${activeOption || 'A'}`;
-            
+
             // Find the first connected image ID that is NOT the current scene's image to serve as end frame
             const endFrameId = customEndId || uniqueIds.find(id => id !== currentSceneImgId && id !== `scene_img_${scene.id}`);
-            
+
             const newStartEndAssetIds = [
                 customStartId || currentSceneImgId
             ];
             if (endFrameId) {
                 newStartEndAssetIds.push(endFrameId);
             }
-            
+
             if (JSON.stringify(newStartEndAssetIds) !== JSON.stringify(scene.startEndAssetIds || [])) {
                 onSceneUpdate(scene.id, { startEndAssetIds: newStartEndAssetIds });
                 pendingSaveRef.current = true;
@@ -2120,13 +2126,13 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
     // Load nodes and edges layout from database or auto-generate defaults
     const loadLayout = useCallback(() => {
         const savedLayout = scene.canvas?.[activeOption];
-        
+
         // Clean up edges in-place to match prompt text tags
         const option = getOptionData(activeOption);
-        
+
         const imageTags = extractAssetTags(option.np_prompt || '');
         const imageReferencedIds = getReferencedIdsFromTags(imageTags);
-        
+
         const videoTags = extractAssetTags(option.video_prompt || '');
         const videoReferencedIds = getReferencedIdsFromTags(videoTags);
 
@@ -2185,7 +2191,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
             // Apply dynamic callback bindings to parsed nodes
             const boundNodes = filteredSavedNodes.map((node: any) => {
                 const updatedNode = { ...node };
-                
+
                 if (needsMigration) {
                     if (node.id === 'image-prompt') {
                         updatedNode.position = { x: 330, y: 50 };
@@ -2242,7 +2248,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                             if (latest?.data?.imageUrl) window.open(latest.data.imageUrl, '_blank');
                         }
                     };
-                                } else if (node.id === 'video-prompt') {
+                } else if (node.id === 'video-prompt') {
                     updatedNode.data = {
                         ...node.data,
                         assets,
@@ -2353,8 +2359,8 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                     const sourceNode = boundNodes.find((n: any) => n.id === e.source);
                     if (sourceNode) {
                         if (sourceNode.type === 'asset' || sourceNode.type === 'sceneRef') {
-                            const id = sourceNode.type === 'asset' 
-                                ? sourceNode.data.asset.id 
+                            const id = sourceNode.type === 'asset'
+                                ? sourceNode.data.asset.id
                                 : (() => {
                                     const baseId = `scene_img_${sourceNode.data.scene.id}`;
                                     const foundId = imageReferencedIds.find(rid => rid === baseId || rid.startsWith(`${baseId}_`));
@@ -2367,7 +2373,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                             const expectedName = isStart ? '首帧' : '尾帧';
                             const fallbackId = isStart ? `first_frame_${sourceNode.id}` : `last_frame_${sourceNode.id}`;
                             const realId = isStart ? sourceNode.data?.startImageAssetId : sourceNode.data?.endImageAssetId;
-                            
+
                             return imageTags.some((tag: any) => {
                                 if (tag.name !== expectedName) return false;
                                 return tag.id === fallbackId || (realId && tag.id === realId) || !tag.id;
@@ -2378,8 +2384,8 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                     const sourceNode = boundNodes.find((n: any) => n.id === e.source);
                     if (sourceNode) {
                         if (sourceNode.type === 'asset' || sourceNode.type === 'sceneRef') {
-                            const id = sourceNode.type === 'asset' 
-                                ? sourceNode.data.asset.id 
+                            const id = sourceNode.type === 'asset'
+                                ? sourceNode.data.asset.id
                                 : (() => {
                                     const baseId = `scene_img_${sourceNode.data.scene.id}`;
                                     const foundId = videoReferencedIds.find(rid => rid === baseId || rid.startsWith(`${baseId}_`));
@@ -2392,7 +2398,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                             const expectedName = isStart ? '首帧' : '尾帧';
                             const fallbackId = isStart ? `first_frame_${sourceNode.id}` : `last_frame_${sourceNode.id}`;
                             const realId = isStart ? sourceNode.data?.startImageAssetId : sourceNode.data?.endImageAssetId;
-                            
+
                             return videoTags.some((tag: any) => {
                                 if (tag.name !== expectedName) return false;
                                 return tag.id === fallbackId || (realId && tag.id === realId) || !tag.id;
@@ -2454,7 +2460,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                 let optId: string | undefined = undefined;
 
                 if (id.startsWith('scene_img_') || id.startsWith('scene_')) {
-                    sceneObj = allScenes.find(s => 
+                    sceneObj = allScenes.find(s =>
                         id === `scene_${s.id}` ||
                         id === `scene_img_${s.id}` ||
                         id.startsWith(`scene_${s.id}_`) ||
@@ -2470,10 +2476,10 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                     }
                 } else if (id.startsWith('first_frame_') || id.startsWith('last_frame_') || id === 'first-last-frame') {
                     // Match firstLastFrame node
-                    const matchedNode = boundNodes.find((n: any) => 
+                    const matchedNode = boundNodes.find((n: any) =>
                         n.type === 'firstLastFrame' && (
-                            id.includes(n.id) || 
-                            n.data?.startImageAssetId === id || 
+                            id.includes(n.id) ||
+                            n.data?.startImageAssetId === id ||
                             n.data?.endImageAssetId === id
                         )
                     );
@@ -2526,7 +2532,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                             id: sourceNodeId,
                             type: 'sceneRef',
                             position: { x: 80, y: nodeY },
-                            data: { 
+                            data: {
                                 scene: sceneObj,
                                 optionId: optId
                             }
@@ -2555,9 +2561,9 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                 if (imageReferencedIds.includes(id)) {
                     const isStart = id.startsWith('first_frame_') || id === 'first-last-frame' || (boundNodes.find(n => n.id === sourceNodeId)?.data?.startImageAssetId === id);
                     const handleId = nodeType === 'firstLastFrame' ? (isStart ? 'source-start' : 'source-end') : undefined;
-                    
-                    const edgeExists = cleanedEdges.some(e => 
-                        e.source === actualSourceId && 
+
+                    const edgeExists = cleanedEdges.some(e =>
+                        e.source === actualSourceId &&
                         e.target === 'image-prompt' &&
                         (!handleId || e.sourceHandle === handleId)
                     );
@@ -2577,9 +2583,9 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                 if (videoReferencedIds.includes(id)) {
                     const isStart = id.startsWith('first_frame_') || id === 'first-last-frame' || (boundNodes.find(n => n.id === sourceNodeId)?.data?.startImageAssetId === id);
                     const handleId = nodeType === 'firstLastFrame' ? (isStart ? 'source-start' : 'source-end') : undefined;
-                    
-                    const edgeExists = cleanedEdges.some(e => 
-                        e.source === actualSourceId && 
+
+                    const edgeExists = cleanedEdges.some(e =>
+                        e.source === actualSourceId &&
                         e.target === 'video-prompt' &&
                         (!handleId || e.sourceHandle === handleId)
                     );
@@ -2726,7 +2732,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
 
             allReferencedAssetIds.forEach((id) => {
                 if (id.startsWith('scene_img_') || id.startsWith('scene_')) {
-                    const sceneObj = allScenes.find(s => 
+                    const sceneObj = allScenes.find(s =>
                         id === `scene_${s.id}` ||
                         id === `scene_img_${s.id}` ||
                         id.startsWith(`scene_${s.id}_`) ||
@@ -2754,13 +2760,13 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                                 id: nodeId,
                                 type: 'sceneRef',
                                 position: { x: 80, y: nodeY },
-                                data: { 
+                                data: {
                                     scene: sceneObj,
                                     optionId: optId
                                 }
                             });
                         }
-                        
+
                         if (imageReferencedIds.includes(id)) {
                             defaultEdges.push({
                                 id: `edge_${id}_to_image_prompt`,
@@ -2785,7 +2791,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                     const nodeId = 'first-last-frame';
                     const isStart = id.startsWith('first_frame_') || id === 'first-last-frame';
                     const handleId = isStart ? 'source-start' : 'source-end';
-                    
+
                     if (!defaultNodes.some(n => n.id === nodeId)) {
                         defaultNodes.push({
                             id: nodeId,
@@ -2796,7 +2802,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                             }
                         });
                     }
-                    
+
                     if (imageReferencedIds.includes(id)) {
                         defaultEdges.push({
                             id: `edge_${id}_to_image_prompt_${isStart ? 'start' : 'end'}`,
@@ -2840,7 +2846,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                                 data: { asset }
                             });
                         }
-                        
+
                         if (imageReferencedIds.includes(id)) {
                             defaultEdges.push({
                                 id: `edge_${asset.id}_to_image_prompt`,
@@ -2917,7 +2923,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                 const newOutputNode = {
                     id: 'image-output',
                     type: 'imageOutput',
-                    position: imagePromptNode 
+                    position: imagePromptNode
                         ? { x: imagePromptNode.position.x + 410, y: imagePromptNode.position.y + 170 }
                         : { x: 740, y: 220 },
                     data: {
@@ -2964,7 +2970,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                 const newOutputNode = {
                     id: 'video-output',
                     type: 'videoOutput',
-                    position: videoPromptNode 
+                    position: videoPromptNode
                         ? { x: videoPromptNode.position.x + 410, y: videoPromptNode.position.y + 170 }
                         : { x: 740, y: 970 },
                     data: {
@@ -3109,7 +3115,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                         return {
                             ...node,
                             data: {
-                               ...node.data,
+                                ...node.data,
                                 scene: matchedScene
                             }
                         };
@@ -3263,10 +3269,10 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
         } else {
             // Function Node Templates
             const baseId = type === 'imagePrompt' ? 'image-prompt' :
-                           type === 'imageOutput' ? 'image-output' :
-                           type === 'videoPrompt' ? 'video-prompt' :
-                           type === 'firstLastFrame' ? 'first-last-frame' : 'video-output';
-            
+                type === 'imageOutput' ? 'image-output' :
+                    type === 'videoPrompt' ? 'video-prompt' :
+                        type === 'firstLastFrame' ? 'first-last-frame' : 'video-output';
+
             const isPrimaryExists = nodes.some(n => n.id === baseId);
             if (isPrimaryExists) {
                 window.dispatchEvent(new CustomEvent('show-toast', {
@@ -3275,7 +3281,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                 return;
             }
             newNode.id = baseId;
-            
+
             // Auto bind actions
             const option = getOptionData(activeOption);
             if (type === 'imagePrompt') {
@@ -3385,7 +3391,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
         }
         latestNodesRef.current = nextNodes;
         latestEdgesRef.current = nextEdges;
-        
+
         // Mark pending save — will be handled by the useEffect that watches nodes
         pendingSaveRef.current = true;
     }, [reactFlowInstance, assets, sceneImages, allScenes, activeOption, scene, currentGenStatus, currentVideoStatus, nodes, edges, setEdges]);
@@ -3396,7 +3402,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
     const processedEdges = edges.map(edge => {
         const targetNode = nodes.find(n => n.id === edge.target);
         let isGenerating = false;
-        
+
         if (targetNode) {
             if (targetNode.id === 'image-prompt') {
                 isGenerating = currentGenStatus === ImageGenStatus.GENERATING;
@@ -3410,7 +3416,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                 isGenerating = !!targetNode.data?.ttsLoading;
             }
         }
-        
+
         if (isGenerating) {
             return {
                 ...edge,
@@ -3422,7 +3428,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                 }
             };
         }
-        
+
         return edge;
     });
 
@@ -3620,7 +3626,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                 {/* Header Navbar */}
                 <div className="h-[60px] border-b border-white/5 bg-[#121216]/80 backdrop-blur-md flex items-center justify-between px-6 z-10">
                     <div className="flex items-center gap-3">
-                        <button 
+                        <button
                             onClick={onClose}
                             className="p-1.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
                         >
@@ -3639,11 +3645,10 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                                 <button
                                     key={opt}
                                     onClick={() => setActiveOption(opt)}
-                                    className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
-                                        activeOption === opt 
-                                            ? 'bg-cyan-500 text-black shadow-lg shadow-cyan-500/20' 
+                                    className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${activeOption === opt
+                                            ? 'bg-cyan-500 text-black shadow-lg shadow-cyan-500/20'
                                             : 'text-gray-400 hover:text-white'
-                                    }`}
+                                        }`}
                                 >
                                     方案 {opt}
                                 </button>
@@ -3699,9 +3704,17 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                         >
                             <span>重置布局</span>
                         </button>
+
+                        <button
+                            onClick={() => setShowSettingsModal(true)}
+                            className="p-1.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors cursor-pointer"
+                            title={language === 'Chinese' ? "系统设置" : "System Settings"}
+                        >
+                            <Settings className="w-4 h-4" />
+                        </button>
                     </div>
 
-                    <button 
+                    <button
                         onClick={onClose}
                         className="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-xl transition-colors"
                     >
@@ -3710,7 +3723,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                 </div>
 
                 {/* React Flow Infinite Canvas */}
-                <div 
+                <div
                     className="flex-1 w-full bg-[#0a0a0d]"
                     onDragOver={onDragOver}
                     onDrop={onDrop}
@@ -3751,8 +3764,8 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
 
                 {/* Bottom Dock Scene Slider (Horizontal navigation) */}
                 <div className="h-[120px] border-t border-white/5 bg-[#121216]/90 backdrop-blur-md flex items-center px-6 gap-4 overflow-hidden z-10 shrink-0 select-none">
-                    <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block w-10 shrink-0">场景<br/>DOCK</span>
-                    
+                    <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block w-10 shrink-0">场景<br />DOCK</span>
+
                     <div className="flex-1 min-w-0 h-full flex items-center gap-3 overflow-x-auto overflow-y-hidden pt-2 pb-4 pr-4 custom-dock-scrollbar">
                         {allScenes.map((s) => {
                             const isCurrent = s.id === scene.id;
@@ -3763,9 +3776,8 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                                 <div
                                     key={s.id}
                                     onClick={() => onSelectScene(s.id)}
-                                    className={`flex-shrink-0 w-[140px] aspect-[16/10] rounded-xl border bg-black/40 overflow-hidden relative cursor-pointer hover:scale-[1.02] hover:border-cyan-500/20 active:scale-[0.98] transition-all flex flex-col ${
-                                        isCurrent ? 'border-cyan-500 ring-1 ring-cyan-500/30' : 'border-white/5'
-                                    }`}
+                                    className={`flex-shrink-0 w-[140px] aspect-[16/10] rounded-xl border bg-black/40 overflow-hidden relative cursor-pointer hover:scale-[1.02] hover:border-cyan-500/20 active:scale-[0.98] transition-all flex flex-col ${isCurrent ? 'border-cyan-500 ring-1 ring-cyan-500/30' : 'border-white/5'
+                                        }`}
                                 >
                                     {img ? (
                                         <img src={img} alt={`Scene ${s.id}`} className="w-full h-full object-cover" />
@@ -3781,7 +3793,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                                 </div>
                             );
                         })}
-                        
+
                         {/* Add scene trigger */}
                         <div
                             onClick={onAddScene}
@@ -3795,7 +3807,7 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
             </div>
             {/* Hover Preview Tooltip/Card */}
             {hoveredItem && (
-                <div 
+                <div
                     style={{
                         position: 'fixed',
                         left: `${hoveredItem.rect.right + 10}px`,
@@ -3842,10 +3854,10 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                                 {/* Media Section */}
                                 {mediaUrl ? (
                                     <div className="w-full aspect-[16/10] bg-black/40 relative overflow-hidden border-b border-white/5">
-                                        <img 
-                                            src={mediaUrl} 
-                                            alt={asset.name} 
-                                            className="w-full h-full object-cover" 
+                                        <img
+                                            src={mediaUrl}
+                                            alt={asset.name}
+                                            className="w-full h-full object-cover"
                                         />
                                     </div>
                                 ) : (
@@ -3914,10 +3926,10 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                                 {/* Media Section */}
                                 {imageUrl ? (
                                     <div className="w-full aspect-[16/10] bg-black/40 relative overflow-hidden border-b border-white/5">
-                                        <img 
-                                            src={imageUrl} 
-                                            alt={item.label} 
-                                            className="w-full h-full object-cover" 
+                                        <img
+                                            src={imageUrl}
+                                            alt={item.label}
+                                            className="w-full h-full object-cover"
                                         />
                                         <div className="absolute top-2 right-2 px-1.5 py-0.5 bg-green-950/80 border border-green-500/30 rounded text-[8px] text-green-300 font-bold uppercase tracking-wider">
                                             图片预览
@@ -3939,10 +3951,9 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                                             <Film className="w-4 h-4 text-cyan-400" />
                                             <h4 className="text-xs font-bold text-gray-100 truncate max-w-[150px]">{item.label}</h4>
                                         </div>
-                                        <span className={`text-[9px] px-2 py-0.5 rounded-full font-semibold uppercase ${
-                                            imageUrl ? 'bg-green-950/30 text-green-400 border border-green-500/10' :
-                                            'bg-pink-950/30 text-pink-400 border border-pink-500/10'
-                                        }`}>
+                                        <span className={`text-[9px] px-2 py-0.5 rounded-full font-semibold uppercase ${imageUrl ? 'bg-green-950/30 text-green-400 border border-green-500/10' :
+                                                'bg-pink-950/30 text-pink-400 border border-pink-500/10'
+                                            }`}>
                                             {imageUrl ? '图片' : '未生成'}
                                         </span>
                                     </div>
@@ -3951,6 +3962,65 @@ export const SceneCanvasModal: React.FC<SceneCanvasModalProps> = ({
                             </div>
                         );
                     })()}
+                </div>
+            )}
+
+            {showSettingsModal && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[9999] animate-in fade-in duration-200 text-left">
+                    <div className="bg-white dark:bg-dark-800 rounded-xl w-full max-w-5xl flex flex-col max-h-[90vh] border border-gray-200 dark:border-white/10 shadow-2xl overflow-hidden">
+
+                        {/* Header */}
+                        <div className="px-6 py-4 border-b border-gray-200 dark:border-white/5 flex justify-between items-center bg-gray-50 dark:bg-[#17171a]">
+                            <div className="flex items-center gap-2">
+                                <Settings className="w-5 h-5 text-indigo-600 dark:text-banana-400" />
+                                <h3 className="text-sm font-bold text-gray-900 dark:text-white tracking-wide">
+                                    {language === 'Chinese' ? "系统设置" : "System Settings"}
+                                </h3>
+                            </div>
+                            <button
+                                onClick={() => setShowSettingsModal(false)}
+                                className="p-1.5 text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        {/* Body */}
+                        <div className="flex-1 overflow-y-auto p-2 bg-white dark:bg-dark-800">
+                            <SettingsPanel
+                                providers={modelConfig.providers}
+                                onUpdateProviders={(updatedProviders) => modelManager.setConfig({ providers: updatedProviders })}
+                                activeTextModel={modelConfig.textmodel}
+                                activeImageModel={modelConfig.imagemodel}
+                                activeVideoModel={modelConfig.videomodel}
+                                onChangeActiveModel={(type, val) => {
+                                    if (type === 'text') {
+                                        const provider = modelConfig.providers.find(p => p.id === val);
+                                        const firstModel = provider?.chatModels?.[0] || 'gpt-5.4-mini-2026-03-17';
+                                        modelManager.setConfig({
+                                            textmodel: val,
+                                            t8starTextModel: firstModel
+                                        });
+                                    }
+                                    if (type === 'image') modelManager.setConfig({ imagemodel: val });
+                                    if (type === 'video') modelManager.setConfig({ videomodel: val });
+                                }}
+                                language={language}
+                            />
+                        </div>
+
+                        {/* Footer */}
+                        <div className="flex justify-end gap-3 px-5 py-4 border-t border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-[#17171a]">
+                            <button
+                                onClick={() => setShowSettingsModal(false)}
+                                className="px-5 py-2 rounded-lg text-xs font-semibold bg-indigo-600 dark:bg-banana-400 text-white dark:text-black flex items-center gap-1.5 shadow-md shadow-indigo-600/20 dark:shadow-banana-400/20 hover:opacity-90 active:scale-95 transition-all"
+                            >
+                                <Check className="w-4 h-4 stroke-[3]" />
+                                {language === 'Chinese' ? "保存并确定" : "Save & Close"}
+                            </button>
+                        </div>
+
+                    </div>
                 </div>
             )}
         </div>

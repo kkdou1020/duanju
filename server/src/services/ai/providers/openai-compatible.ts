@@ -10,6 +10,8 @@ import {
 } from "./t8star-utils";
 import nodeFetch from 'node-fetch';
 import { getProxyAgent } from "../helpers";
+import { ProviderConfig } from "../../../shared/types";
+
 const fetch = (url: any, options: any = {}) => {
     const agent = getProxyAgent(url);
     if (agent) {
@@ -37,9 +39,9 @@ function normalizeSchemaTypes(schema: any): any {
     return newSchema;
 }
 
-
-export class T8StarProvider implements IAIProvider {
-    private config: AIProviderConfig;
+export class OpenAICompatibleProvider implements IAIProvider {
+    private providerId: string;
+    private config: any;
     private textBaseUrl: string;
     private mediaBaseUrl: string;
 
@@ -48,23 +50,64 @@ export class T8StarProvider implements IAIProvider {
     private videoApiKey: string;
     private audioApiKey: string;
     private nanobananaApiKey: string;
+    private modelApiKeys: Record<string, string> = {};
+    private enabled: boolean;
 
-    constructor(config?: AIProviderConfig) {
+    constructor(providerId: string, config?: any) {
+        this.providerId = providerId;
         this.config = config || {};
-        // In backend mode, use real external URLs directly
         this.textBaseUrl = this.config.baseUrl || "https://ai.t8star.org";
-        this.mediaBaseUrl = this.config.mediaBaseUrl || "https://ai.t8star.org";
+        this.mediaBaseUrl = this.config.mediaBaseUrl || this.config.baseUrl || "https://ai.t8star.org";
 
-        // API keys read from config (injected from .env)
-        this.textApiKey = this.config.apiKey || "";
-        this.imageApiKey = this.config.mediaApiKey || "";
-        this.videoApiKey = this.config.videoApiKey || "";
-        console.log("[T8Star] Initialized with videoApiKey prefix:", this.videoApiKey ? `${this.videoApiKey.substring(0, 8)}...` : "NONE");
-        this.audioApiKey = this.config.audioApiKey || "";
-        this.nanobananaApiKey = this.config.nanobananaApiKey || "";
+        const globalKey = this.config.apiKey || "";
+        this.textApiKey = globalKey;
+        this.imageApiKey = this.config.mediaApiKey || globalKey;
+        this.videoApiKey = this.config.videoApiKey || globalKey;
+        this.audioApiKey = this.config.audioApiKey || globalKey;
+        this.nanobananaApiKey = this.config.nanobananaApiKey || globalKey;
+        this.modelApiKeys = this.config.modelApiKeys || {};
+        this.enabled = this.config.enabled !== false;
+
+        console.log(`[OpenAICompatible - ${this.providerId}] Initialized with baseUrl: ${this.textBaseUrl}, videoApiKey prefix:`, this.videoApiKey ? `${this.videoApiKey.substring(0, 8)}...` : "NONE");
     }
 
-    private isT8starModel(model?: string) {
+    private getApiKey(model: string, defaultKey: string): string {
+        if (this.modelApiKeys && this.modelApiKeys[model]) {
+            return this.modelApiKeys[model];
+        }
+        return defaultKey;
+    }
+
+    public isEnabled(): boolean {
+        return this.enabled;
+    }
+
+    private resolveUrl(baseUrl: string, path: string): string {
+        const cleanBase = baseUrl.trim().replace(/\/+$/, "");
+        
+        // If path starts with /v1/ or /v1?
+        if (path.startsWith("/v1/") || path === "/v1" || path.startsWith("/v1?")) {
+            if (cleanBase.endsWith("/v1")) {
+                return `${cleanBase}${path.substring(3)}`;
+            } else {
+                return `${cleanBase}${path}`;
+            }
+        }
+        
+        // If path starts with /v2/ or /seedance/
+        if (path.startsWith("/v2/") || path.startsWith("/seedance/")) {
+            if (cleanBase.endsWith("/v1")) {
+                const baseWithoutV1 = cleanBase.substring(0, cleanBase.length - 3).replace(/\/+$/, "");
+                return `${baseWithoutV1}${path}`;
+            } else {
+                return `${cleanBase}${path}`;
+            }
+        }
+        
+        return `${cleanBase}${path}`;
+    }
+
+    private isCompatibleModel(model?: string) {
         if (!model) return false;
         if (model.includes("image") || model.includes("imagen") || model === "nano-banana-pro") return false;
         return (
@@ -149,17 +192,17 @@ export class T8StarProvider implements IAIProvider {
             try { fs.appendFileSync(logFile, line); } catch(e){}
         };
 
-        const url = `${baseUrl.replace(/\/+$/, "")}${path}`;
-        log(`[T8Star API] POST ${url}...`);
+        const url = this.resolveUrl(baseUrl, path);
+        log(`[${this.providerId} API] POST ${url}...`);
 
         const controller = new AbortController();
         const timeout = setTimeout(() => {
-            log(`[T8Star API] ERROR: Hard timeout of 300s reached! Aborting connection.`);
+            log(`[${this.providerId} API] ERROR: Hard timeout of 300s reached! Aborting connection.`);
             controller.abort();
         }, 300000); // 300s hard timeout
 
         const abortHandler = () => {
-            log(`[T8Star API] External abort requested. Aborting connection.`);
+            log(`[${this.providerId} API] External abort requested. Aborting connection.`);
             controller.abort();
         };
 
@@ -181,21 +224,20 @@ export class T8StarProvider implements IAIProvider {
                     "Authorization": `Bearer ${apiKey}`,
                 },
                 body: JSON.stringify(body),
-                signal: controller.signal as any, // Cast to any to avoid type mismatch with older node-fetch types
+                signal: controller.signal as any,
             });
 
             const timeToHeaders = Date.now() - startTime;
-            log(`[T8Star API] POST ${url} returned ${res.status} in ${timeToHeaders}ms`);
+            log(`[${this.providerId} API] POST ${url} returned ${res.status} in ${timeToHeaders}ms`);
 
             if (!res.ok) {
                 const text = await res.text().catch(() => "");
                 throw new Error(`HTTP Error: ${res.status} ${text}`);
             }
 
-            // Read the body with an idle timeout
             const buffer = await res.arrayBuffer();
             const timeToBody = Date.now() - startTime;
-            log(`[T8Star API] Downloaded body (${buffer.byteLength} bytes) in ${timeToBody}ms`);
+            log(`[${this.providerId} API] Downloaded body (${buffer.byteLength} bytes) in ${timeToBody}ms`);
             
             clearTimeout(timeout);
             if (signal) {
@@ -209,14 +251,14 @@ export class T8StarProvider implements IAIProvider {
             if (signal) {
                 signal.removeEventListener('abort', abortHandler);
             }
-            log(`[T8Star API] Fetch failed: ${error?.message || error}`);
+            log(`[${this.providerId} API] Fetch failed: ${error?.message || error}`);
             throw error;
         }
     }
 
     private async postChatCompletionsT8star(body: any, apiKey: string, stream: boolean, signal?: AbortSignal) {
-        const url = `${this.textBaseUrl.replace(/\/+$/, "")}/v1/chat/completions`;
-        console.log(`[T8Star postChatCompletionsT8star] Starting request to ${url} with model ${body.model}...`);
+        const url = this.resolveUrl(this.textBaseUrl, "/v1/chat/completions");
+        console.log(`[${this.providerId} postChatCompletions] Starting request to ${url} with model ${body.model}...`);
         const startTime = Date.now();
         try {
             const res = await fetch(url, {
@@ -230,7 +272,7 @@ export class T8StarProvider implements IAIProvider {
                 signal: signal as any,
             });
 
-            console.log(`[T8Star postChatCompletionsT8star] Received response headers with status ${res.status} in ${Date.now() - startTime}ms`);
+            console.log(`[${this.providerId} postChatCompletions] Received response headers with status ${res.status} in ${Date.now() - startTime}ms`);
 
             if (!res.ok) {
                 const text = await res.text().catch(() => "");
@@ -239,11 +281,10 @@ export class T8StarProvider implements IAIProvider {
 
             if (!stream) {
                 const json = await res.json();
-                console.log(`[T8Star postChatCompletionsT8star] Finished JSON parsing in ${Date.now() - startTime}ms`);
+                console.log(`[${this.providerId} postChatCompletions] Finished JSON parsing in ${Date.now() - startTime}ms`);
                 return json;
             }
 
-            // Stream handling for Node.js
             const responseText = await res.text();
             let fullText = "";
             const lines = responseText.split(/\r?\n/);
@@ -258,10 +299,10 @@ export class T8StarProvider implements IAIProvider {
                     if (typeof delta === "string") fullText += delta;
                 } catch { }
             }
-            console.log(`[T8Star postChatCompletionsT8star] Finished Stream parsing in ${Date.now() - startTime}ms`);
+            console.log(`[${this.providerId} postChatCompletions] Finished Stream parsing in ${Date.now() - startTime}ms`);
             return { _stream: true, fullText };
         } catch (error: any) {
-            console.error(`[T8Star postChatCompletionsT8star] Error after ${Date.now() - startTime}ms:`, error);
+            console.error(`[${this.providerId} postChatCompletions] Error after ${Date.now() - startTime}ms:`, error);
             throw error;
         }
     }
@@ -273,7 +314,7 @@ export class T8StarProvider implements IAIProvider {
             const contentType = res.headers.get('content-type') || 'image/png';
             return `data:${contentType};base64,${buffer.toString('base64')}`;
         } catch (e) {
-            console.error("Failed to fetch image for base64 conversion:", url, e);
+            console.error(`[${this.providerId}] Failed to fetch image for base64 conversion:`, url, e);
             return null;
         }
     }
@@ -312,6 +353,7 @@ export class T8StarProvider implements IAIProvider {
 
     async generateContent(args: GenerateContentArgs): Promise<GenerateContentResponse> {
         const { model, contents, config } = args;
+        const cleanModel = model.split(':')[0];
 
         const messages: any[] = [];
 
@@ -377,17 +419,17 @@ export class T8StarProvider implements IAIProvider {
             messages.push({ role: "user", content: "" });
         }
 
-        if (this.isT8starModel(model)) {
+        if (this.isCompatibleModel(cleanModel)) {
             const stream = !!config?.stream;
 
             const body: any = {
-                model,
+                model: cleanModel,
                 stream,
                 messages,
             };
 
             if (config?.responseSchema) {
-                const schema = model.includes('gpt-') ? normalizeSchemaTypes(config.responseSchema) : config.responseSchema;
+                const schema = cleanModel.includes('gpt-') ? normalizeSchemaTypes(config.responseSchema) : config.responseSchema;
                 body.tools = [{
                     type: "function",
                     function: {
@@ -418,16 +460,17 @@ export class T8StarProvider implements IAIProvider {
                 googleExtra.image_config = imageConfig;
             }
             if (config?.speechConfig) googleExtra.speech_config = config.speechConfig;
-            if (config?.responseModalities) googleExtra.response_modalities = config.responseModalities;
-            if (config?.responseSchema && !model.includes('gpt-')) googleExtra.response_schema = config.responseSchema;
+            if (config?.responseModalalities) googleExtra.response_modalities = config.responseModalalities;
+            if (config?.responseSchema && !cleanModel.includes('gpt-')) googleExtra.response_schema = config.responseSchema;
 
             if (Object.keys(googleExtra).length) {
                 body.extra_body = { ...(body.extra_body || {}), google: googleExtra };
             }
 
-            const activeApiKey = (model?.includes("nano-banana") || model?.includes("nanobanana")) && this.nanobananaApiKey
+            const defaultKey = (cleanModel?.includes("nano-banana") || cleanModel?.includes("nanobanana")) && this.nanobananaApiKey
                 ? this.nanobananaApiKey
                 : this.textApiKey;
+            const activeApiKey = this.getApiKey(cleanModel, defaultKey);
             const data = await this.postChatCompletionsT8star(body, activeApiKey, stream, config?.signal);
 
             if (data?._stream) {
@@ -437,7 +480,6 @@ export class T8StarProvider implements IAIProvider {
 
             const msg = data?.choices?.[0]?.message;
 
-            // Function Calling: extract structured data from tool_calls
             if (msg?.tool_calls?.[0]?.function?.arguments) {
                 const text = msg.tool_calls[0].function.arguments;
                 return { text, candidates: [{ content: { parts: [{ text }] } }] };
@@ -468,8 +510,7 @@ export class T8StarProvider implements IAIProvider {
             return { text, candidates: [{ content: { parts: [{ text }] } }] };
         }
 
-        // --- T8Star Image Generation Intercept ---
-        if (model === "gemini-3.1-flash-image-preview-2k" || model.includes("image") || model.includes("imagen") || model === "nano-banana-pro") {
+        if (cleanModel === "gemini-3.1-flash-image-preview-2k" || cleanModel.includes("image") || cleanModel.includes("imagen") || cleanModel === "nano-banana-pro") {
             let prompt = "";
             let refImages: string[] = [];
 
@@ -506,21 +547,21 @@ export class T8StarProvider implements IAIProvider {
                imageSize = config.imageConfig.overrideNanoSize;
             }
 
-
-            let apiKey = this.imageApiKey;
-            if ((model?.includes("nano-banana") || model?.includes("nanobanana")) && this.nanobananaApiKey) {
-                apiKey = this.nanobananaApiKey;
+            let defaultKey = this.imageApiKey;
+            if ((cleanModel?.includes("nano-banana") || cleanModel?.includes("nanobanana")) && this.nanobananaApiKey) {
+                defaultKey = this.nanobananaApiKey;
             } else if (config?.imageConfig?.useOfficialKey) {
-                apiKey = process.env.T8_OFFICIAL_IMAGE_KEY || this.imageApiKey;
+                defaultKey = process.env.T8_OFFICIAL_IMAGE_KEY || this.imageApiKey;
             }
+            const apiKey = this.getApiKey(cleanModel, defaultKey);
 
             const imageBody: any = {
-                model: model,
+                model: cleanModel,
                 prompt: prompt,
                 response_format: "url",
             };
 
-            if (config?.imageConfig?.useOfficialKey || (model === "gpt-image-2" && config?.imageConfig?.size)) {
+            if (config?.imageConfig?.useOfficialKey || (cleanModel === "gpt-image-2" && config?.imageConfig?.size)) {
                  if (config.imageConfig.size) {
                     imageBody.size = config.imageConfig.size;
                  }
@@ -528,7 +569,6 @@ export class T8StarProvider implements IAIProvider {
                     imageBody.quality = config.imageConfig.quality;
                  }
             } else {
-                // 原有的专门给非官方版本或者资产图使用的格式
                 imageBody.image_size = imageSize;
                 imageBody.aspect_ratio = aspectRatio;
             }
@@ -560,7 +600,6 @@ export class T8StarProvider implements IAIProvider {
             }
 
             if (b64) {
-                 // Clean up any double data URI prefix
                  b64 = b64.replace(/^data:image\/[a-zA-Z0-9.+]+;base64,/, "");
                  return {
                     text: "",
@@ -582,10 +621,8 @@ export class T8StarProvider implements IAIProvider {
             }
             throw new Error(`Failed to extract image from response: ${JSON.stringify(imageData)}`);
         }
-        // --- End Image Generation Intercept ---
 
-        // Use mediaBaseUrl for other models (e.g. image generation fallback)
-        const body: any = { model, stream: false, messages };
+        const body: any = { model: cleanModel, stream: false, messages };
 
         const googleExtra: any = {};
         if (config?.imageConfig) {
@@ -597,7 +634,7 @@ export class T8StarProvider implements IAIProvider {
             googleExtra.image_config = imageConfig;
         }
         if (config?.speechConfig) googleExtra.speech_config = config.speechConfig;
-        if (config?.responseModalities) googleExtra.response_modalities = config.responseModalities;
+        if (config?.responseModalalities) googleExtra.response_modalities = config.responseModalalities;
         if (config?.responseSchema) googleExtra.response_schema = config.responseSchema;
         if (Object.keys(googleExtra).length) {
             body.extra_body = { ...(body.extra_body || {}), google: googleExtra };
@@ -640,15 +677,18 @@ export class T8StarProvider implements IAIProvider {
 
     async generateVideos(args: GenerateVideosArgs): Promise<VideosOperation> {
         const { model, prompt, image, config } = args;
+        const cleanModel = model.split(':')[0];
 
-        const isSeedance = model.includes("seedance") || model.includes("doubao");
-        const isVeo = model.includes("veo");
+        const isSeedance = cleanModel.includes("seedance") || cleanModel.includes("doubao");
+        const isVeo = cleanModel.includes("veo");
         const isV2Protocol = isVeo || isSeedance;
-        const activeApiKey = isSeedance ? this.imageApiKey : this.videoApiKey;
+        const defaultKey = isSeedance ? this.imageApiKey : this.videoApiKey;
+        const activeApiKey = this.getApiKey(cleanModel, defaultKey);
 
         if (!isV2Protocol) {
-            const form = new FormData();
-            form.append("model", model);
+            const NodeFormData = require('form-data');
+            const form = new NodeFormData();
+            form.append("model", cleanModel);
             form.append("prompt", prompt);
             form.append("seconds", String(config?.seconds ?? 8));
 
@@ -662,16 +702,17 @@ export class T8StarProvider implements IAIProvider {
                 form.append("input_reference", String(config.input_reference));
             } else if (image?.imageBytes) {
                 const bin = Buffer.from(image.imageBytes, 'base64');
-                const blob = new Blob([bin], { type: image.mimeType || "image/png" });
-                form.append("input_reference", blob, "input.png");
+                form.append("input_reference", bin, {
+                    filename: "input.png",
+                    contentType: image.mimeType || "image/png"
+                });
             }
 
-            const data = await this.postForm("/v1/videos", form);
+            const data = await this.postForm("/v1/videos", form, activeApiKey);
             const id = data?.id;
             return { done: false, operation: { id }, response: undefined, error: undefined };
         }
 
-        // --- T8Star Veo Logic ---
         let imagesToSend: string[] = config?.images || [];
         if (imagesToSend.length === 0 && image?.imageBytes) {
             imagesToSend.push(`data:${image.mimeType || 'image/png'};base64,${image.imageBytes}`);
@@ -703,11 +744,11 @@ export class T8StarProvider implements IAIProvider {
         const enhancePrompt = !!config?.enhance_prompt;
         const aspectRatio = config?.aspectRatio || '16:9';
 
-        let url = `${this.mediaBaseUrl.replace(/\/+$/, "")}/v2/videos/generations`;
+        let url = this.resolveUrl(this.mediaBaseUrl, "/v2/videos/generations");
         let payload: any = {};
 
         if (isSeedance && config?.seedanceContent) {
-            url = `${this.mediaBaseUrl.replace(/\/+$/, "")}/seedance/v3/contents/generations/tasks`;
+            url = this.resolveUrl(this.mediaBaseUrl, "/seedance/v3/contents/generations/tasks");
             
             const uploadMediaIfBase64 = async (mediaStr: string, defaultName: string): Promise<string> => {
                 if (mediaStr.startsWith('data:')) {
@@ -719,11 +760,11 @@ export class T8StarProvider implements IAIProvider {
                         let ext = mimeType.split('/')[1] || 'bin';
                         if (ext === 'quicktime') ext = 'mov';
                         const filename = `${defaultName}.${ext}`;
-                        console.log(`[T8Star] Uploading base64 media (${buffer.length} bytes) as ${filename}...`);
+                        console.log(`[${this.providerId}] Uploading base64 media (${buffer.length} bytes) as ${filename}...`);
                         return await this.uploadFile(buffer, mimeType, filename, activeApiKey);
                     }
                 }
-                return mediaStr; // Return as-is if not base64 or failed to parse
+                return mediaStr;
             };
 
             const finalContent = [{ type: 'text', text: prompt }];
@@ -741,18 +782,17 @@ export class T8StarProvider implements IAIProvider {
             }
 
             payload = {
-                model,
+                model: cleanModel,
                 content: finalContent,
-                generate_audio: true, // Let Seedance 2.0 decide based on prompt
+                generate_audio: true,
                 ratio: aspectRatio,
                 duration: config?.seconds || 8,
                 watermark: false
             };
         } else {
-            // Old Veo / V2 Fallback Logic
             payload = {
                 prompt: prompt,
-                model,
+                model: cleanModel,
                 enhance_prompt: enhancePrompt,
                 images: finalImages.map((x) => x.value),
                 aspect_ratio: aspectRatio,
@@ -769,7 +809,7 @@ export class T8StarProvider implements IAIProvider {
                             let ext = mimeType.split('/')[1] || 'bin';
                             if (ext === 'quicktime') ext = 'mov';
                             const filename = `${defaultName}.${ext}`;
-                            console.log(`[T8Star] Uploading base64 media (${buffer.length} bytes) as ${filename}...`);
+                            console.log(`[${this.providerId}] Uploading base64 media (${buffer.length} bytes) as ${filename}...`);
                             return await this.uploadFile(buffer, mimeType, filename, activeApiKey);
                         }
                     }
@@ -822,12 +862,16 @@ export class T8StarProvider implements IAIProvider {
         };
     }
 
-    private async postForm(path: string, form: FormData) {
-        const url = `${this.mediaBaseUrl.replace(/\/+$/, "")}${path}`;
+    private async postForm(path: string, form: any, apiKey: string) {
+        const url = this.resolveUrl(this.mediaBaseUrl, path);
         const res = await fetch(url, {
             method: "POST",
-            headers: { Accept: "application/json", "Authorization": `Bearer ${this.videoApiKey}` },
-            body: form as any,
+            headers: { 
+                Accept: "application/json", 
+                "Authorization": `Bearer ${apiKey}`,
+                ...form.getHeaders()
+            },
+            body: form,
         });
         if (!res.ok) {
             const text = await res.text().catch(() => "");
@@ -836,11 +880,11 @@ export class T8StarProvider implements IAIProvider {
         return res.json() as Promise<any>;
     }
 
-    private async getJson(path: string) {
-        const url = `${this.mediaBaseUrl.replace(/\/+$/, "")}${path}`;
+    private async getJson(path: string, apiKey: string) {
+        const url = this.resolveUrl(this.mediaBaseUrl, path);
         const res = await fetch(url, {
             method: "GET",
-            headers: { Accept: "application/json", "Authorization": `Bearer ${this.videoApiKey}` },
+            headers: { Accept: "application/json", "Authorization": `Bearer ${apiKey}` },
         });
         if (!res.ok) {
             const text = await res.text().catch(() => "");
@@ -857,9 +901,9 @@ export class T8StarProvider implements IAIProvider {
         const activeApiKey = isSeedance ? this.imageApiKey : this.videoApiKey;
 
         try {
-            let url = `${this.mediaBaseUrl.replace(/\/+$/, "")}/v2/videos/generations/${encodeURIComponent(id)}`;
+            let url = this.resolveUrl(this.mediaBaseUrl, `/v2/videos/generations/${encodeURIComponent(id)}`);
             if (isSeedance) {
-                url = `${this.mediaBaseUrl.replace(/\/+$/, "")}/seedance/v3/contents/generations/tasks/${encodeURIComponent(id)}`;
+                url = this.resolveUrl(this.mediaBaseUrl, `/seedance/v3/contents/generations/tasks/${encodeURIComponent(id)}`);
             }
             
             const res = await fetch(url, {
@@ -896,10 +940,9 @@ export class T8StarProvider implements IAIProvider {
                 };
             }
         } catch (e) {
-            // Fallback to legacy endpoint
         }
 
-        const data = await this.getJson(`/v1/videos/${encodeURIComponent(id)}`);
+        const data = await this.getJson(`/v1/videos/${encodeURIComponent(id)}`, activeApiKey);
         const status = data?.status;
 
         let uri = data?.video_url || data?.url || "";
@@ -916,7 +959,7 @@ export class T8StarProvider implements IAIProvider {
     }
 
     async speech(body: any): Promise<ArrayBuffer> {
-        const url = `${this.textBaseUrl.replace(/\/+$/, "")}/v1/audio/speech`;
+        const url = this.resolveUrl(this.textBaseUrl, "/v1/audio/speech");
         const res = await fetch(url, {
             method: "POST",
             headers: {
@@ -945,7 +988,7 @@ export class T8StarProvider implements IAIProvider {
         });
         
         const keyToUse = apiKey || this.videoApiKey;
-        const urlReq = `${this.mediaBaseUrl.replace(/\/+$/, "")}/v1/files`;
+        const urlReq = this.resolveUrl(this.mediaBaseUrl, "/v1/files");
         try {
             const res = await fetch(urlReq, {
                 method: "POST",
@@ -967,7 +1010,7 @@ export class T8StarProvider implements IAIProvider {
             }
             return url;
         } catch (e: any) {
-            console.error("[T8StarProvider] File upload failed:", e);
+            console.error(`[OpenAICompatible - ${this.providerId}] File upload failed:`, e);
             throw e;
         }
     }

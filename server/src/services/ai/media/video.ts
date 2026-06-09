@@ -111,14 +111,14 @@ export const submitVideoGeneration = async (
     const modelConfig = getModelManager().getConfig();
     const option = optionId && scene.prompt_options ? scene.prompt_options.find((o: any) => o.option_id === optionId) : null;
     const frontendModel = option?.videoModel || scene.videoModel;
-    let model = frontendModel || modelConfig.t8starVideoModel || "veo3.1-components";
+    let rawModel = frontendModel || modelConfig.t8starVideoModel || "veo3.1-components";
+    let model = rawModel.split(':')[0];
 
-    console.log(`[DEBUG] submitVideoGeneration model=${model}, videoApiKeyPrefix=${((getModelManager() as any).t8star.videoApiKey || '').substring(0, 8)}...`);
+    const refImageMode = option?.refImageMode || scene.refImageMode || (scene.isStartEndFrameMode ? 'start_end_frame' : 'auto');
 
-    // 智能路由：仅当选用普通 Veo 3.1 系列时，根据模式自动切换
-    if (model === "veo" || model === "veo3.1" || model === "veo3.1-components") {
-        model = scene.isStartEndFrameMode ? "veo3.1" : "veo3.1-components";
-    }
+    const t8Provider = (getModelManager() as any).providers?.get("t8star");
+    const keyPrefix = t8Provider ? ((t8Provider as any).videoApiKey || t8Provider.config?.videoApiKey || '') : '';
+    console.log(`[DEBUG] submitVideoGeneration model=${model}, refImageMode=${refImageMode}, optionId=${optionId}, sceneOptions=${JSON.stringify(scene.prompt_options)}`);
     
     const isSeedance = model.includes("seedance") || model.includes("doubao");
 
@@ -139,7 +139,7 @@ export const submitVideoGeneration = async (
     let videoIndex = 1;
     let audioIndex = 1;
 
-    if (scene.isStartEndFrameMode) {
+    if (refImageMode === 'start_end_frame') {
         if (imageBase64) {
             imagesToSend.push(imageBase64);
             if (isSeedance) seedanceContent.push({ type: 'image_url', image_url: { url: imageBase64 }, role: 'first_frame' });

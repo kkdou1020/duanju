@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { clearState } from '@/services/storage';
 import InputPanel from '@/ui/panels/InputPanel';
 import ChunkPanel from '@/ui/cards/chunk/ChunkPanel';
 import { AssetSelector } from '@/ui/panels/asset-library/AssetSelector';
-import { Film, Globe, Book, Trash2, Upload, Sun, Moon, Info } from 'lucide-react';
+import { Film, Globe, Book, Trash2, Upload, Sun, Moon, Info, Settings, X, Check } from 'lucide-react';
 import { STATE_KEY } from '@/shared/constants/defaults';
 import { useAppState } from './useAppState';
+import { SettingsPanel } from '@/ui/panels/SettingsPanel';
+import { useModelConfig, modelManager } from '@/services/ai/model-manager';
 
 const App: React.FC = () => {
     const {
@@ -26,6 +28,9 @@ const App: React.FC = () => {
         toast,
     } = useAppState();
 
+    const [showSettingsModal, setShowSettingsModal] = useState(false);
+    const modelConfig = useModelConfig();
+
 
     return (
         <div className="min-h-screen bg-[#f7f5f0] dark:bg-dark-900 text-slate-900 dark:text-gray-100 flex flex-col font-sans selection:bg-indigo-500/30 dark:selection:bg-banana-500/30 transition-colors duration-300">
@@ -44,6 +49,14 @@ const App: React.FC = () => {
 
                     <div className="flex items-center gap-3 text-xs md:text-sm">
 
+
+                        <button
+                            onClick={() => setShowSettingsModal(true)}
+                            className="p-2 text-gray-400 hover:text-indigo-600 dark:hover:text-banana-400 transition-colors rounded-full hover:bg-gray-100 dark:hover:bg-white/5"
+                            title={t.tabSettings || (language === 'Chinese' ? "系统设置" : "System Settings")}
+                        >
+                            <Settings className="w-4 h-4" />
+                        </button>
 
                         <button
                             onClick={toggleTheme}
@@ -186,6 +199,64 @@ const App: React.FC = () => {
                         setShowGlobalSelector(false);
                     }}
                 />
+            )}
+            {showSettingsModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn">
+                    <div className="relative w-full max-w-4xl bg-white dark:bg-[#111113] border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                        
+                        {/* Header */}
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-[#17171a]">
+                            <div className="flex items-center gap-2">
+                                <Settings className="w-5 h-5 text-indigo-600 dark:text-banana-400" />
+                                <h3 className="text-sm font-bold text-gray-900 dark:text-white tracking-wide">
+                                    {t.tabSettings || (language === 'Chinese' ? "系统设置" : "System Settings")}
+                                </h3>
+                            </div>
+                            <button 
+                                onClick={() => setShowSettingsModal(false)}
+                                className="p-1.5 text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        {/* Body */}
+                        <div className="flex-1 overflow-y-auto p-2 bg-white dark:bg-dark-800">
+                            <SettingsPanel
+                                providers={modelConfig.providers}
+                                onUpdateProviders={(updatedProviders) => modelManager.setConfig({ providers: updatedProviders })}
+                                activeTextModel={modelConfig.textmodel}
+                                activeImageModel={modelConfig.imagemodel}
+                                activeVideoModel={modelConfig.videomodel}
+                                onChangeActiveModel={(type, val) => {
+                                    if (type === 'text') {
+                                        const provider = modelConfig.providers.find(p => p.id === val);
+                                        const firstModel = provider?.chatModels?.[0] || 'gpt-5.4-mini-2026-03-17';
+                                        modelManager.setConfig({
+                                            textmodel: val,
+                                            t8starTextModel: firstModel
+                                        });
+                                    }
+                                    if (type === 'image') modelManager.setConfig({ imagemodel: val });
+                                    if (type === 'video') modelManager.setConfig({ videomodel: val });
+                                }}
+                                language={language}
+                            />
+                        </div>
+
+                        {/* Footer */}
+                        <div className="flex justify-end gap-3 px-5 py-4 border-t border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-[#17171a]">
+                            <button
+                                onClick={() => setShowSettingsModal(false)}
+                                className="px-5 py-2 rounded-lg text-xs font-semibold bg-indigo-600 dark:bg-banana-400 text-white dark:text-black flex items-center gap-1.5 shadow-md shadow-indigo-600/20 dark:shadow-banana-400/20 hover:opacity-90 active:scale-95 transition-all"
+                            >
+                                <Check className="w-4 h-4 stroke-[3]" />
+                                {language === 'Chinese' ? "保存并确定" : "Save & Close"}
+                            </button>
+                        </div>
+
+                    </div>
+                </div>
             )}
             {toast && (
                 <div className="fixed bottom-6 right-6 z-[9999] flex items-center gap-3 bg-white/95 dark:bg-dark-800/95 border border-indigo-500/30 dark:border-banana-400/30 shadow-xl shadow-indigo-500/10 dark:shadow-banana-500/10 backdrop-blur-md px-4 py-3 rounded-xl max-w-sm animate-in slide-in-from-bottom-2 fade-in duration-300">

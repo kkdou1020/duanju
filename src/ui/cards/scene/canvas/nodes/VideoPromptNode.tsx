@@ -3,6 +3,7 @@ import { Handle, Position } from '@xyflow/react';
 import { Film, Settings, Sparkles, Loader2, Info } from 'lucide-react';
 import MentionTextarea, { SceneImageCandidate } from '@/ui/components/MentionTextarea';
 import { ImageGenStatus, Asset } from '@/shared/types';
+import { modelManager, parseVideoModel } from '@/services/ai/model-manager';
 
 interface VideoPromptNodeProps {
     id: string;
@@ -46,6 +47,67 @@ export const VideoPromptNode: React.FC<VideoPromptNodeProps> = ({ id, data }) =>
 
     const isGenerating = videoStatus === ImageGenStatus.GENERATING;
 
+    // Get config and active provider video models
+    const config = modelManager.getConfig();
+    const activeProvider = config.providers.find(p => p.id === config.videomodel);
+    const videoModels = activeProvider?.videoModels && activeProvider.videoModels.length > 0
+        ? activeProvider.videoModels
+        : ['veo3.1-components:auto', 'doubao-seedance-2-0-260128:start_end_frame,auto'];
+
+    // Group models by prefix after parsing clean name
+    const veoModels = videoModels.filter(m => m.split(':')[0].toLowerCase().startsWith('veo'));
+    const doubaoModels = videoModels.filter(m => {
+        const clean = m.split(':')[0].toLowerCase();
+        return clean.startsWith('doubao') || clean.startsWith('seedance');
+    });
+    const otherModels = videoModels.filter(m => {
+        const clean = m.split(':')[0].toLowerCase();
+        return !clean.startsWith('veo') && !clean.startsWith('doubao') && !clean.startsWith('seedance');
+    });
+
+    // Determine current selected type using clean name
+    let currentType = 'veo';
+    const activeVideoModelStr = videoModel || (videoModels[0] || '').split(':')[0];
+    const rawModelStr = videoModels.find(m => m.split(':')[0] === activeVideoModelStr) || activeVideoModelStr;
+    const parsedModel = parseVideoModel(rawModelStr);
+    const supportedModes = parsedModel.modes;
+
+    if (activeVideoModelStr) {
+        const lowerModel = activeVideoModelStr.toLowerCase();
+        if (lowerModel.startsWith('doubao') || lowerModel.startsWith('seedance')) {
+            currentType = 'doubao';
+        } else if (lowerModel.startsWith('veo')) {
+            currentType = 'veo';
+        } else {
+            currentType = 'other';
+        }
+    }
+
+    // Fallback if currentType doesn't have any models
+    if (currentType === 'veo' && veoModels.length === 0) {
+        if (doubaoModels.length > 0) currentType = 'doubao';
+        else if (otherModels.length > 0) currentType = 'other';
+    } else if (currentType === 'doubao' && doubaoModels.length === 0) {
+        if (veoModels.length > 0) currentType = 'veo';
+        else if (otherModels.length > 0) currentType = 'other';
+    }
+
+    const currentTypeModels = currentType === 'veo' ? veoModels : currentType === 'doubao' ? doubaoModels : otherModels;
+
+    const handleTypeChange = (type: string) => {
+        const models = type === 'veo' ? veoModels : type === 'doubao' ? doubaoModels : otherModels;
+        if (models.length > 0) {
+            onUpdate('videoModel', models[0].split(':')[0]);
+        }
+    };
+
+    // Auto-correct refImageMode if not supported by the currently selected model
+    React.useEffect(() => {
+        if (supportedModes.length > 0 && !supportedModes.includes(refImageMode as any)) {
+            onUpdate('refImageMode', supportedModes[0]);
+        }
+    }, [activeVideoModelStr, refImageMode, supportedModes, onUpdate]);
+
     return (
         <div className="relative flex flex-col gap-3.5 p-4 rounded-2xl border border-purple-500/30 bg-[#0e0e11]/90 shadow-2xl shadow-purple-500/5 w-[300px]">
             {/* Single Target handle on the LEFT */}
@@ -68,16 +130,32 @@ export const VideoPromptNode: React.FC<VideoPromptNodeProps> = ({ id, data }) =>
 
             {/* Config Fields */}
             <div className="flex flex-col gap-3 nodrag nopan nowheel" onKeyDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
-                {/* Video Engine Model */}
+                {/* Video Engine Type */}
                 <div className="flex flex-col gap-1">
-                    <span className="text-[10px] text-gray-400 font-bold tracking-wide">生成模型 (Engine)</span>
+                    <span className="text-[10px] text-gray-400 font-bold tracking-wide">模型类型</span>
                     <select
-                        value={videoModel || 'doubao-seedance-2-0-260128'}
+                        value={currentType}
+                        onChange={(e) => handleTypeChange(e.target.value)}
+                        className="text-xs bg-[#16161a] border border-white/10 rounded-lg px-2.5 py-1.5 text-gray-200 outline-none focus:border-purple-500 cursor-pointer"
+                    >
+                        {veoModels.length > 0 && <option value="veo">Veo</option>}
+                        {doubaoModels.length > 0 && <option value="doubao">Doubao / Seedance</option>}
+                        {otherModels.length > 0 && <option value="other">其他</option>}
+                    </select>
+                </div>
+
+                {/* Video Engine Specific Model */}
+                <div className="flex flex-col gap-1">
+                    <span className="text-[10px] text-gray-400 font-bold tracking-wide">具体模型</span>
+                    <select
+                        value={videoModel || (currentTypeModels[0] || "").split(':')[0]}
                         onChange={(e) => onUpdate('videoModel', e.target.value)}
                         className="text-xs bg-[#16161a] border border-white/10 rounded-lg px-2.5 py-1.5 text-gray-200 outline-none focus:border-purple-500 cursor-pointer"
                     >
-                        <option value="doubao-seedance-2-0-260128">doubao-seedance-2-0</option>
-                        <option value="veo3.1-components">veo 3.1</option>
+                        {currentTypeModels.map(m => {
+                            const clean = m.split(':')[0];
+                            return <option key={clean} value={clean}>{clean}</option>;
+                        })}
                     </select>
                 </div>
 
@@ -89,9 +167,8 @@ export const VideoPromptNode: React.FC<VideoPromptNodeProps> = ({ id, data }) =>
                         onChange={(e) => onUpdate('refImageMode', e.target.value)}
                         className="text-xs bg-[#16161a] border border-white/10 rounded-lg px-2.5 py-1.5 text-gray-200 outline-none focus:border-purple-500 cursor-pointer"
                     >
-                        <option value="auto">参考图 (auto)</option>
-                        <option value="first_frame">上传首帧</option>
-                        <option value="start_end_frame">首尾帧视频</option>
+                        {supportedModes.includes('auto') && <option value="auto">参考图 (auto)</option>}
+                        {supportedModes.includes('start_end_frame') && <option value="start_end_frame">首尾帧视频</option>}
                     </select>
                 </div>
 

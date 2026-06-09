@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Scene, ImageGenStatus, GlobalStyle, Asset } from '@/shared/types';
 import { Translation } from '@/services/i18n/translations';
+import { useModelConfig, parseVideoModel } from '@/services/ai/model-manager';
 import { LazyMedia } from '@/ui/common/LazyMedia';
 import { Image as ImageIcon, Aperture, RefreshCw, Download, Video, Film, Upload, Trash2, AlertCircle, ChevronDown } from 'lucide-react';
 import { refreshVideoUrl } from '@/services/api';
@@ -53,11 +54,38 @@ const SceneMediaViewer: React.FC<SceneMediaViewerProps> = ({
     const imageStartTime = getTaskStartTime?.('image', viewingOptionId || undefined);
     const videoStartTime = getTaskStartTime?.('video', viewingOptionId || undefined);
 
+    const config = useModelConfig();
+    const activeImgProvider = config.providers.find(p => p.id === config.imagemodel);
+    const imageModels = activeImgProvider?.imageModels && activeImgProvider.imageModels.length > 0
+        ? activeImgProvider.imageModels
+        : ['gpt-image-2'];
+
+    const activeVidProvider = config.providers.find(p => p.id === config.videomodel);
+    const videoModels = activeVidProvider?.videoModels && activeVidProvider.videoModels.length > 0
+        ? activeVidProvider.videoModels
+        : ['doubao-seedance-2-0-260128'];
+
+    const defaultImageModel = imageModels[0] ? imageModels[0].split(':')[0] : '';
+    const defaultVideoModel = videoModels[0] ? videoModels[0].split(':')[0] : '';
+
+    const activeVidModelStr = (scene.videoModel || defaultVideoModel || '').split(':')[0];
+    const rawModelStr = videoModels.find(m => m.split(':')[0] === activeVidModelStr) || activeVidModelStr;
+    const parsedModel = parseVideoModel(rawModelStr);
+    const supportedModes = parsedModel.modes;
+
+    // Auto-correct refImageMode if not supported by the currently selected model
+    React.useEffect(() => {
+        const currentRefMode = scene.refImageMode || 'auto';
+        if (supportedModes.length > 0 && !supportedModes.includes(currentRefMode as any)) {
+            handleVideoModeChange(supportedModes[0]);
+        }
+    }, [scene.videoModel, defaultVideoModel, scene.refImageMode, supportedModes]);
+
     const [showSettings, setShowSettings] = useState(false);
 
     const getDropdownLabel = () => {
         if (viewMode === 'image') {
-            const model = scene.imageModel || 'gpt-image-2';
+            const model = scene.imageModel || defaultImageModel;
             return `生图: ${model}`;
         } else {
             if (scene.refImageMode === 'start_end_frame') {
@@ -66,8 +94,8 @@ const SceneMediaViewer: React.FC<SceneMediaViewerProps> = ({
             if (scene.refImageMode === 'first_frame') {
                 return '视频: 上传首帧';
             }
-            const model = scene.videoModel || 'doubao-seedance-2-0-260128';
-            return `视频: ${model === 'doubao-seedance-2-0-260128' ? 'seedance 2.0' : model === 'veo3.1-components' ? 'veo 3.1' : 'Polo'}`;
+            const model = scene.videoModel || defaultVideoModel;
+            return `视频: ${model === 'doubao-seedance-2-0-260128' ? 'seedance 2.0' : model === 'veo3.1-components' ? 'veo 3.1' : model}`;
         }
     };
 
@@ -84,7 +112,7 @@ const SceneMediaViewer: React.FC<SceneMediaViewerProps> = ({
     };
 
     const renderImageSettings = () => {
-        const imageModel = scene.imageModel || 'gpt-image-2';
+        const imageModel = scene.imageModel || defaultImageModel;
         const imageSize = scene.imageSize || '16:9';
         const imageQuality = scene.imageQuality || 'auto';
 
@@ -98,87 +126,142 @@ const SceneMediaViewer: React.FC<SceneMediaViewerProps> = ({
                         onChange={(e) => onUpdate(scene.id, 'imageModel', e.target.value)}
                         className="bg-white dark:bg-[#151515] border border-gray-200 dark:border-white/10 rounded px-2.5 py-1 text-gray-700 dark:text-gray-200 outline-none w-full cursor-pointer focus:border-indigo-500"
                     >
-                        <option value="gpt-image-2">gpt-image-2</option>
-                        <option value="nano-banana-pro">nano-banana-pro</option>
-                        <option value="gpt-image-2-official">gpt-image-2 (官方版)</option>
+                        {imageModels.map(m => (
+                            <option key={m} value={m}>{m}</option>
+                        ))}
                     </select>
                 </div>
 
-                {imageModel !== 'polo' && (
-                    <>
-                        {/* Aspect Ratio Select */}
-                        <div className="flex flex-col gap-1">
-                            <span className="text-gray-400 font-medium">尺寸比例</span>
+                {/* Aspect Ratio Select */}
+                <div className="flex flex-col gap-1">
+                    <span className="text-gray-400 font-medium">尺寸比例</span>
+                    <select
+                        value={imageSize}
+                        onChange={(e) => onUpdate(scene.id, 'imageSize', e.target.value)}
+                        className="bg-white dark:bg-[#151515] border border-gray-200 dark:border-white/10 rounded px-2.5 py-1 text-gray-700 dark:text-gray-200 outline-none w-full cursor-pointer focus:border-indigo-500"
+                    >
+                        <option value="16:9">16:9</option>
+                        <option value="9:16">9:16</option>
+                        <option value="1:1">1:1</option>
+                        <option value="3:2">3:2</option>
+                        <option value="2:3">2:3</option>
+                        <option value="4:5">4:5</option>
+                        <option value="5:4">5:4</option>
+                        <option value="3:4">3:4</option>
+                        <option value="4:3">4:3</option>
+                    </select>
+                </div>
+
+                {/* Resolution / Quality Select */}
+                <div className="flex flex-col gap-1">
+                    {imageModel === 'nano-banana-pro' ? (
+                        <>
+                            <span className="text-gray-400 font-medium">图像分辨率</span>
                             <select
-                                value={imageSize}
-                                onChange={(e) => onUpdate(scene.id, 'imageSize', e.target.value)}
+                                value={imageQuality === 'auto' ? '2K' : imageQuality}
+                                onChange={(e) => onUpdate(scene.id, 'imageQuality', e.target.value)}
                                 className="bg-white dark:bg-[#151515] border border-gray-200 dark:border-white/10 rounded px-2.5 py-1 text-gray-700 dark:text-gray-200 outline-none w-full cursor-pointer focus:border-indigo-500"
                             >
-                                <option value="16:9">16:9</option>
-                                <option value="9:16">9:16</option>
-                                <option value="1:1">1:1</option>
-                                <option value="3:2">3:2</option>
-                                <option value="2:3">2:3</option>
-                                <option value="4:5">4:5</option>
-                                <option value="5:4">5:4</option>
-                                <option value="3:4">3:4</option>
-                                <option value="4:3">4:3</option>
+                                <option value="1K">1K</option>
+                                <option value="2K">2K</option>
+                                <option value="4K" disabled>4K (暂不可用)</option>
                             </select>
-                        </div>
-
-                        {/* Resolution / Quality Select */}
-                        <div className="flex flex-col gap-1">
-                            {imageModel === 'nano-banana-pro' ? (
-                                <>
-                                    <span className="text-gray-400 font-medium">图像分辨率</span>
-                                    <select
-                                        value={imageQuality === 'auto' ? '2K' : imageQuality}
-                                        onChange={(e) => onUpdate(scene.id, 'imageQuality', e.target.value)}
-                                        className="bg-white dark:bg-[#151515] border border-gray-200 dark:border-white/10 rounded px-2.5 py-1 text-gray-700 dark:text-gray-200 outline-none w-full cursor-pointer focus:border-indigo-500"
-                                    >
-                                        <option value="1K">1K</option>
-                                        <option value="2K">2K</option>
-                                        <option value="4K" disabled>4K (暂不可用)</option>
-                                    </select>
-                                </>
-                            ) : (
-                                <>
-                                    <span className="text-gray-400 font-medium">生成质量</span>
-                                    <select
-                                        value={imageQuality}
-                                        onChange={(e) => onUpdate(scene.id, 'imageQuality', e.target.value)}
-                                        className="bg-white dark:bg-[#151515] border border-gray-200 dark:border-white/10 rounded px-2.5 py-1 text-gray-700 dark:text-gray-200 outline-none w-full cursor-pointer focus:border-indigo-500"
-                                    >
-                                        <option value="auto">auto</option>
-                                        <option value="low">low</option>
-                                        <option value="medium">medium</option>
-                                        <option value="high">high</option>
-                                    </select>
-                                </>
-                            )}
-                        </div>
-                    </>
-                )}
+                        </>
+                    ) : (
+                        <>
+                            <span className="text-gray-400 font-medium">生成质量</span>
+                            <select
+                                value={imageQuality}
+                                onChange={(e) => onUpdate(scene.id, 'imageQuality', e.target.value)}
+                                className="bg-white dark:bg-[#151515] border border-gray-200 dark:border-white/10 rounded px-2.5 py-1 text-gray-700 dark:text-gray-200 outline-none w-full cursor-pointer focus:border-indigo-500"
+                            >
+                                <option value="auto">auto</option>
+                                <option value="low">low</option>
+                                <option value="medium">medium</option>
+                                <option value="high">high</option>
+                            </select>
+                        </>
+                    )}
+                </div>
             </div>
         );
     };
 
     const renderVideoSettings = () => {
-        const videoModel = scene.videoModel || 'doubao-seedance-2-0-260128';
+        const videoModel = scene.videoModel || defaultVideoModel;
         const refImageMode = scene.refImageMode || 'auto';
+
+        // Group models by prefix after parsing clean name
+        const veoModels = videoModels.filter(m => m.split(':')[0].toLowerCase().startsWith('veo'));
+        const doubaoModels = videoModels.filter(m => {
+            const clean = m.split(':')[0].toLowerCase();
+            return clean.startsWith('doubao') || clean.startsWith('seedance');
+        });
+        const otherModels = videoModels.filter(m => {
+            const clean = m.split(':')[0].toLowerCase();
+            return !clean.startsWith('veo') && !clean.startsWith('doubao') && !clean.startsWith('seedance');
+        });
+
+        // Determine current selected type using clean name
+        let currentType = 'veo';
+        const activeVideoModel = videoModel || (videoModels[0] || '').split(':')[0];
+        if (activeVideoModel) {
+            const lowerModel = activeVideoModel.toLowerCase();
+            if (lowerModel.startsWith('doubao') || lowerModel.startsWith('seedance')) {
+                currentType = 'doubao';
+            } else if (lowerModel.startsWith('veo')) {
+                currentType = 'veo';
+            } else {
+                currentType = 'other';
+            }
+        }
+
+        // Fallback if currentType doesn't have any models
+        if (currentType === 'veo' && veoModels.length === 0) {
+            if (doubaoModels.length > 0) currentType = 'doubao';
+            else if (otherModels.length > 0) currentType = 'other';
+        } else if (currentType === 'doubao' && doubaoModels.length === 0) {
+            if (veoModels.length > 0) currentType = 'veo';
+            else if (otherModels.length > 0) currentType = 'other';
+        }
+
+        const currentTypeModels = currentType === 'veo' ? veoModels : currentType === 'doubao' ? doubaoModels : otherModels;
+
+        const handleTypeChange = (type: string) => {
+            const models = type === 'veo' ? veoModels : type === 'doubao' ? doubaoModels : otherModels;
+            if (models.length > 0) {
+                onUpdate(scene.id, 'videoModel', models[0].split(':')[0]);
+            }
+        };
 
         return (
             <div className="flex flex-col gap-3 text-xs animate-in fade-in duration-200">
-                {/* Video Engine Select */}
+                {/* Video Engine Type */}
                 <div className="flex flex-col gap-1">
-                    <span className="text-gray-400 font-medium">生成模型 (Engine)</span>
+                    <span className="text-gray-400 font-medium">模型类型</span>
                     <select
-                        value={videoModel}
+                        value={currentType}
+                        onChange={(e) => handleTypeChange(e.target.value)}
+                        className="bg-white dark:bg-[#151515] border border-gray-200 dark:border-white/10 rounded px-2.5 py-1 text-gray-700 dark:text-gray-200 outline-none w-full cursor-pointer focus:border-blue-500"
+                    >
+                        {veoModels.length > 0 && <option value="veo">Veo</option>}
+                        {doubaoModels.length > 0 && <option value="doubao">Doubao / Seedance</option>}
+                        {otherModels.length > 0 && <option value="other">其他</option>}
+                    </select>
+                </div>
+
+                {/* Video Engine Specific Model */}
+                <div className="flex flex-col gap-1">
+                    <span className="text-gray-400 font-medium">具体模型</span>
+                    <select
+                        value={videoModel || (currentTypeModels[0] || "").split(':')[0]}
                         onChange={(e) => onUpdate(scene.id, 'videoModel', e.target.value)}
                         className="bg-white dark:bg-[#151515] border border-gray-200 dark:border-white/10 rounded px-2.5 py-1 text-gray-700 dark:text-gray-200 outline-none w-full cursor-pointer focus:border-blue-500"
                     >
-                        <option value="doubao-seedance-2-0-260128">doubao-seedance-2-0</option>
-                        <option value="veo3.1-components">veo 3.1</option>
+                        {currentTypeModels.map(m => {
+                            const clean = m.split(':')[0];
+                            return <option key={clean} value={clean}>{clean}</option>;
+                        })}
                     </select>
                 </div>
 
@@ -190,9 +273,8 @@ const SceneMediaViewer: React.FC<SceneMediaViewerProps> = ({
                         onChange={(e) => handleVideoModeChange(e.target.value as 'auto' | 'first_frame' | 'start_end_frame')}
                         className="bg-white dark:bg-[#151515] border border-gray-200 dark:border-white/10 rounded px-2.5 py-1 text-gray-700 dark:text-gray-200 outline-none w-full cursor-pointer focus:border-blue-500"
                     >
-                        <option value="auto">参考图 (auto)</option>
-                        <option value="first_frame">上传首帧</option>
-                        <option value="start_end_frame">首尾帧视频</option>
+                        {supportedModes.includes('auto') && <option value="auto">参考图 (auto)</option>}
+                        {supportedModes.includes('start_end_frame') && <option value="start_end_frame">首尾帧视频</option>}
                     </select>
                 </div>
             </div>
