@@ -32,3 +32,10 @@ release/
 
 # Sensitive credentials
 electron-builder.env
+
+# Generated test artifacts and local media outputs
+test-results/
+scripts/twelvelabs_test/output_clips/
+scripts/twelvelabs_test/temp_videos/
+*.mp4
+*.webm

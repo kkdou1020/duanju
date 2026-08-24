@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "tsc && node -e \"const fs = require('fs'); fs.cpSync('src/domain/generation/skills', 'dist/domain/generation/skills', { recursive: true });\"",
     "legacy": "node index.js",
     "test:models": "tsx src/scripts/test-models.ts"
   },
