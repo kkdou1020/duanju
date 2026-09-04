@@ -253,35 +253,6 @@ cd server && npm install && cd ..
 
 ### 2. 配置环境变量
 
-复制并编辑 `.env` 文件（项目根目录）：
-
-```bash
-# ===== 文本模型 (用于 Agent 1/2/3 推理) =====
-GOOGLE_API_KEY=your_google_gemini_key_here
-
-# ===== T8Star Provider (主 Provider，支持全部模态) =====
-T8_TEXT_API_KEY=your_t8star_text_key
-T8_IMAGE_API_KEY=your_t8star_image_key
-T8_VIDEO_API_KEY=your_t8star_video_key
-T8_AUDIO_API_KEY=your_t8star_audio_key
-T8_BASE_URL=https://ai.t8star.org
-T8_MEDIA_BASE_URL=https://ai.t8star.org
-
-# ===== Tutujin (Polo) Provider (备选) =====
-POLO_TEXT_API_KEY=your_polo_text_key
-POLO_IMAGE_API_KEY=your_polo_image_key
-POLO_VIDEO_API_KEY=your_polo_video_key
-
-# ===== NanoBanana 自有平台 =====
-NANOBANANA_API_KEY=your_nanobanana_key
-
-# ===== 代理设置 (如在国内需要) =====
-HTTPS_PROXY=http://127.0.0.1:7897
-
-# ===== GitHub 发布 (仅打包需要) =====
-GH_TOKEN=your_github_pat_with_repo_scope
-```
-
 ### 3. 启动开发环境
 
 需要 **两个终端** 分别启动后端和前端：
@@ -605,20 +576,6 @@ gcloud config set project YOUR_PROJECT_ID
 | Electron 打包时报 asar 错误 | 当前配置 `asar: false`，不要改为 true，否则 Skill 文档和二进制文件路径异常 |
 
 ---
-
-## 🤝 贡献
-
-1. Fork 仓库
-2. 创建 feature 分支: `git checkout -b feature/amazing-feature`
-3. 提交改动: `git commit -m 'feat: add amazing feature'` (遵循 Conventional Commits)
-4. 推送: `git push origin feature/amazing-feature`
-5. 提交 Pull Request
-
----
-
-## 📄 License
-
-MIT License © 2025 NanoBanana Team
 
 ---
 
